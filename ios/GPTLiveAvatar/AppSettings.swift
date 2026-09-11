@@ -18,6 +18,10 @@ final class AppSettings: ObservableObject {
         // The persona name follows the avatar unless the user renamed her.
         let names = Dictionary(uniqueKeysWithValues: AssetStore.shared.avatars.map { ($0.slug, $0.name) })
         if personaName.isEmpty || personaName == names[oldValue] || personaName == "Tia", let name = names[avatar] { personaName = name }
+        if let previous = names[oldValue], let next = names[avatar], previous != next {
+            persona = persona.replacingOccurrences(of: "\\b\(NSRegularExpression.escapedPattern(for: previous))\\b", with: next, options: .regularExpression)
+            if persona.trimmingCharacters(in: .whitespaces).isEmpty { persona = "You are \(next), a warm, playful companion who loves to move." }
+        }
         applyModel()
     } }
     @Published var personaName: String { didSet { save("personaName", personaName) } }

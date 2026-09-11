@@ -308,9 +308,15 @@ ipcMain.handle('gla:models:list', async () => {
 ipcMain.handle('gla:avatar:info', () => avatarInfo());
 ipcMain.handle('gla:avatar:select', (_event, slug) => {
   if (typeof slug !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(slug)) return publicSettings();
-  // The persona name follows the avatar unless the user renamed her.
+  // The persona follows the avatar: her name, and her name inside the notes.
   const names = Object.fromEntries(assets.avatars().map(a => [a.slug, a.name]));
-  if (!config.personaName || config.personaName === names[config.avatar] || config.personaName === 'Tia') config.personaName = names[slug] || config.personaName;
+  const previousName = names[config.avatar] || config.personaName, nextName = names[slug] || slug;
+  if (!config.personaName || config.personaName === previousName || config.personaName === 'Tia') config.personaName = nextName;
+  if (previousName && nextName && previousName !== nextName) {
+    const escaped = previousName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    config.persona = String(config.persona || '').replace(new RegExp(`\\b${escaped}\\b`, 'g'), nextName);
+    if (!config.persona.trim()) config.persona = `You are ${nextName}, a warm, playful desk companion who loves to move.`;
+  }
   config.avatar = slug; config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings();
 });
 ipcMain.handle('gla:avatar:use-bundled', () => { config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings(); });

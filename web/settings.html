@@ -115,7 +115,7 @@
   let progress = null;
   function renderAvatars(settings) {
     const list = settings.avatars || [];
-    const current = settings.avatarDir ? '' : settings.avatar;
+    const current = settings.avatarDir ? '' : (settings.avatar && (settings.avatar.fallbackFor || settings.avatar.slug)) || '';
     $('#avatarSelect').innerHTML = list.map(a => `<option value="${a.slug}" ${a.slug === current ? 'selected' : ''}>${a.name}${a.bundled ? ' · built in' : a.installed ? ' · downloaded' : ' · cloud'}</option>`).join('') || '<option value="">No avatars</option>';
     $('#avatarSelect').disabled = Boolean(settings.avatarDir);
     renderTiers(settings.tiers);
