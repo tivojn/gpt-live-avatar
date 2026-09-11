@@ -715,6 +715,8 @@ const applySettings = next => {
   // Switching avatar (picker) or package folder swaps the whole model.
   if (avatar && (previous.avatarDir !== settings.avatarDir || (previous.avatar && previous.avatar.dir) !== (settings.avatar && settings.avatar.dir) || (previous.avatar && previous.avatar.slug) !== (settings.avatar && settings.avatar.slug))) { if (stage) void exitStage(); avatar.dispose(); avatar = null; companion = null; ready = false; void loadAvatar(); }
   if (!avatar && settings.avatar && settings.avatar.ok && !ready) void loadAvatar();
+  const fallback = settings.avatar && settings.avatar.fallbackFor;
+  if (fallback && fallback !== (previous.avatar && previous.avatar.fallbackFor)) toast(`${fallback} is not downloaded yet, so Tia is shown. Download it under Settings › Avatar.`, 8000);
 };
 gla.onSettings(applySettings);
 applySettings(settings);

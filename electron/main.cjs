@@ -61,9 +61,15 @@ function loadConfig() {
 }
 // Where the selected avatar's files live: a custom package folder, or the
 // bundled package overlaid with whatever tiers were downloaded.
+let avatarFallback = '';
 function avatarRoots() {
+  avatarFallback = '';
   if (config.avatarDir) return [config.avatarDir];
-  const roots = assets ? assets.roots(config.avatar) : [];
+  let roots = assets ? assets.roots(config.avatar) : [];
+  if (!roots.length && config.avatar !== 'tia' && assets) {
+    // Chosen avatar not downloaded yet: show the bundled Tia and say so.
+    roots = assets.roots('tia'); if (roots.length) avatarFallback = config.avatar;
+  }
   if (!roots.length && fs.existsSync(path.join(DEFAULT_OPENCLAM_AVATAR, 'manifest.json'))) return [DEFAULT_OPENCLAM_AVATAR];
   return roots;
 }
@@ -111,7 +117,7 @@ function backendCandidates(ids) {
 // ---------------------------------------------------------------- avatar package
 function avatarInfo() {
   const roots = avatarRoots();
-  const result = { dir: roots[0] || '', roots, slug: config.avatarDir ? '' : config.avatar, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
+  const result = { dir: roots[0] || '', roots, slug: config.avatarDir ? '' : (avatarFallback ? 'tia' : config.avatar), fallbackFor: avatarFallback, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
   if (!roots.length) { result.problem = config.avatarDir ? 'No avatar folder selected.' : 'This avatar is not installed yet. Download it in Settings.'; return result; }
   try {
     const manifestPath = avatarFile('manifest.json');

@@ -106,7 +106,7 @@
     $('#opacity').value = Math.round((settings.opacity || 1) * 100); $('#opacityOut').value = $('#opacity').value + '%';
     $('#bubbleMode').value = settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
     const a = settings.avatar || {};
-    setState($('#avatarState'), a.ok ? `${a.name}: ${a.clips} motions${a.modelBytes ? `, model ${(a.modelBytes / 1048576).toFixed(0)} MB` : ''}.` : (a.problem || 'No avatar.'), a.ok ? 'ok' : 'bad');
+    setState($('#avatarState'), a.fallbackFor ? `${a.fallbackFor} is not downloaded yet; showing Tia. Download the avatar package below.` : a.ok ? `${a.name}: ${a.clips} motions${a.modelBytes ? `, model ${(a.modelBytes / 1048576).toFixed(0)} MB` : ''}.` : (a.problem || 'No avatar.'), a.ok && !a.fallbackFor ? 'ok' : 'bad');
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
   }
