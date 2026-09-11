@@ -4,3 +4,4 @@ dist/
 *.log
 ios/build/
 ios/*.xcodeproj/xcuserdata/
+build/
