@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04A48D0B46E5108D38511A09 /* AvatarModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D8ED5242B46343686FBA04 /* AvatarModel.swift */; };
+		20AAC1671E30FCD156C8ECFF /* SpeechVisemeAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1964B9E93830F73FE3B49D3F /* SpeechVisemeAnalyzer.swift */; };
 		2950E575D9E189F4D513C144 /* GPTLiveAvatarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D1772DDA6129D0DCFA3D0B /* GPTLiveAvatarApp.swift */; };
 		296EB95F03B62A300CF1CF1A /* three.core.js in Resources */ = {isa = PBXBuildFile; fileRef = FF061392B2227AFB45BF3E49 /* three.core.js */; };
 		2E801A16623AE77026396735 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A4592A7F68050FE631A1E8 /* SettingsView.swift */; };
@@ -20,6 +21,7 @@
 		581973404210D4B2350971B9 /* GLTFLoader.js in Resources */ = {isa = PBXBuildFile; fileRef = BDB4CF1CC45E5DAA4F55E808 /* GLTFLoader.js */; };
 		856CDC463BD7040AC294D115 /* avatar3d-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = 6437EFA3DB5B0B121DECB41A /* avatar3d-motion.js */; };
 		8605B4E326D2EA0B22A65EC3 /* AvatarWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07372A35D5961A17D7977AF /* AvatarWebView.swift */; };
+		89F13C80DE516C2CB89EE91B /* AssetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F347F6749F54AE04FDC80E /* AssetStore.swift */; };
 		91F1EA0DE513BFAD5E33714F /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF41DE49BA18BF388DC94759 /* AppSettings.swift */; };
 		A4444B0A3EA269E36CF6C21D /* three.module.js in Resources */ = {isa = PBXBuildFile; fileRef = B5C8F4FAFF34B60FB4F855CE /* three.module.js */; };
 		B3CA8D6851B05CD9A908CAC9 /* model.glb in Resources */ = {isa = PBXBuildFile; fileRef = D0592C49C3A5B9D78DED85D3 /* model.glb */; };
@@ -27,6 +29,7 @@
 		D30790DC7C0C9B5C69795831 /* avatar3d.js in Resources */ = {isa = PBXBuildFile; fileRef = 5E8EA743D1F05949507C4C46 /* avatar3d.js */; };
 		D3BA6DF624AAC21F557AF33F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CFDD03B15EAAAEADA22CF089 /* Assets.xcassets */; };
 		E2C3E1CB730FB2A1365C17C9 /* avatar3d-companion.js in Resources */ = {isa = PBXBuildFile; fileRef = 0FFE9A84C04C7FFEE89A1298 /* avatar3d-companion.js */; };
+		E4F1A31CB85CF3FF6CB6B2C4 /* assets-index.json in Resources */ = {isa = PBXBuildFile; fileRef = 2A43445B8E883AFDA5DDF603 /* assets-index.json */; };
 		E631A4E232470ED7F54B068E /* RoomEnvironment.js in Resources */ = {isa = PBXBuildFile; fileRef = F5A556E1DA31DFF450FC9C54 /* RoomEnvironment.js */; };
 		E9F86B036E7DD70F8B48A999 /* SkeletonUtils.js in Resources */ = {isa = PBXBuildFile; fileRef = 17F58F6B2614B233BFEA8582 /* SkeletonUtils.js */; };
 		ED9298499D5BDFAAF8CD8C56 /* ModelResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = E33A6C4CA3C452ACF58B0D4A /* ModelResources.swift */; };
@@ -36,8 +39,10 @@
 /* Begin PBXFileReference section */
 		0FFE9A84C04C7FFEE89A1298 /* avatar3d-companion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "avatar3d-companion.js"; sourceTree = "<group>"; };
 		17F58F6B2614B233BFEA8582 /* SkeletonUtils.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = SkeletonUtils.js; sourceTree = "<group>"; };
+		1964B9E93830F73FE3B49D3F /* SpeechVisemeAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechVisemeAnalyzer.swift; sourceTree = "<group>"; };
 		22A95464B29EE8AFE4798721 /* LiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSession.swift; sourceTree = "<group>"; };
 		23A4592A7F68050FE631A1E8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		2A43445B8E883AFDA5DDF603 /* assets-index.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "assets-index.json"; sourceTree = "<group>"; };
 		332681D3E16028E9D289F105 /* GPTLiveAvatar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GPTLiveAvatar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		37D1772DDA6129D0DCFA3D0B /* GPTLiveAvatarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTLiveAvatarApp.swift; sourceTree = "<group>"; };
 		39D95B16C8C14720937BFC34 /* avatar-ios.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "avatar-ios.html"; sourceTree = "<group>"; };
@@ -57,6 +62,7 @@
 		D0592C49C3A5B9D78DED85D3 /* model.glb */ = {isa = PBXFileReference; path = model.glb; sourceTree = "<group>"; };
 		D64B2A405968C1D4EA3D4C82 /* avatar3d-options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "avatar3d-options.js"; sourceTree = "<group>"; };
 		DF41DE49BA18BF388DC94759 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		E1F347F6749F54AE04FDC80E /* AssetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetStore.swift; sourceTree = "<group>"; };
 		E33A6C4CA3C452ACF58B0D4A /* ModelResources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelResources.swift; sourceTree = "<group>"; };
 		F5A556E1DA31DFF450FC9C54 /* RoomEnvironment.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = RoomEnvironment.js; sourceTree = "<group>"; };
 		FF061392B2227AFB45BF3E49 /* three.core.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = three.core.js; sourceTree = "<group>"; };
@@ -94,6 +100,7 @@
 		2CA352CAF375ADAD66ED5E3D /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				2A43445B8E883AFDA5DDF603 /* assets-index.json */,
 				D0592C49C3A5B9D78DED85D3 /* model.glb */,
 				3B572F8D08FA465224537BD2 /* motions */,
 				CB1194D6CA6C8C89727E565C /* thumbnail.png */,
@@ -144,6 +151,7 @@
 			isa = PBXGroup;
 			children = (
 				22A95464B29EE8AFE4798721 /* LiveSession.swift */,
+				1964B9E93830F73FE3B49D3F /* SpeechVisemeAnalyzer.swift */,
 			);
 			path = Live;
 			sourceTree = "<group>";
@@ -151,6 +159,7 @@
 		B8E5132A118DC75553E91054 /* Avatar */ = {
 			isa = PBXGroup;
 			children = (
+				E1F347F6749F54AE04FDC80E /* AssetStore.swift */,
 				C2D8ED5242B46343686FBA04 /* AvatarModel.swift */,
 				B07372A35D5961A17D7977AF /* AvatarWebView.swift */,
 				E33A6C4CA3C452ACF58B0D4A /* ModelResources.swift */,
@@ -241,6 +250,7 @@
 				581973404210D4B2350971B9 /* GLTFLoader.js in Resources */,
 				E631A4E232470ED7F54B068E /* RoomEnvironment.js in Resources */,
 				E9F86B036E7DD70F8B48A999 /* SkeletonUtils.js in Resources */,
+				E4F1A31CB85CF3FF6CB6B2C4 /* assets-index.json in Resources */,
 				5286632C9497D05C111576F4 /* avatar-ios.html in Resources */,
 				445ABC29342C6E622FFBB757 /* avatar-ios.js in Resources */,
 				E2C3E1CB730FB2A1365C17C9 /* avatar3d-companion.js in Resources */,
@@ -263,6 +273,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				91F1EA0DE513BFAD5E33714F /* AppSettings.swift in Sources */,
+				89F13C80DE516C2CB89EE91B /* AssetStore.swift in Sources */,
 				04A48D0B46E5108D38511A09 /* AvatarModel.swift in Sources */,
 				8605B4E326D2EA0B22A65EC3 /* AvatarWebView.swift in Sources */,
 				350BBA92DDBA15ADE7C23B75 /* ContentView.swift in Sources */,
@@ -270,6 +281,7 @@
 				F248A0D27F477824EC7DAD64 /* LiveSession.swift in Sources */,
 				ED9298499D5BDFAAF8CD8C56 /* ModelResources.swift in Sources */,
 				2E801A16623AE77026396735 /* SettingsView.swift in Sources */,
+				20AAC1671E30FCD156C8ECFF /* SpeechVisemeAnalyzer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
