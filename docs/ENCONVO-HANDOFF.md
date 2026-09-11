@@ -10,6 +10,16 @@ this repository contributes only the avatar.
 Repository: https://github.com/tivojn/gpt-live-avatar (source) and its
 `assets-v1` release (models, texture tiers, motion clips, catalogue).
 
+## 0. See it running first
+
+Install the notarized Mac build from
+https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.1.0, paste any
+OpenAI key with GPT-Live-1 access, double-click her head and say "do a kung fu
+punch", "come closer", "go to the upper right corner". Right-click her for the
+menu (motions, poses, outfits, bubble modes). That is the behaviour the
+integration below reproduces inside EnConvo; the TestFlight iOS build shows
+the same on a phone.
+
 ## 1. What to take and what to ignore
 
 Take (the avatar layer, plain ES modules, no build step):
@@ -198,6 +208,11 @@ Two GPT-Live details that cost a day here:
   (`build/entitlements.mac.plist`); without it the mic prompt never shows and
   capture is silent while Chromium still reports "granted". EnConvo already
   captures audio, so this only matters if the avatar runs as its own app.
+- Shipping as a separate app: `tools/dmg.sh` shows the unattended release
+  chain (electron-builder signs and notarizes the app with an App Store
+  Connect API key, then the DMG container itself is signed, notarized and
+  stapled; an unsigned DMG is rejected by Gatekeeper even when its contents are
+  notarized). `mac.notarize` and `dmg.sign` in `package.json` are the switches.
 - Keep bubbles and overlays inside the *visible* part of the screen, not the
   window: a close-up can make the window larger than the display.
 - The model draws her small at the far stage depth; cap corner destinations
