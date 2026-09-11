@@ -248,6 +248,7 @@ function createAvatarWindow() {
     alwaysOnTop: true, skipTaskbar: true, backgroundColor: '#00000000', title: 'GPT-Live Avatar',
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false },
   });
+  avatarWindow.setBounds(clampToDisplay(avatarWindow.getBounds()));
   avatarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   avatarWindow.setAlwaysOnTop(true, 'floating');
   avatarWindow.loadURL(`${serverOrigin}/avatar.html`);
@@ -326,10 +327,20 @@ ipcMain.handle('gla:live:create', async (_event, sdp) => {
   try { return { ok: true, ...(await createLiveSession(sdp)) }; }
   catch (error) { const status = error && error.status; return { ok: false, error: status === 401 ? 'OpenAI rejected the stored API key.' : status === 403 ? 'This API key has no access to GPT-Live.' : (error && error.message) || 'Live session creation failed.' }; }
 });
+// Keep the avatar window on its display: at least this much of it stays visible
+// on every side, so her head cannot slip above the menu bar.
+function clampToDisplay(bounds) {
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const keep = 140;
+  const x = Math.max(area.x - Math.max(0, bounds.width - keep), Math.min(area.x + area.width - keep, bounds.x));
+  const y = Math.max(area.y, Math.min(area.y + area.height - keep, bounds.y));
+  return { ...bounds, x: Math.round(x), y: Math.round(y) };
+}
 ipcMain.on('gla:window:move-by', (_event, { dx, dy }) => {
   if (!avatarWindow) return;
-  const [x, y] = avatarWindow.getPosition();
-  avatarWindow.setPosition(Math.round(x + dx), Math.round(y + dy));
+  const b = avatarWindow.getBounds();
+  const next = clampToDisplay({ ...b, x: b.x + dx, y: b.y + dy });
+  avatarWindow.setPosition(next.x, next.y);
 });
 ipcMain.handle('gla:window:resize', (_event, { width, height }) => {
   if (!avatarWindow) return null;

@@ -321,7 +321,8 @@ function placeBubble() {
   } else {
     // No headroom (she came close or stands at the top): sit beside her head
     // on the side with more visible space, level with the crown.
-    const headHalf = Math.max(40, layout.bounds[2] * fit.scale * .28);
+    // Beside the head normally; beside the whole body when her head is out of view.
+    const headHalf = headTop < clip.top ? layout.bounds[2] * fit.scale / 2 + 4 : Math.max(40, layout.bounds[2] * fit.scale * .28);
     const rightX = centerX + headHalf + BUBBLE_GAP + half, leftX = centerX - headHalf - BUBBLE_GAP - half;
     const roomRight = clip.right - (centerX + headHalf), roomLeft = centerX - headHalf - clip.left;
     targetX = roomRight >= roomLeft ? Math.min(maxX, rightX) : Math.max(minX, leftX);
