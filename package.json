@@ -43,8 +43,8 @@
     },
     "extraResources": [
       {
-        "from": "build/assets/bundle",
-        "to": "avatars"
+        "from": "build/assets/bundle/tia",
+        "to": "avatars/tia"
       },
       {
         "from": "build/assets/index.json",

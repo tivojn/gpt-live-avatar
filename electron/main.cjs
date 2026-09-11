@@ -300,6 +300,9 @@ ipcMain.handle('gla:models:list', async () => {
 ipcMain.handle('gla:avatar:info', () => avatarInfo());
 ipcMain.handle('gla:avatar:select', (_event, slug) => {
   if (typeof slug !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(slug)) return publicSettings();
+  // The persona name follows the avatar unless the user renamed her.
+  const names = Object.fromEntries(assets.avatars().map(a => [a.slug, a.name]));
+  if (!config.personaName || config.personaName === names[config.avatar] || config.personaName === 'Tia') config.personaName = names[slug] || config.personaName;
   config.avatar = slug; config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings();
 });
 ipcMain.handle('gla:avatar:use-bundled', () => { config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings(); });

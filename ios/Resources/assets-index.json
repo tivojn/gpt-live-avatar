@@ -34,6 +34,84 @@
      "sha256": "46a54fb0391088966ac3b1018b130b58270f07859bf015e0e1b20cd629523a59"
     }
    }
+  },
+  "sarah": {
+   "name": "Sarah",
+   "bundledMac": false,
+   "bundledIOS": false,
+   "mac": {
+    "base": {
+     "file": "sarah-base.zip",
+     "bytes": 29757787,
+     "sha256": "4c02b789c29dfcab82f188abaa3a3f009eaecca7badb4b05b8c47021cab4ee0e"
+    },
+    "balanced": {
+     "file": "sarah-balanced.zip",
+     "bytes": 53733911,
+     "sha256": "39cca5a784a8c6107d529385ea90980e295967841e2950a5e34c8ef2a6508cd9"
+    },
+    "best": {
+     "file": "sarah-best.zip",
+     "bytes": 165126960,
+     "sha256": "e9c9486a391840a41835f792081559d2e445a78644d8eb753cf6130ffc8d64cd"
+    }
+   },
+   "ios": {
+    "1k": {
+     "file": "sarah-1k.glb",
+     "bytes": 56072636,
+     "sha256": "c3a1f0beb8a885652312e4ad85df7932333d096006c96ce0c63dc8dc00011c1e"
+    },
+    "2k": {
+     "file": "sarah-2k.glb",
+     "bytes": 87659580,
+     "sha256": "5ff89a795d2ef4f9043935486b44956945109223b17d917ebff9ca7f79b62dc4"
+    },
+    "4k": {
+     "file": "sarah-4k.glb",
+     "bytes": 203932948,
+     "sha256": "00ecfb6373bd1a17a7771010cebf8134d8fec1d2c9eab98bcb9ce29a7e3fae16"
+    }
+   }
+  },
+  "sgt-sara": {
+   "name": "SGT Sara",
+   "bundledMac": false,
+   "bundledIOS": false,
+   "mac": {
+    "base": {
+     "file": "sgt-sara-base.zip",
+     "bytes": 37878574,
+     "sha256": "820e16a860dcaf9f13e8954e6d36084be3f8fa9135a1615b4fb8bfde39bd6eec"
+    },
+    "balanced": {
+     "file": "sgt-sara-balanced.zip",
+     "bytes": 62033404,
+     "sha256": "32e4b0089357d3cae133832d41d5554d8aad1a355218d6d6943237d5b6655daa"
+    },
+    "best": {
+     "file": "sgt-sara-best.zip",
+     "bytes": 168242285,
+     "sha256": "28f303fb3e6c5ee9051d5ec2fbba939e6e8703683cc6fb6e777e41a57885e2ee"
+    }
+   },
+   "ios": {
+    "1k": {
+     "file": "sgt-sara-1k.glb",
+     "bytes": 59889052,
+     "sha256": "3352d0cf456bc38b309b3040a72cd434d4a5e61e9344f140319602cede87c0fd"
+    },
+    "2k": {
+     "file": "sgt-sara-2k.glb",
+     "bytes": 91735600,
+     "sha256": "aa7bd1eb6716d447fdec4c97fc26ed52ca15a296ecd3f3366428240660192f5f"
+    },
+    "4k": {
+     "file": "sgt-sara-4k.glb",
+     "bytes": 198941672,
+     "sha256": "74e0cde6a4f7789f4b0f18c8302436c44fe1023f764fb7c5e3865fb0df449c7d"
+    }
+   }
   }
  }
 }

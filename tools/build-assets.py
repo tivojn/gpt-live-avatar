@@ -18,7 +18,10 @@ SRC = Path(sys.argv[1]).expanduser()
 SLUG = sys.argv[2] if len(sys.argv) > 2 else "tia"
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "build" / "assets"
-BUNDLE = OUT / "bundle" / SLUG
+BUNDLED_SLUGS = {"tia"}
+# Only bundled avatars live under bundle/ (copied into the apps); the rest are
+# staged under packages/ and shipped solely through the release.
+BUNDLE = OUT / ("bundle" if SLUG in BUNDLED_SLUGS else "packages") / SLUG
 TIERS = OUT / "tiers"; IOS = OUT / "ios"
 for d in (BUNDLE, TIERS, IOS): d.mkdir(parents=True, exist_ok=True)
 
@@ -62,7 +65,6 @@ def build_tier(name, sizes):
             if size_of(f.name) in sizes: z.write(f, f"runtime/resident/{f.name}")
     return path
 tier_paths = {"balanced": build_tier("balanced", {2048}), "best": build_tier("best", {4096})}
-BUNDLED_SLUGS = {"tia"}
 if SLUG not in BUNDLED_SLUGS:
     # Non-bundled avatars: the friendly package itself is the "base" download.
     base = TIERS / f"{SLUG}-base.zip"

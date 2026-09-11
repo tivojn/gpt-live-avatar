@@ -49,6 +49,16 @@ struct ContentView: View {
 #if DEBUG
             let env = ProcessInfo.processInfo.environment
             if let slug = env["GLA_AVATAR"], !slug.isEmpty { settings.avatar = slug }
+            if let clip = env["GLA_PLAY"], !clip.isEmpty {
+                // Unattended motion test without a live session: GLA_PLAY=kung-fu-punch
+                Task {
+                    while store.loadState != .ready { try? await Task.sleep(nanoseconds: 500_000_000) }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    let reply = await store.command("clip:" + clip)
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    NSLog("GLA play %@ -> %@ status=%@", clip, reply ?? "nil", store.motionStatus)
+                }
+            }
             if let spec = env["GLA_DOWNLOAD"], spec.contains(":") {
                 // Unattended download test: GLA_DOWNLOAD=tia:2k
                 let parts = spec.split(separator: ":").map(String.init)

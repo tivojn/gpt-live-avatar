@@ -13,7 +13,13 @@ final class AppSettings: ObservableObject {
     @Published var backendModel: String { didSet { save("backendModel", backendModel) } }
     @Published var voice: String { didSet { save("voice", voice) } }
     @Published var quality: String { didSet { save("quality", quality); applyModel() } }
-    @Published var avatar: String { didSet { save("avatar", avatar); applyModel() } }
+    @Published var avatar: String { didSet {
+        save("avatar", avatar)
+        // The persona name follows the avatar unless the user renamed her.
+        let names = Dictionary(uniqueKeysWithValues: AssetStore.shared.avatars.map { ($0.slug, $0.name) })
+        if personaName.isEmpty || personaName == names[oldValue] || personaName == "Tia", let name = names[avatar] { personaName = name }
+        applyModel()
+    } }
     @Published var personaName: String { didSet { save("personaName", personaName) } }
     @Published var persona: String { didSet { save("persona", persona) } }
     @Published var opacity: Double { didSet { save("opacity", opacity) } }
