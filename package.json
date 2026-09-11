@@ -57,7 +57,8 @@
       }
     ],
     "dmg": {
-      "writeUpdateInfo": false
+      "writeUpdateInfo": false,
+      "sign": true
     }
   }
 }
