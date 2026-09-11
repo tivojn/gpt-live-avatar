@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('gla', {
     moveBy: (dx, dy) => ipcRenderer.send('gla:window:move-by', { dx, dy }),
     resizeTo: (width, height) => ipcRenderer.invoke('gla:window:resize', { width, height }),
     bounds: () => ipcRenderer.invoke('gla:window:bounds'),
+    workArea: () => ipcRenderer.invoke('gla:window:work-area'),
+    setBounds: bounds => ipcRenderer.invoke('gla:window:set-bounds', bounds),
     setIgnoreMouse: ignore => ipcRenderer.send('gla:window:ignore-mouse', Boolean(ignore)),
   },
   openSettings: () => ipcRenderer.invoke('gla:open-settings'),
