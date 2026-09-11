@@ -10,6 +10,8 @@ struct AvatarWebView: UIViewRepresentable {
     let pose: AvatarPose
     let orbit: AvatarOrbit
     let visibleRect: CGRect
+    /// Screen areas (points) covered by native chrome such as the bubble.
+    var insets: (top: CGFloat, bottom: CGFloat) = (0, 0)
     var isActive = true
     @ObservedObject private var store = AvatarStore.shared
 
@@ -48,6 +50,7 @@ struct AvatarWebView: UIViewRepresentable {
             "conversation": store.conversation,
             "options": store.selection,
             "pointer": NSNull(),
+            "inset": ["top": insets.top, "bottom": insets.bottom],
         ]
         coordinator.needsFlush = true
         coordinator.flush(view)

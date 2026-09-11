@@ -57,7 +57,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lionheart.gptliveavatar
         PRODUCT_NAME: GPT-Live Avatar
         MARKETING_VERSION: 1.0.0
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_STRICT_CONCURRENCY: minimal
     info:

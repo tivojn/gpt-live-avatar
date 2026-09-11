@@ -17,13 +17,16 @@ struct ContentView: View {
     @State private var smoother = PoseSmoother()
     @State private var blinkNext: TimeInterval = 0
     @State private var blinkAt: TimeInterval = -10
+    @State private var bubbleHeight: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
                 TimelineView(.animation(minimumInterval: reduceMotion ? 0.25 : 1.0 / 30, paused: scenePhase != .active)) { context in
-                    AvatarWebView(pose: pose(at: context.date), orbit: orbit, visibleRect: visibleRect(in: proxy.size), isActive: scenePhase == .active)
+                    AvatarWebView(pose: pose(at: context.date), orbit: orbit, visibleRect: visibleRect(in: proxy.size),
+                                  insets: (settings.showBubble ? bubbleHeight + proxy.safeAreaInsets.top + 16 : proxy.safeAreaInsets.top, proxy.safeAreaInsets.bottom),
+                                  isActive: scenePhase == .active)
                 }
                 .opacity(settings.opacity)
                 .ignoresSafeArea()
@@ -31,7 +34,10 @@ struct ContentView: View {
                 .gesture(DragGesture(minimumDistance: 4).onChanged { value in orbit = orbitStart.dragging(value.translation) }.onEnded { _ in orbitStart = orbit })
                 .simultaneousGesture(MagnificationGesture().onChanged { value in zoom = min(2.5, max(0.6, zoomStart * value)) }.onEnded { _ in zoomStart = zoom })
                 .onTapGesture(count: 2) { toggleCall() }
-                if settings.showBubble { bubble.padding(.horizontal, 12).padding(.top, 8) }
+                if settings.showBubble {
+                    bubble.padding(.horizontal, 12).padding(.top, 8)
+                        .background(GeometryReader { g in Color.clear.onAppear { bubbleHeight = g.size.height }.onChange(of: g.size.height) { _, h in bubbleHeight = h } })
+                }
                 if case .loading = store.loadState { ProgressView("Loading Tia…").tint(.white).foregroundStyle(.white).padding().background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14)).frame(maxHeight: .infinity) }
                 if case .failed(let message) = store.loadState { Text(message).foregroundStyle(.white).multilineTextAlignment(.center).padding().background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14)).padding(24).frame(maxHeight: .infinity) }
             }
@@ -80,6 +86,13 @@ struct ContentView: View {
                 TextField("Steer her: e.g. speak slowly, do a wave…", text: $steer).textFieldStyle(.roundedBorder).font(.footnote).disabled(live.state != .connected)
                     .onSubmit(sendSteer)
                 Button("Send", action: sendSteer).buttonStyle(.bordered).font(.footnote).disabled(live.state != .connected || steer.isEmpty)
+            }
+            if live.state == .connected {
+                HStack(spacing: 6) {
+                    Image(systemName: live.muted ? "mic.slash" : "mic").font(.caption2)
+                    GeometryReader { g in ZStack(alignment: .leading) { Capsule().fill(Color.white.opacity(0.15)); Capsule().fill(Color.green).frame(width: g.size.width * CGFloat(live.inputLevel)) } }.frame(height: 4)
+                    Text(live.sentAudioBytes > 0 ? "\(live.sentAudioBytes / 48000) s sent" : "no audio yet").font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                }
             }
             if !live.lastError.isEmpty { Text(live.lastError).font(.caption2).foregroundStyle(.red) }
         }

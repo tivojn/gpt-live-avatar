@@ -21,6 +21,8 @@ final class LiveSession: ObservableObject {
     @Published private(set) var speaking = false
     @Published private(set) var outputLevel: Float = 0
     @Published private(set) var muted = false
+    @Published private(set) var inputLevel: Float = 0
+    @Published private(set) var sentAudioBytes = 0
     /// Latest finalized assistant sentence group and the user turn it answers.
     var onAssistantFinal: ((_ userText: String, _ reply: String, _ turnID: String) -> Void)?
 
@@ -32,6 +34,12 @@ final class LiveSession: ObservableObject {
     private let player = AVAudioPlayerNode()
     private var converter: AVAudioConverter?
     private let wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 24_000, channels: 1, interleaved: true)!
+    /// Player nodes on real devices only accept float PCM; decode PCM16 into this.
+    private let playFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false)!
+    private let captureQueue = DispatchQueue(label: "gla.capture")
+    // Touched only on captureQueue (sync from the main actor, async from the tap).
+    private nonisolated(unsafe) var captureConverter: AVAudioConverter?
+    private nonisolated(unsafe) var captureActive = false
     private var pendingByte: UInt8?
     private var eventCounter = 0
     private var segments: [String: (id: String, text: String, endMs: Double, timer: Task<Void, Never>?)] = [:]
@@ -53,6 +61,11 @@ final class LiveSession: ObservableObject {
         guard !key.isEmpty else { lastError = "Add your OpenAI API key in Settings first."; return }
         lastError = ""; userLine = ""; assistantLine = ""; assistantTurn = ""; latestUserFinal = ""; turnID = "live:greeting"
         state = .connecting
+        // iOS only shows the microphone prompt when asked; without permission the
+        // input node silently delivers zeros and she never hears anything.
+        let granted = await AVAudioApplication.requestRecordPermission()
+        guard granted else { lastError = "Microphone access is off. Allow it for GPT-Live Avatar in Settings > Privacy > Microphone."; state = .idle; return }
+        sentAudioBytes = 0; inputLevel = 0
         do {
             try configureAudioSession()
             try startAudioEngine()
@@ -187,9 +200,13 @@ final class LiveSession: ObservableObject {
     private func startAudioEngine() throws {
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
-        converter = AVAudioConverter(from: inputFormat, to: wireFormat)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw NSError(domain: "gla", code: 1, userInfo: [NSLocalizedDescriptionKey: "no microphone input format"])
+        }
+        let converter = AVAudioConverter(from: inputFormat, to: wireFormat)
+        captureQueue.sync { captureConverter = converter; captureActive = true }
         if !engine.attachedNodes.contains(player) { engine.attach(player) }
-        engine.connect(player, to: engine.mainMixerNode, format: wireFormat)
+        engine.connect(player, to: engine.mainMixerNode, format: playFormat)
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { [weak self] buffer, _ in
             self?.capture(buffer)
@@ -197,9 +214,11 @@ final class LiveSession: ObservableObject {
         engine.prepare()
         try engine.start()
         player.play()
+        NSLog("GLA audio: input %@ -> wire 24k pcm16, play float32", inputFormat.description)
     }
 
     private func stopAudioEngine() {
+        captureQueue.sync { captureActive = false; captureConverter = nil }
         engine.inputNode.removeTap(onBus: 0)
         player.stop()
         engine.stop()
@@ -208,41 +227,70 @@ final class LiveSession: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    /// Runs on the audio thread: convert to 24 kHz mono PCM16 and ship it.
+    /// Runs on the audio thread. Convert to 24 kHz mono PCM16 on a serial queue
+    /// (the tap buffer is only valid inside the callback, so copy it first), then
+    /// hop to the main actor only to send.
     private nonisolated func capture(_ buffer: AVAudioPCMBuffer) {
-        Task { @MainActor [weak self] in
-            guard let self, self.state != .idle, !self.muted, let converter = self.converter else { return }
-            let ratio = self.wireFormat.sampleRate / buffer.format.sampleRate
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 32)
-            guard let output = AVAudioPCMBuffer(pcmFormat: self.wireFormat, frameCapacity: capacity) else { return }
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else { return }
+        copy.frameLength = buffer.frameLength
+        let bytesPerFrame = Int(buffer.format.streamDescription.pointee.mBytesPerFrame)
+        let channels = buffer.format.isInterleaved ? 1 : Int(buffer.format.channelCount)
+        if let src = buffer.floatChannelData, let dst = copy.floatChannelData {
+            for c in 0..<channels { memcpy(dst[c], src[c], Int(buffer.frameLength) * (buffer.format.isInterleaved ? bytesPerFrame : 4)) }
+        } else if let src = buffer.int16ChannelData, let dst = copy.int16ChannelData {
+            for c in 0..<channels { memcpy(dst[c], src[c], Int(buffer.frameLength) * (buffer.format.isInterleaved ? bytesPerFrame : 2)) }
+        } else if let src = buffer.int32ChannelData, let dst = copy.int32ChannelData {
+            for c in 0..<channels { memcpy(dst[c], src[c], Int(buffer.frameLength) * (buffer.format.isInterleaved ? bytesPerFrame : 4)) }
+        } else { return }
+        captureQueue.async { [weak self] in
+            guard let self else { return }
+            guard self.captureActive, let converter = self.captureConverter else { return }
+            let ratio = 24_000 / copy.format.sampleRate
+            let capacity = AVAudioFrameCount(Double(copy.frameLength) * ratio + 32)
+            guard let output = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: capacity) else { return }
             var consumed = false
             var error: NSError?
-            converter.convert(to: output, error: &error) { _, status in
-                if consumed { status.pointee = .noDataNow; return nil }
-                consumed = true; status.pointee = .haveData; return buffer
+            let status = converter.convert(to: output, error: &error) { _, outStatus in
+                if consumed { outStatus.pointee = .noDataNow; return nil }
+                consumed = true; outStatus.pointee = .haveData; return copy
             }
-            guard error == nil, output.frameLength > 0, let channel = output.int16ChannelData else { return }
-            var bytes = Data(bytes: channel[0], count: Int(output.frameLength) * 2)
-            if let pending = self.pendingByte { bytes.insert(pending, at: 0); self.pendingByte = nil }
-            if bytes.count % 2 == 1 { self.pendingByte = bytes.removeLast() }
-            guard !bytes.isEmpty else { return }
-            self.send(["type": "session.input_audio.append", "audio": bytes.base64EncodedString()])
+            guard status != .error, error == nil, output.frameLength > 0, let channel = output.int16ChannelData else {
+                if let error { NSLog("GLA capture convert failed: %@", error.localizedDescription) }
+                return
+            }
+            var sum: Float = 0
+            for i in 0..<Int(output.frameLength) { let v = Float(channel[0][i]) / 32_768; sum += v * v }
+            let level = min(1, sqrt(sum / Float(max(1, output.frameLength))) * 8)
+            let bytes = Data(bytes: channel[0], count: Int(output.frameLength) * 2)
+            Task { @MainActor [weak self] in self?.ship(bytes, level: level) }
         }
+    }
+
+    private func ship(_ chunk: Data, level: Float) {
+        guard state != .idle, !muted else { return }
+        inputLevel = level
+        var bytes = chunk
+        if let pending = pendingByte { bytes.insert(pending, at: 0); pendingByte = nil }
+        if bytes.count % 2 == 1 { pendingByte = bytes.removeLast() }
+        guard !bytes.isEmpty else { return }
+        sentAudioBytes += bytes.count
+        send(["type": "session.input_audio.append", "audio": bytes.base64EncodedString()])
     }
 
     private func play(_ pcm: Data) {
         let frames = AVAudioFrameCount(pcm.count / 2)
-        guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: wireFormat, frameCapacity: frames) else { return }
+        guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: playFormat, frameCapacity: frames) else { return }
         buffer.frameLength = frames
+        var sum: Float = 0
         pcm.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress, let channel = buffer.int16ChannelData else { return }
-            memcpy(channel[0], base, Int(frames) * 2)
+            guard let channel = buffer.floatChannelData else { return }
+            let samples = raw.bindMemory(to: Int16.self)
+            for i in 0..<Int(frames) {
+                let v = Float(Int16(littleEndian: samples[i])) / 32_768
+                channel[0][i] = v; sum += v * v
+            }
         }
         // Output level for lip-sync: RMS of this chunk, decayed between chunks.
-        var sum: Float = 0
-        if let channel = buffer.int16ChannelData {
-            for i in 0..<Int(frames) { let v = Float(channel[0][i]) / 32_768; sum += v * v }
-        }
         let rms = sqrt(sum / Float(frames))
         outputLevel = max(outputLevel * 0.6, min(1, rms * 6))
         speaking = outputLevel > 0.04

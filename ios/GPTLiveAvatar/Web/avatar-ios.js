@@ -23,6 +23,13 @@ const fail = error => {
 };
 window.addEventListener('error', event => fail(event.error || event.message));
 window.addEventListener('unhandledrejection', event => fail(event.reason));
+// The overhead bubble covers the top of the screen; walks and corner
+// destinations stay in the part of the surface she can actually be seen in.
+function stageSafeArea(surface){
+  const top=Math.min(surface.height*.6,Math.max(0,Number(latest?.inset?.top)||0));
+  const bottom=Math.min(surface.height*.3,Math.max(0,Number(latest?.inset?.bottom)||0));
+  return {x:surface.x,y:surface.y+top,width:surface.width,height:surface.height-top-bottom};
+}
 window.updateAvatar = frame => {
   latest = frame;
   if (!loading && !failed) loading = load(frame).catch(fail);
@@ -109,8 +116,8 @@ window.avatarCommand = async (value, isText = false) => {
     try {
       await avatar.motion.prepare(action==='run-around'?'hello-run':avatar.options.walkingClip());
       if(generation!==actionGeneration)return null;
-      const box=avatar.canvas.getBoundingClientRect(),surface={x:0,y:0,width:box.width,height:box.height};
-      const crop=displayedViewport||latest.crop,scale=surface.width/crop.w;
+      const box=avatar.canvas.getBoundingClientRect(),surface=stageSafeArea({x:0,y:0,width:box.width,height:box.height});
+      const crop=displayedViewport||latest.crop,scale=box.width/crop.w;
       if(!avatar.studioStage){
         avatar.studioStage=new AvatarStudioStage({scale,x:-crop.x*scale,y:-crop.y*scale},avatar.layout(),surface);
         avatar.lockStudioLens();travelOffset={x:0,y:0};
@@ -221,7 +228,7 @@ function draw(now) {
   lastNativeLayout=nativeLayout;
   let viewport = fitAvatarViewport(latest.crop, surface.width, surface.height, density);
   if(companion&&avatar.studioStage){
-    const stage=avatar.studioStage,safe={x:0,y:0,width:surface.width,height:surface.height};
+    const stage=avatar.studioStage,safe=stageSafeArea({x:0,y:0,width:surface.width,height:surface.height});
     const nativeFit={scale:surface.width/viewport.w,x:-viewport.x*surface.width/viewport.w,y:-viewport.y*surface.height/viewport.h};
     if(!resized)stage.manual(nativeFit,safe);else stage.manualFit=nativeFit;
     const gait=companion.roam==='run-around'?'hello-run':avatar.options.walkingClip();
