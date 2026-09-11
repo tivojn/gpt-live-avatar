@@ -1,0 +1,20 @@
+{
+  "name": "three",
+  "version": "0.185.1",
+  "license": "MIT",
+  "files": [
+    "three.core.js",
+    "three.module.js",
+    "GLTFLoader.js",
+    "KTX2Loader.js",
+    "WorkerPool.js",
+    "ktx-parse.module.js",
+    "zstddec.module.js",
+    "ColorSpaces.js",
+    "BufferGeometryUtils.js",
+    "SkeletonUtils.js",
+    "RoomEnvironment.js",
+    "basis_transcoder.js",
+    "basis_transcoder.wasm"
+  ]
+}

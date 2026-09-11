@@ -1,0 +1,35 @@
+{
+  "name": "gpt-live-avatar",
+  "version": "0.1.0",
+  "description": "Tia, a full-duplex desk avatar on OpenAI GPT-Live-1",
+  "author": "Adam Cohen",
+  "license": "MIT",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node qa/qa.js",
+    "pack": "electron-builder --mac dir"
+  },
+  "dependencies": {
+    "openai": "^7.15.0"
+  },
+  "devDependencies": {
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.adamcohen.gptliveavatar",
+    "productName": "GPT-Live Avatar",
+    "directories": { "output": "dist" },
+    "files": ["electron/**", "web/**", "package.json"],
+    "mac": {
+      "target": ["dir"],
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "LSMinimumSystemVersion": "14.0",
+        "NSMicrophoneUsageDescription": "GPT-Live Avatar uses the microphone only during a live conversation; ending the conversation stops capture."
+      }
+    }
+  }
+}
