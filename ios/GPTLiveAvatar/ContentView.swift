@@ -48,6 +48,18 @@ struct ContentView: View {
             if !settings.hasKey { showSettings = true }
 #if DEBUG
             let env = ProcessInfo.processInfo.environment
+            if let slug = env["GLA_AVATAR"], !slug.isEmpty { settings.avatar = slug }
+            if let spec = env["GLA_DOWNLOAD"], spec.contains(":") {
+                // Unattended download test: GLA_DOWNLOAD=tia:2k
+                let parts = spec.split(separator: ":").map(String.init)
+                Task {
+                    var last = -1
+                    let watcher = Task { while !Task.isCancelled { if let p = AssetStore.shared.progress { let pc = Int(p.fraction * 100); if pc != last { last = pc; NSLog("GLA download %@ %@ %d%%", p.phase, p.tier, pc) } }; try? await Task.sleep(nanoseconds: 300_000_000) } }
+                    await AssetStore.shared.download(slug: parts[0], tier: parts[1])
+                    watcher.cancel()
+                    NSLog("GLA download finished: present=%d model=%@", AssetStore.shared.isPresent(slug: parts[0], tier: parts[1]) ? 1 : 0, AvatarStore.shared.modelURL?.lastPathComponent ?? "nil")
+                }
+            }
             if env["GLA_AUTOSTART"] == "1" {
                 Task {
                     while store.loadState != .ready { try? await Task.sleep(nanoseconds: 500_000_000) }

@@ -8,9 +8,14 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const zlib = require('node:zlib');
+const { AvatarAssets } = require('./assets.cjs');
 
 const WEB = path.join(__dirname, '..', 'web');
 const DEFAULT_OPENCLAM_AVATAR = path.join(os.homedir(), 'Library', 'Application Support', 'OpenClam Studio', 'backend-data', 'avatars', 'tia');
+// Bundled avatar packages (resource-friendly tier) and the shipped catalogue.
+const BUNDLED_AVATARS = app.isPackaged ? path.join(process.resourcesPath, 'avatars') : path.join(__dirname, '..', 'build', 'assets', 'bundle');
+const BUNDLED_INDEX = app.isPackaged ? path.join(process.resourcesPath, 'assets-index.json') : path.join(__dirname, '..', 'build', 'assets', 'index.json');
 const LIVE_MODEL = 'gpt-live-1';
 const DEFAULT_BACKEND_MODEL = 'gpt-5.6-terra';
 const RECOMMENDED_BACKENDS = ['gpt-5.6-terra', 'gpt-5.6-luna'];
@@ -21,6 +26,7 @@ const DEFAULTS = {
   backendModel: DEFAULT_BACKEND_MODEL,
   voice: 'marin',
   quality: 'balanced',
+  avatar: 'tia',
   avatarDir: '',
   personaName: 'Tia',
   persona: 'You are Tia, a warm, playful desk companion who loves to move.',
@@ -37,6 +43,7 @@ let config = { ...DEFAULTS };
 let avatarWindow = null;
 let settingsWindow = null;
 let serverOrigin = '';
+let assets = null;
 
 // ---------------------------------------------------------------- config
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
@@ -49,14 +56,24 @@ function loadConfig() {
   } catch { config = { ...DEFAULTS }; }
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
   if (!QUALITIES.includes(config.quality)) config.quality = DEFAULTS.quality;
-  if (!config.avatarDir && fs.existsSync(path.join(DEFAULT_OPENCLAM_AVATAR, 'manifest.json'))) config.avatarDir = DEFAULT_OPENCLAM_AVATAR;
+  if (typeof config.avatar !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(config.avatar)) config.avatar = DEFAULTS.avatar;
 }
+// Where the selected avatar's files live: a custom package folder, or the
+// bundled package overlaid with whatever tiers were downloaded.
+function avatarRoots() {
+  if (config.avatarDir) return [config.avatarDir];
+  const roots = assets ? assets.roots(config.avatar) : [];
+  if (!roots.length && fs.existsSync(path.join(DEFAULT_OPENCLAM_AVATAR, 'manifest.json'))) return [DEFAULT_OPENCLAM_AVATAR];
+  return roots;
+}
+const avatarFile = rel => (assets ? assets.resolve(avatarRoots(), rel) : null);
 function saveConfig() {
   fs.mkdirSync(path.dirname(configPath()), { recursive: true });
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo() };
+  return { ...config, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+    avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null };
 }
 function broadcastSettings() {
   const value = publicSettings();
@@ -92,28 +109,31 @@ function backendCandidates(ids) {
 
 // ---------------------------------------------------------------- avatar package
 function avatarInfo() {
-  const dir = config.avatarDir;
-  const result = { dir, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
-  if (!dir) { result.problem = 'No avatar folder selected.'; return result; }
+  const roots = avatarRoots();
+  const result = { dir: roots[0] || '', roots, slug: config.avatarDir ? '' : config.avatar, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
+  if (!roots.length) { result.problem = config.avatarDir ? 'No avatar folder selected.' : 'This avatar is not installed yet. Download it in Settings.'; return result; }
   try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-    if (manifest.renderer !== '3d' || !manifest.model) { result.problem = 'This folder is not a 3D avatar package.'; return result; }
-    const model = path.join(dir, manifest.model);
-    result.modelBytes = fs.statSync(model).size;
+    const manifestPath = avatarFile('manifest.json');
+    if (!manifestPath) { result.problem = 'The avatar package has no manifest.'; return result; }
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (manifest.renderer !== '3d') { result.problem = 'This folder is not a 3D avatar package.'; return result; }
     result.name = String(manifest.name || 'Avatar');
     result.manifest = manifest;
-    // Prefer the published runtime bundle: its split "resident" model streams
-    // textures at the size the quality setting asks for, which is what makes
-    // the resource-friendly mode cheap. Fall back to the plain GLB.
-    const resident = path.join(dir, 'runtime', 'resident', 'model.gltf');
-    result.residentAvailable = fs.existsSync(resident);
-    result.modelURL = result.residentAvailable ? '/avatar/runtime/resident/model.gltf' : `/avatar/${manifest.model}`;
-    const runtimeMotions = path.join(dir, 'runtime', 'motions', 'library.json');
-    result.motionsURL = fs.existsSync(runtimeMotions) ? '/avatar/runtime/motions/library.json' : '/avatar/motions/library.json';
+    // Prefer the split "resident" model: it streams textures at the size the
+    // quality setting asks for, which is what makes the friendly mode cheap
+    // and lets downloaded 2K/4K tiers plug in. Fall back to a plain GLB.
+    const resident = avatarFile(path.join('runtime', 'resident', 'model.gltf'));
+    result.residentAvailable = Boolean(resident);
+    const glb = manifest.model ? avatarFile(manifest.model) : null;
+    if (!resident && !glb) { result.problem = 'The avatar package has no model.'; return result; }
+    result.modelBytes = resident ? 0 : fs.statSync(glb).size;
+    result.modelURL = resident ? '/avatar/runtime/resident/model.gltf' : `/avatar/${manifest.model}`;
+    result.motionsURL = avatarFile(path.join('runtime', 'motions', 'library.json')) ? '/avatar/runtime/motions/library.json' : '/avatar/motions/library.json';
     result.pose = manifest.pose || 'relaxed'; result.yaw = Number(manifest.yaw) || 0;
     result.visemes = Array.isArray(manifest.visemes) ? manifest.visemes : ['sil', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou'];
     try {
-      const library = JSON.parse(fs.readFileSync(path.join(dir, 'motions', 'library.json'), 'utf8'));
+      const libraryPath = avatarFile(path.join('runtime', 'motions', 'library.json')) || avatarFile(path.join('motions', 'library.json'));
+      const library = JSON.parse(fs.readFileSync(libraryPath, 'utf8'));
       result.clips = (library.clips || []).length;
       result.clipLabels = (library.clips || []).map(c => String(c.label || c.id || '').replace(/[^\w -]/g, '').slice(0, 60)).filter(Boolean);
     } catch { result.clips = 0; result.clipLabels = []; }
@@ -133,11 +153,33 @@ function startServer() {
   return new Promise(resolve => {
     const server = http.createServer(async (request, response) => {
       const url = new URL(request.url, 'http://127.0.0.1');
-      let root = WEB; let rel = decodeURIComponent(url.pathname);
-      if (rel.startsWith('/avatar/')) { root = config.avatarDir; rel = rel.slice('/avatar/'.length); if (!root) { response.writeHead(404); response.end(); return; } }
-      if (rel === '/' || rel === '') rel = 'avatar.html';
-      const file = safeJoin(root, rel);
-      if (!file) { response.writeHead(403); response.end(); return; }
+      let rel = decodeURIComponent(url.pathname);
+      let file = null;
+      if (rel.startsWith('/avatar/')) {
+        rel = rel.slice('/avatar/'.length);
+        if (rel.includes('..')) { response.writeHead(403); response.end(); return; }
+        const roots = avatarRoots();
+        if (!roots.length) { response.writeHead(404); response.end(); return; }
+        const sendBuffer = (buffer, type) => { response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Length': buffer.length }); response.end(request.method === 'HEAD' ? undefined : buffer); };
+        // The resident model lists only the texture sizes that are on disk, so
+        // the renderer never asks for a tier that was not downloaded.
+        if (rel === 'runtime/resident/model.gltf') {
+          const doc = assets.residentDocument(roots);
+          if (!doc) { response.writeHead(404); response.end(); return; }
+          sendBuffer(doc, 'model/gltf+json'); return;
+        }
+        file = assets.resolve(roots, rel);
+        // Motion clips ship raw-deflate compressed; inflate on the way out.
+        if (!file && rel.endsWith('.json')) {
+          const packed = assets.resolve(roots, rel + '.deflate');
+          if (packed) { try { sendBuffer(zlib.inflateRawSync(await fsp.readFile(packed)), 'application/json'); } catch { response.writeHead(500); response.end(); } return; }
+        }
+        if (!file) { response.writeHead(404); response.end(); return; }
+      } else {
+        if (rel === '/' || rel === '') rel = 'avatar.html';
+        file = safeJoin(WEB, rel);
+        if (!file) { response.writeHead(403); response.end(); return; }
+      }
       let stat;
       try { stat = await fsp.stat(file); } catch { response.writeHead(404); response.end(); return; }
       if (!stat.isFile()) { response.writeHead(404); response.end(); return; }
@@ -226,7 +268,7 @@ function openSettingsWindow() {
 ipcMain.handle('gla:settings:get', () => publicSettings());
 ipcMain.handle('gla:settings:set', (_event, patch) => {
   if (!patch || typeof patch !== 'object') return publicSettings();
-  const allowed = ['backendModel', 'voice', 'quality', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble'];
+  const allowed = ['backendModel', 'voice', 'quality', 'avatar', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble'];
   for (const key of allowed) if (key in patch) config[key] = patch[key];
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
   if (!QUALITIES.includes(config.quality)) config.quality = DEFAULTS.quality;
@@ -256,6 +298,20 @@ ipcMain.handle('gla:models:list', async () => {
   catch (error) { return { ok: false, error: error.message, backends: RECOMMENDED_BACKENDS }; }
 });
 ipcMain.handle('gla:avatar:info', () => avatarInfo());
+ipcMain.handle('gla:avatar:select', (_event, slug) => {
+  if (typeof slug !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(slug)) return publicSettings();
+  config.avatar = slug; config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings();
+});
+ipcMain.handle('gla:avatar:use-bundled', () => { config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings(); });
+// Texture tiers and downloadable avatars.
+ipcMain.handle('gla:assets:status', (_event, slug) => assets.status(typeof slug === 'string' && slug ? slug : config.avatar));
+ipcMain.handle('gla:assets:refresh', async () => { await assets.refreshIndex(); broadcastSettings(); return publicSettings(); });
+ipcMain.handle('gla:assets:download', async (_event, { slug, tier }) => {
+  try { await assets.download(String(slug || config.avatar), String(tier)); broadcastSettings(); return { ok: true }; }
+  catch (error) { broadcastSettings(); return { ok: false, error: error.message }; }
+});
+ipcMain.handle('gla:assets:cancel', () => { assets.cancel(); return true; });
+ipcMain.handle('gla:assets:remove', async (_event, { slug, tier }) => { try { await assets.remove(String(slug || config.avatar), String(tier)); broadcastSettings(); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } });
 ipcMain.handle('gla:avatar:choose', async () => {
   const picked = await dialog.showOpenDialog({ title: 'Choose a 3D avatar package folder', properties: ['openDirectory'], defaultPath: config.avatarDir || DEFAULT_OPENCLAM_AVATAR });
   if (picked.canceled || !picked.filePaths[0]) return avatarInfo();
@@ -336,6 +392,11 @@ ipcMain.handle('gla:quit', () => { app.quit(); return true; });
 // ---------------------------------------------------------------- app
 app.whenReady().then(async () => {
   loadConfig();
+  assets = new AvatarAssets({ bundledRoot: BUNDLED_AVATARS, downloadsRoot: path.join(app.getPath('userData'), 'avatars'), bundledIndexPath: BUNDLED_INDEX,
+    broadcast: progress => { for (const w of [avatarWindow, settingsWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:assets:progress', progress); } });
+  // Refresh the cloud catalogue in the background so new avatars and tiers
+  // show up without an app update; failures keep the shipped copy.
+  setTimeout(() => { assets.refreshIndex().then(() => broadcastSettings()).catch(() => {}); }, 2000);
   // Development convenience: seed the encrypted key store from the environment
   // once, so a test run never needs the key typed into the UI.
   if (process.env.GLA_OPENAI_KEY && !hasApiKey()) { try { writeApiKey(process.env.GLA_OPENAI_KEY.trim()); } catch {} }

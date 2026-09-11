@@ -19,6 +19,17 @@ contextBridge.exposeInMainWorld('gla', {
   // avatar package
   avatarInfo: () => ipcRenderer.invoke('gla:avatar:info'),
   chooseAvatarFolder: () => ipcRenderer.invoke('gla:avatar:choose'),
+  selectAvatar: slug => ipcRenderer.invoke('gla:avatar:select', slug),
+  useBundledAvatar: () => ipcRenderer.invoke('gla:avatar:use-bundled'),
+  // texture tiers and downloadable avatars (GitHub release), with progress
+  assets: {
+    status: slug => ipcRenderer.invoke('gla:assets:status', slug),
+    refresh: () => ipcRenderer.invoke('gla:assets:refresh'),
+    download: (slug, tier) => ipcRenderer.invoke('gla:assets:download', { slug, tier }),
+    cancel: () => ipcRenderer.invoke('gla:assets:cancel'),
+    remove: (slug, tier) => ipcRenderer.invoke('gla:assets:remove', { slug, tier }),
+    onProgress: callback => subscribe('gla:assets:progress', callback),
+  },
   // live session: the renderer owns WebRTC, main owns the API key
   createLiveSession: sdp => ipcRenderer.invoke('gla:live:create', sdp),
   live: { heartbeat: active => ipcRenderer.send('gla:live:heartbeat', Boolean(active)) },

@@ -12,7 +12,8 @@ final class AppSettings: ObservableObject {
 
     @Published var backendModel: String { didSet { save("backendModel", backendModel) } }
     @Published var voice: String { didSet { save("voice", voice) } }
-    @Published var quality: String { didSet { save("quality", quality); AvatarStore.shared.applyQuality(quality) } }
+    @Published var quality: String { didSet { save("quality", quality); applyModel() } }
+    @Published var avatar: String { didSet { save("avatar", avatar); applyModel() } }
     @Published var personaName: String { didSet { save("personaName", personaName) } }
     @Published var persona: String { didSet { save("persona", persona) } }
     @Published var opacity: Double { didSet { save("opacity", opacity) } }
@@ -26,19 +27,22 @@ final class AppSettings: ObservableObject {
         backendModel = defaults.string(forKey: "backendModel") ?? "gpt-5.6-terra"
         voice = defaults.string(forKey: "voice") ?? "marin"
         quality = defaults.string(forKey: "quality") ?? "balanced"
+        avatar = defaults.string(forKey: "avatar") ?? "tia"
         personaName = defaults.string(forKey: "personaName") ?? "Tia"
         persona = defaults.string(forKey: "persona") ?? "You are Tia, a warm, playful companion who loves to move."
         opacity = defaults.object(forKey: "opacity") as? Double ?? 1
         showBubble = defaults.object(forKey: "showBubble") as? Bool ?? true
         backends = defaults.stringArray(forKey: "backends") ?? Self.recommendedBackends
         hasKey = Keychain.read() != nil
-        AvatarStore.shared.applyQuality(quality)
+        applyModel()
+        AssetStore.shared.onChange = { [weak self] in self?.applyModel() }
 #if DEBUG
         // Development: seed the key from the launch environment once.
         if !hasKey, let seed = ProcessInfo.processInfo.environment["GLA_OPENAI_KEY"], seed.hasPrefix("sk-") { Keychain.write(seed); hasKey = true }
 #endif
     }
     private func save(_ key: String, _ value: Any) { defaults.set(value, forKey: key) }
+    func applyModel() { AvatarStore.shared.applyQuality(quality, avatar: avatar) }
 
     var apiKey: String { Keychain.read() ?? "" }
 

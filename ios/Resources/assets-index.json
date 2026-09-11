@@ -1,0 +1,39 @@
+{
+ "version": 1,
+ "avatars": {
+  "tia": {
+   "name": "Tia",
+   "bundledMac": true,
+   "bundledIOS": true,
+   "mac": {
+    "balanced": {
+     "file": "tia-balanced.zip",
+     "bytes": 126202221,
+     "sha256": "b6c841eecea7734fabbd9c0bbf85d4ad9946c188dfad2b67f6c279fcb673db2a"
+    },
+    "best": {
+     "file": "tia-best.zip",
+     "bytes": 271107942,
+     "sha256": "2e5f2eb0551860c5b3ea7c971372e3baa32cf46d4fdb7f67730f6f7b611246e3"
+    }
+   },
+   "ios": {
+    "1k": {
+     "file": "tia-1k.glb",
+     "bytes": 144795180,
+     "sha256": "e11170d89058af4402b59c82b62d63acfd1a291ab3c70256aa5d7a2bd85c6de2"
+    },
+    "2k": {
+     "file": "tia-2k.glb",
+     "bytes": 163517080,
+     "sha256": "e3c93daf150269cf3964eb9b653b45c6434bebeb2d09e904284269127a9517aa"
+    },
+    "4k": {
+     "file": "tia-4k.glb",
+     "bytes": 203553916,
+     "sha256": "46a54fb0391088966ac3b1018b130b58270f07859bf015e0e1b20cd629523a59"
+    }
+   }
+  }
+ }
+}

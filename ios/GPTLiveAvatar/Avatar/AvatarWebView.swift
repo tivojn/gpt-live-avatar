@@ -37,8 +37,9 @@ struct AvatarWebView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.view = view
         store.renderer = coordinator
-        if !coordinator.started || coordinator.textureLimit != store.textureLimit {
+        if !coordinator.started || coordinator.textureLimit != store.textureLimit || coordinator.modelURL != store.modelURL {
             coordinator.textureLimit = store.textureLimit
+            coordinator.modelURL = store.modelURL
             coordinator.start(view)
         }
         coordinator.latest = [
@@ -69,6 +70,7 @@ struct AvatarWebView: UIViewRepresentable {
         weak var view: WKWebView?
         var started = false
         var textureLimit = 2048
+        var modelURL: URL?
         var pageReady = false, updating = false, needsFlush = false, hasFailed = false
         var latest: [String: Any]?
         private var lastFrame: NSDictionary?
@@ -90,7 +92,9 @@ struct AvatarWebView: UIViewRepresentable {
             startup?.cancel(); timeout?.cancel(); assets.cancelAll(); view.stopLoading()
             preparing = true
             assets.maximumTextureSize = recoveryCount == 0 ? textureLimit : recoveryCount == 1 ? min(textureLimit, 1024) : 512
+            assets.modelURL = modelURL
             AvatarStore.shared.loadState = .loading
+            if modelURL == nil { fail("This avatar is not downloaded yet. Get it in Settings.", view: view); return }
             armTimeout(view, generation: current, seconds: 180)
             startup = Task { @MainActor [weak self, weak view] in
                 do {
@@ -193,6 +197,7 @@ final class AvatarAssets: NSObject, WKURLSchemeHandler {
         "/vendor/three/BufferGeometryUtils.js": "BufferGeometryUtils.js", "/vendor/three/SkeletonUtils.js": "SkeletonUtils.js",
     ]
     var maximumTextureSize = 2048
+    var modelURL: URL?
     private var requests: [ObjectIdentifier: UUID] = [:]
     private let worker = ModelWorker()
     private var preparation: UUID?
@@ -200,14 +205,14 @@ final class AvatarAssets: NSObject, WKURLSchemeHandler {
     func cancelAll() { requests.removeAll(); preparation = nil }
 
     func prepare() async throws {
-        let token = UUID(), maximum = maximumTextureSize
+        let token = UUID(), maximum = maximumTextureSize, url = modelURL
         preparation = token
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             worker.queue.async { [worker, weak self] in
                 let cancelled = { DispatchQueue.main.sync { self?.preparation != token } }
                 let result = Result<Void, Error> {
                     if cancelled() { throw CancellationError() }
-                    let model = try worker.model(maximum: maximum)
+                    let model = try worker.model(maximum: maximum, url: url)
                     DispatchQueue.main.sync { guard let self, self.preparation == token else { return }; AvatarStore.shared.receive(worker.catalogue(model)) }
                     try model.prepareImages(isCancelled: cancelled)
                 }
@@ -220,7 +225,7 @@ final class AvatarAssets: NSObject, WKURLSchemeHandler {
         guard let request = task.request.url, request.host == "local" else { task.didFailWithError(URLError(.unsupportedURL)); return }
         let key = ObjectIdentifier(task), token = UUID()
         requests[key] = token
-        let maximum = maximumTextureSize
+        let maximum = maximumTextureSize, url = modelURL
         let bundled = Self.resources[request.path].flatMap { Bundle.main.url(forResource: $0, withExtension: nil) }
         worker.queue.async { [worker, weak self] in
             guard DispatchQueue.main.sync(execute: { self?.requests[key] == token }) else { return }
@@ -228,7 +233,7 @@ final class AvatarAssets: NSObject, WKURLSchemeHandler {
                 try autoreleasepool {
                     if let bundled { return (try Data(contentsOf: bundled), request.path.hasSuffix(".js") ? "text/javascript" : "text/html") }
                     if request.path.hasPrefix("/motions/") { return (try MotionResources.resource(path: request.path), "application/json") }
-                    let model = try worker.model(maximum: maximum)
+                    let model = try worker.model(maximum: maximum, url: url)
                     if request.path == "/model.gltf" { return (model.document, "model/gltf+json") }
                     let parts = request.path.split(separator: "/")
                     guard parts.count == 2, let digits = parts[1].split(separator: ".").first, let index = Int(digits), index >= 0 else { throw URLError(.fileDoesNotExist) }
@@ -261,10 +266,10 @@ private final class ModelWorker: @unchecked Sendable {
         value["motions"] = MotionResources.choices()
         return value
     }
-    func model(maximum: Int) throws -> ModelResources {
-        let next = "\(maximum)"
+    func model(maximum: Int, url: URL?) throws -> ModelResources {
+        guard let url else { throw URLError(.fileDoesNotExist) }
+        let next = "\(maximum)|\(url.path)"
         if next == key, let source { return source }
-        guard let url = Bundle.main.url(forResource: "model", withExtension: "glb") else { throw URLError(.fileDoesNotExist) }
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("GPTLiveAvatar/3DTextures", isDirectory: true)
         let model = try ModelResources(url: url, maximumTextureSize: maximum, cacheRoot: cache)
         source = model; key = next
@@ -308,6 +313,8 @@ final class AvatarStore: ObservableObject {
     @Published var selection: [String: String] = ["performance": "balanced"]
     @Published var conversation: [String: String] = [:]
     @Published var textureLimit = 2048
+    /// The GLB to render: bundled 1K Tia, or a downloaded tier / avatar.
+    @Published var modelURL: URL?
     weak var renderer: AvatarWebView.Coordinator?
 
     var motionLabels: [String] { motions.compactMap { $0["label"] } }
@@ -323,12 +330,14 @@ final class AvatarStore: ObservableObject {
         guard ["playTransitions", "followCursor", "dynamicMotions"].contains(key) else { return }
         selection[key] = enabled ? nil : "false"
     }
-    func applyQuality(_ quality: String) {
+    func applyQuality(_ quality: String, avatar: String) {
         switch quality {
         case "friendly": selection["performance"] = "eco"; textureLimit = 1024
         case "best": selection["performance"] = "quality"; textureLimit = 4096
         default: selection["performance"] = "balanced"; textureLimit = 2048
         }
+        let url = AssetStore.shared.modelURL(slug: avatar, quality: quality)
+        if url != modelURL { modelURL = url; motions = [] }
     }
     /// Hand a finished assistant reply to the companion controller in the page.
     func conversation(user: String, reply: String, turnID: String) {

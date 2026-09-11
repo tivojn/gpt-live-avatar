@@ -375,6 +375,7 @@ const considerReply = reply => { if (!companion) return; companion.consider(late
 // ---------------------------------------------------------------- live session
 const live = new LiveClient({ createSession: sdp => gla.createLiveSession(sdp) });
 window.gla_live = live; // debug handle
+Object.defineProperty(window, 'gla_avatar', { get: () => avatar }); // debug handle
 live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
 live.addEventListener('error', ({ detail }) => eventLog.push([performance.now() | 0, 'error:' + detail.message]));
 let assistantTurn = ''; let usage = null;

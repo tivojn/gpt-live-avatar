@@ -46,6 +46,7 @@ targets:
       - path: ../web/vendor/three/SkeletonUtils.js
         buildPhase: resources
       - path: Resources/model.glb
+      - path: Resources/assets-index.json
         buildPhase: resources
       - path: Resources/thumbnail.png
         buildPhase: resources

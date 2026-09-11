@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node qa/qa.js",
-    "pack": "electron-builder --mac dir"
+    "pack": "electron-builder --mac dir",
+    "dmg": "electron-builder --mac dmg"
   },
   "dependencies": {
     "openai": "^7.15.0"
@@ -21,15 +22,37 @@
   "build": {
     "appId": "com.adamcohen.gptliveavatar",
     "productName": "GPT-Live Avatar",
-    "directories": { "output": "dist" },
-    "files": ["electron/**", "web/**", "package.json"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**",
+      "web/**",
+      "package.json"
+    ],
     "mac": {
-      "target": ["dir"],
+      "target": [
+        "dir",
+        "dmg"
+      ],
       "category": "public.app-category.productivity",
       "extendInfo": {
         "LSMinimumSystemVersion": "14.0",
         "NSMicrophoneUsageDescription": "GPT-Live Avatar uses the microphone only during a live conversation; ending the conversation stops capture."
       }
+    },
+    "extraResources": [
+      {
+        "from": "build/assets/bundle",
+        "to": "avatars"
+      },
+      {
+        "from": "build/assets/index.json",
+        "to": "assets-index.json"
+      }
+    ],
+    "dmg": {
+      "writeUpdateInfo": false
     }
   }
 }
