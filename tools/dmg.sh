@@ -8,6 +8,12 @@ cd "$(dirname "$0")/.."
 ENV_FILE="${GLA_NOTARIZE_ENV:-$HOME/.config/gpt-live-avatar/notarize.env}"
 if [ -f "$ENV_FILE" ]; then . "$ENV_FILE"; echo "notarizing with API key $APPLE_API_KEY_ID"; else echo "no notarize.env: building an unnotarized DMG"; fi
 npx electron-builder --mac dmg
+# electron-builder notarizes and staples the .app; the DMG container needs its
+# own ticket so Gatekeeper accepts it before the app is even copied out.
 for dmg in dist/*.dmg; do
-  if [ -n "${APPLE_API_KEY_ID:-}" ]; then xcrun stapler validate "$dmg" && spctl -a -t open --context context:primary-signature -v "$dmg" || true; fi
+  if [ -n "${APPLE_API_KEY_ID:-}" ]; then
+    xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+    xcrun stapler staple "$dmg"
+    spctl -a -t open --context context:primary-signature -vv "$dmg"
+  fi
 done
