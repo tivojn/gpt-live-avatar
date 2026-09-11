@@ -39,7 +39,10 @@
       "extendInfo": {
         "LSMinimumSystemVersion": "14.0",
         "NSMicrophoneUsageDescription": "GPT-Live Avatar uses the microphone only during a live conversation; ending the conversation stops capture."
-      }
+      },
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "hardenedRuntime": true
     },
     "extraResources": [
       {
