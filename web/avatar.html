@@ -36,6 +36,11 @@
   #bubble input { flex: 1; min-width: 0; border: 1px solid var(--bubble-line); background: var(--bubble-input); color: inherit; border-radius: 14px; padding: 6px 10px; font: inherit; font-size: 12.5px; outline: none; }
   #bubble input::placeholder { color: var(--bubble-dim); }
   #bubble input:focus { border-color: rgba(127,181,255,.8); }
+  /* Listening pill: shown whenever a conversation is on and the bubble is hidden. */
+  #listen { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 14px; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); font-size: 11px; pointer-events: none; transition: opacity .18s; }
+  #listen.hidden { opacity: 0; } #listen svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+  #listen .meter { width: 20px; height: 12px; } #listen .meter i { width: 3px; }
+  #listen.muted { opacity: .6; }
   #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--bubble-bg); color: var(--bubble-text); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
 </style>
@@ -55,6 +60,7 @@
     <button class="icon end" id="endBtn" title="End conversation"><svg viewBox="0 0 20 20"><path d="M3 11.5c4-3.5 10-3.5 14 0l-2.2 2.4-2.6-1.4v-2c-1.4-.5-3-.5-4.4 0v2l-2.6 1.4z" fill="currentColor" stroke="none"/></svg></button>
   </div>
 </div>
+<div id="listen" class="hidden"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><span class="meter" id="listenMeter"><i></i><i></i><i></i><i></i><i></i></span><span id="listenText">Listening</span></div>
 <div id="toast"></div>
 <script type="module" src="/avatar3d.js"></script>
 <script type="module">
@@ -232,7 +238,7 @@ function paint(now) {
   if (stageEl.width !== Math.round(cssW * dpr) || stageEl.height !== Math.round(cssH * dpr)) { stageEl.width = Math.round(cssW * dpr); stageEl.height = Math.round(cssH * dpr); }
   const layout = avatar.layout();
   const [bx, by, bw, bh] = layout.bounds; const pad = Math.max(bw, bh) * .04;
-  const reserveCss = BUBBLE_RESERVE;
+  const reserveCss = Math.min(BUBBLE_RESERVE, cssH * .3);
   let fit, surface;
   if (stage) {
     // Stage mode: the window covers the whole display; her size is fixed and
@@ -315,6 +321,10 @@ function placeBubble() {
   const floor = above ? headTop - height - BUBBLE_GAP * .6 : maxY;
   bubble.style.left = Math.max(half + margin, Math.min(maxX, placeBubble.x)) + 'px';
   bubble.style.top = Math.max(margin, Math.min(placeBubble.y, floor)) + 'px';
+  const pill = $('#listen'), pw = pill.offsetWidth || 90, ph = pill.offsetHeight || 24;
+  const pillAbove = headTop - ph - 10 >= margin;
+  pill.style.left = Math.max(pw / 2 + margin, Math.min(innerWidth - pw / 2 - margin, pillAbove ? centerX : (centerX + (innerWidth - centerX >= centerX ? 1 : -1) * (Math.max(40, layout.bounds[2] * fit.scale * .28) + pw / 2 + 10)))) + 'px';
+  pill.style.top = Math.max(margin, Math.min(innerHeight - ph - margin, pillAbove ? headTop - ph - 10 : headTop + 4)) + 'px';
 }
 
 // ---------------------------------------------------------------- stage mode (screen-wide motion)
@@ -330,7 +340,10 @@ async function enterStage() {
     if (!workArea || !bounds || !frameGeometry) return null;
     const { fit, layout } = frameGeometry; const [bx, by, bw, bh] = layout.bounds;
     const anchor = { x: bounds.x + fit.x + (bx + bw / 2) * fit.scale, y: bounds.y + fit.y + (by + bh) * fit.scale };
-    stage = { workArea, anchor, scale: fit.scale, baseScale: fit.scale, compact: { width: bounds.width, height: bounds.height }, studio: null, travelClip: false, turning: false, idleSince: 0 };
+    const compact = { width: Math.max(MIN_WINDOW_WIDTH, Number(settings.windowWidth) || bounds.width), height: Math.max(420, Number(settings.windowHeight) || bounds.height) };
+    // Her on-screen scale in that baseline window, so a stage exit can map back to it.
+    const baseScale = fit.scale * (compact.height / Math.max(1, bounds.height));
+    stage = { workArea, anchor, scale: fit.scale, baseScale, compact, studio: null, travelClip: false, turning: false, idleSince: 0 };
     gla.window.setIgnoreMouse(true); ignoring = true;
     await gla.window.setBounds({ x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height });
     lastFrame = 0; wake();
@@ -345,20 +358,27 @@ async function exitStage() {
   const scale = fit.scale;
   // Keep the window she had before the stage, scaled only if she was pinched
   // while on stage; the compact fit recomputes the same scale from that size.
-  const factor = scale / (current.baseScale || scale);
-  const width = Math.round(current.compact.width * factor), height = Math.round(current.compact.height * factor);
+  // Far corners draw her small; do not carry a tiny scale into the compact
+  // window, which once squeezed her to a few pixels.
+  const factor = Math.max(.7, Math.min(2.5, scale / (current.baseScale || scale)));
+  const width = Math.max(MIN_WINDOW_WIDTH, Math.round(current.compact.width * factor)), height = Math.round(current.compact.height * factor);
   const feet = { x: current.workArea.x + fit.x + (bx + bw / 2) * scale, y: current.workArea.y + fit.y + (by + bh) * scale };
   if (companion) { companion.command('pose'); companion.reactions = true; }
   if (avatar.studioStage) { avatar.studioStage = null; avatar.studioDistance = null; avatar.resetCameraApproach(); }
   userOrbitDirty = true;
-  await gla.window.setBounds({ x: Math.round(feet.x - width / 2), y: Math.round(feet.y + pad * scale - height), width, height, remember: true });
+  // Not remembered: the baseline stays the size you chose by pinching.
+  await gla.window.setBounds({ x: Math.round(feet.x - width / 2), y: Math.round(feet.y + pad * scale - height), width, height, remember: false });
   lastFrame = 0; wake();
 }
 function stepStudio(now, surface) {
   const studio = stage.studio, motion = avatar.motion;
   const gait = companion.roam === 'run-around' ? 'hello-run' : avatar.options.walkingClip();
+  // Near the camera the visible ground path is foreshortened, so a natural
+  // stride barely moves her; let her hurry through the close-up range.
+  const near = Math.max(0, Math.min(1, (studio.depthScale() - 1) / 1.2));
+  const boost = 1 + 1.6 * near;
   const step = studio.step(companion, now, surface, { cursorX: pointer.x, cursorY: pointer.y, seen: pointer.seen,
-    strideSpeed: motion.clips.get(gait)?.ready?.forwardSpeed,
+    strideSpeed: (motion.clips.get(gait)?.ready?.forwardSpeed || 0) * boost || undefined,
     blocked: Boolean(motion.active && !avatar.options.isTravelClip(motion.active.id)), reduce });
   if (step.walking && (!stage.travelClip || (!motion.pending && motion.active?.id !== gait))) {
     stage.travelClip = true;
@@ -392,7 +412,8 @@ async function beginWalk(action) {
   companion.yaw = avatar.orbit.yaw; stage.studio.facingYaw = avatar.orbit.yaw;
   companion.command(action); companion.reactions = true;
   const destination = stage.studio.destination(action, surface);
-  if (destination) companion.destination = destination;
+  // The top of the stage is the far distance; cap it so a corner never shrinks her below about half size.
+  if (destination) companion.destination = { ...destination, y: Math.max(.26, destination.y) };
   wake();
 }
 window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID, speaking, viseme: currentViseme, relative: Number(audioSignal.relative.toFixed(2)),
@@ -489,15 +510,18 @@ addEventListener('pagehide', () => live.stop('unload'));
 addEventListener('beforeunload', () => live.stop('unload'));
 setInterval(() => { if (live.state === 'connected') $('#dot').className = 'dot ' + (speaking ? 'speaking' : 'live'); }, 250);
 // Five bars flash with whoever is talking: blue for you, green for her.
-const meterBars = [...document.querySelectorAll('#meter i')];
+const meterBars = [...document.querySelectorAll('#meter i'), ...document.querySelectorAll('#listenMeter i')];
 const meterShape = [.45, .8, 1, .8, .45];
 const paintMeter = () => {
   const her = speaking ? Math.max(.25, audioSignal.relative || 0) : 0;
   const you = Math.min(1, micLevel);
   const level = Math.max(her, you * 1.2), who = her >= you ? 'ai' : you > .05 ? 'user' : '';
-  $('#meter').className = 'meter ' + (level > .05 ? who : '');
+  $('#meter').className = 'meter ' + (level > .05 ? who : ''); $('#listenMeter').className = 'meter ' + (level > .05 ? who : '');
+  const pill = $('#listen'), showPill = live.state === 'connected' && bubble.classList.contains('hidden');
+  pill.classList.toggle('hidden', !showPill); pill.classList.toggle('muted', live.muted);
+  $('#listenText').textContent = live.muted ? 'Muted' : her > .05 ? 'Speaking' : 'Listening';
   const wobble = performance.now() / 90;
-  meterBars.forEach((bar, i) => { const h = level > .05 ? 3 + 11 * Math.min(1, level) * meterShape[i] * (.75 + .25 * Math.abs(Math.sin(wobble + i))) : 3; bar.style.height = h + 'px'; });
+  meterBars.forEach((bar, i) => { const h = level > .05 ? 3 + 11 * Math.min(1, level) * meterShape[i % 5] * (.75 + .25 * Math.abs(Math.sin(wobble + i))) : 3; bar.style.height = h + 'px'; });
 };
 setInterval(() => {
   const listening = live.state === 'connected' && !live.muted;
