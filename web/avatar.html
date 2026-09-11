@@ -285,31 +285,49 @@ function paint(now) {
   frameGeometry = { view, scale, layout, fit, pad };
   placeBubble();
 }
+// The window may hang past the screen edge (a close-up makes it larger than
+// the display; you can drag her half off screen). Overlays are clamped to the
+// part of the window that is actually visible, not to the window.
+let screenClip = null;
+async function refreshClip() {
+  try {
+    const [bounds, area] = await Promise.all([gla.window.bounds(), gla.window.workArea()]);
+    if (!bounds || !area) { screenClip = null; return; }
+    screenClip = { left: Math.max(0, area.x - bounds.x), top: Math.max(0, area.y - bounds.y),
+      right: Math.min(bounds.width, area.x + area.width - bounds.x), bottom: Math.min(bounds.height, area.y + area.height - bounds.y) };
+  } catch { screenClip = null; }
+}
+setInterval(refreshClip, 1500); addEventListener('resize', refreshClip); void refreshClip();
 function placeBubble() {
   if (!frameGeometry || !bubble) return;
+  const clip = screenClip && screenClip.right - screenClip.left > 80 && screenClip.bottom - screenClip.top > 60 ? screenClip : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
   const { fit, layout } = frameGeometry; const [bx, by, bw] = layout.bounds;
   // Follow her animated crown when the renderer can project it, so the bubble
   // rides along with a lunge or a walk instead of staying at the rest pose.
   const crown = avatar && avatar.crownProjection ? avatar.crownProjection() : null;
   const headTop = crown && Number.isFinite(crown.y) ? fit.y + crown.y * fit.scale : fit.y + by * fit.scale;
   const centerX = crown && Number.isFinite(crown.x) ? fit.x + crown.x * fit.scale : fit.x + (bx + bw / 2) * fit.scale;
-  const width = bubble.offsetWidth || 340, height = bubble.offsetHeight || 120, half = width / 2;
-  const margin = 6, maxX = innerWidth - half - margin, maxY = innerHeight - height - margin;
+  // Fixed 340 px, unless she is dragged half off the screen: then the bubble
+  // narrows (never below 220 px) so it still fits the visible strip.
+  const wanted = Math.max(220, Math.min(340, Math.floor(clip.right - clip.left) - 12));
+  if (Math.abs(parseFloat(bubble.style.width) - wanted) > .5 || !bubble.style.width) bubble.style.width = wanted + 'px';
+  const width = wanted, height = bubble.offsetHeight || 120, half = width / 2;
+  const margin = 6, minX = clip.left + half + margin, maxX = clip.right - half - margin, minY = clip.top + margin, maxY = clip.bottom - height - margin;
   let targetX, targetY;
-  if (headTop - height - BUBBLE_GAP >= margin) {
+  if (headTop - height - BUBBLE_GAP >= minY) {
     // Room above her: centred over the crown.
-    targetX = Math.max(half + margin, Math.min(maxX, centerX));
+    targetX = Math.max(minX, Math.min(maxX, centerX));
     targetY = headTop - height - BUBBLE_GAP;
   } else {
     // No headroom (she came close or stands at the top): sit beside her head
-    // on the side with more space, level with the crown.
-    const [bx, , bw] = layout.bounds; const headHalf = Math.max(40, bw * fit.scale * .28);
+    // on the side with more visible space, level with the crown.
+    const headHalf = Math.max(40, layout.bounds[2] * fit.scale * .28);
     const rightX = centerX + headHalf + BUBBLE_GAP + half, leftX = centerX - headHalf - BUBBLE_GAP - half;
-    const roomRight = innerWidth - (centerX + headHalf), roomLeft = centerX - headHalf;
-    targetX = roomRight >= roomLeft ? Math.min(maxX, rightX) : Math.max(half + margin, leftX);
-    targetY = Math.max(margin, Math.min(maxY, headTop + BUBBLE_GAP * .5));
+    const roomRight = clip.right - (centerX + headHalf), roomLeft = centerX - headHalf - clip.left;
+    targetX = roomRight >= roomLeft ? Math.min(maxX, rightX) : Math.max(minX, leftX);
+    targetY = Math.max(minY, Math.min(maxY, headTop + BUBBLE_GAP * .5));
   }
-  targetX = Math.max(half + margin, Math.min(maxX, targetX)); targetY = Math.max(margin, Math.min(maxY, targetY));
+  targetX = Math.max(minX, Math.min(maxX, targetX)); targetY = Math.max(minY, Math.min(maxY, targetY));
   // Ease toward the target so a lunge or a jump does not yank the bubble; it
   // floats above her instead of reading as glued to her hair.
   const now = performance.now(), dt = Math.min(100, now - (placeBubble.at || now)); placeBubble.at = now;
@@ -319,12 +337,13 @@ function placeBubble() {
   // Stay inside the window after easing, and never sink onto her crown when placed above.
   const above = targetY <= headTop - height - BUBBLE_GAP * .6;
   const floor = above ? headTop - height - BUBBLE_GAP * .6 : maxY;
-  bubble.style.left = Math.max(half + margin, Math.min(maxX, placeBubble.x)) + 'px';
-  bubble.style.top = Math.max(margin, Math.min(placeBubble.y, floor)) + 'px';
+  bubble.style.left = Math.max(minX, Math.min(maxX, placeBubble.x)) + 'px';
+  bubble.style.top = Math.max(minY, Math.min(placeBubble.y, floor)) + 'px';
   const pill = $('#listen'), pw = pill.offsetWidth || 90, ph = pill.offsetHeight || 24;
-  const pillAbove = headTop - ph - 10 >= margin;
-  pill.style.left = Math.max(pw / 2 + margin, Math.min(innerWidth - pw / 2 - margin, pillAbove ? centerX : (centerX + (innerWidth - centerX >= centerX ? 1 : -1) * (Math.max(40, layout.bounds[2] * fit.scale * .28) + pw / 2 + 10)))) + 'px';
-  pill.style.top = Math.max(margin, Math.min(innerHeight - ph - margin, pillAbove ? headTop - ph - 10 : headTop + 4)) + 'px';
+  const pillAbove = headTop - ph - 10 >= clip.top + margin;
+  const sideRight = clip.right - centerX >= centerX - clip.left;
+  pill.style.left = Math.max(clip.left + pw / 2 + margin, Math.min(clip.right - pw / 2 - margin, pillAbove ? centerX : centerX + (sideRight ? 1 : -1) * (Math.max(40, layout.bounds[2] * fit.scale * .28) + pw / 2 + 10))) + 'px';
+  pill.style.top = Math.max(clip.top + margin, Math.min(clip.bottom - ph - margin, pillAbove ? headTop - ph - 10 : headTop + 4)) + 'px';
 }
 
 // ---------------------------------------------------------------- stage mode (screen-wide motion)
@@ -361,13 +380,18 @@ async function exitStage() {
   // Far corners draw her small; do not carry a tiny scale into the compact
   // window, which once squeezed her to a few pixels.
   const factor = Math.max(.7, Math.min(2.5, scale / (current.baseScale || scale)));
-  const width = Math.max(MIN_WINDOW_WIDTH, Math.round(current.compact.width * factor)), height = Math.round(current.compact.height * factor);
-  const feet = { x: current.workArea.x + fit.x + (bx + bw / 2) * scale, y: current.workArea.y + fit.y + (by + bh) * scale };
+  const area = current.workArea;
+  let width = Math.max(MIN_WINDOW_WIDTH, Math.round(current.compact.width * factor)), height = Math.round(current.compact.height * factor);
+  if (height > area.height) { width = Math.round(width * area.height / height); height = area.height; }
+  const feet = { x: area.x + fit.x + (bx + bw / 2) * scale, y: area.y + fit.y + (by + bh) * scale };
   if (companion) { companion.command('pose'); companion.reactions = true; }
   if (avatar.studioStage) { avatar.studioStage = null; avatar.studioDistance = null; avatar.resetCameraApproach(); }
   userOrbitDirty = true;
   // Not remembered: the baseline stays the size you chose by pinching.
-  await gla.window.setBounds({ x: Math.round(feet.x - width / 2), y: Math.round(feet.y + pad * scale - height), width, height, remember: false });
+  // Keep the whole window on the display so nothing she carries (bubble, pill) is cut off.
+  const x = Math.max(area.x, Math.min(area.x + area.width - width, Math.round(feet.x - width / 2)));
+  const y = Math.max(area.y, Math.min(area.y + area.height - height, Math.round(feet.y + pad * scale - height)));
+  await gla.window.setBounds({ x, y, width, height, remember: false });
   lastFrame = 0; wake();
 }
 function stepStudio(now, surface) {
