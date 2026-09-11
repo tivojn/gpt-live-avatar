@@ -21,8 +21,11 @@
   #bubble .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; } #bubble .row[hidden] { display: none; }
   #bubble button.icon { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(128,128,128,.2); color: inherit; display: grid; place-items: center; padding: 0; cursor: pointer; }
   #bubble button.icon:hover { background: rgba(128,128,128,.34); } #bubble button.icon.active { background: rgba(255,91,77,.55); }
-  /* Listening: the mic glows green and its ring grows with your voice level. */
-  #bubble button.icon.listening { background: rgba(76,217,100,.35); box-shadow: 0 0 0 calc(var(--mic-level, 0) * 6px) rgba(76,217,100,.35); color: #bff5c8; }
+  /* Mic: plain icon while listening (its ring grows with your voice level); the same icon with a slash when muted. */
+  #bubble button.icon svg.off { display: none; } #bubble button.icon.active svg.on { display: none; } #bubble button.icon.active svg.off { display: block; }
+  #bubble button.icon.active { background: rgba(128,128,128,.2); opacity: .75; }
+  #bubble button.icon.listening { box-shadow: 0 0 0 calc(var(--mic-level, 0) * 7px) rgba(255,255,255,.28); }
+  #bubble button.icon.end { background: rgba(255,91,77,.75); color: #fff; } #bubble button.icon.end:hover { background: rgba(255,91,77,.95); }
   #bubble button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   #bubble input { flex: 1; min-width: 0; border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.12); color: inherit; border-radius: 14px; padding: 6px 10px; font: inherit; font-size: 12.5px; outline: none; }
   #bubble input:focus { border-color: rgba(127,181,255,.8); }
@@ -38,10 +41,11 @@
   <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="status" id="status">Loading…</span></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
   <div class="row" id="steerRow">
-    <button class="icon" id="muteBtn" title="Mute microphone"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg></button>
+    <button class="icon" id="muteBtn" title="Mute microphone"><svg class="on" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><svg class="off" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M3 17 17 3"/></svg></button>
     <button class="icon" id="hushBtn" title="Stop talking"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg></button>
     <input id="steer" placeholder="Steer or follow up…" maxlength="2000" autocomplete="off">
     <button class="icon" id="steerBtn" title="Send"><svg viewBox="0 0 20 20"><path d="M10 16V4M4.5 9.5 10 4l5.5 5.5"/></svg></button>
+    <button class="icon end" id="endBtn" title="End conversation"><svg viewBox="0 0 20 20"><path d="M3 11.5c4-3.5 10-3.5 14 0l-2.2 2.4-2.6-1.4v-2c-1.4-.5-3-.5-4.4 0v2l-2.6 1.4z" fill="currentColor" stroke="none"/></svg></button>
   </div>
 </div>
 <div id="toast"></div>
@@ -446,10 +450,17 @@ setInterval(() => {
 }, 80);
 live.addEventListener('state', ({ detail }) => { if (detail.state === 'connected' && live.microphone) attachMicrophone(live.microphone); if (detail.state === 'idle') micAnalyser = null; });
 
-const toggleCall = () => {
+const toggleCall = async () => {
   if (!settings.hasKey) { gla.openSettings(); return; }
-  if (live.state === 'idle') { if (audioContext && audioContext.state === 'suspended') audioContext.resume(); audio.play().catch(() => {}); live.start(); }
-  else live.stop('user');
+  if (live.state !== 'idle') { live.stop('user'); return; }
+  const allowed = await gla.mic.ask();
+  if (!allowed) {
+    setStatus('Microphone is off for GPT-Live Avatar in System Settings.', 'error', 12000);
+    toast('Turn on the microphone for GPT-Live Avatar under Privacy & Security › Microphone, then start again.', 9000);
+    gla.mic.openPrivacy(); return;
+  }
+  if (audioContext && audioContext.state === 'suspended') audioContext.resume();
+  audio.play().catch(() => {}); live.start();
 };
 // Steering / follow-up: commentary makes her act on it right away; a plain
 // instruction append is absorbed silently and may never produce a reply.
@@ -464,6 +475,7 @@ const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.t
 $('#steerBtn').onclick = steer;
 $('#muteBtn').onclick = toggleMute;
 $('#hushBtn').onclick = () => { live.stopSpeaking(); toast('Asked her to stop.'); };
+$('#endBtn').onclick = () => { if (live.state !== 'idle') live.stop('user'); };
 $('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); if (e.key === 'Escape') $('#steer').blur(); });
 // Right-click anywhere on her body or the bubble: the native menu holds every control.
 const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false });

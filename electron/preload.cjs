@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('gla', {
     setIgnoreMouse: ignore => ipcRenderer.send('gla:window:ignore-mouse', Boolean(ignore)),
   },
   openSettings: () => ipcRenderer.invoke('gla:open-settings'),
+  mic: {
+    status: () => ipcRenderer.invoke('gla:mic:status'),
+    ask: () => ipcRenderer.invoke('gla:mic:ask'),
+    openPrivacy: () => ipcRenderer.invoke('gla:mic:open-privacy'),
+  },
   quit: () => ipcRenderer.invoke('gla:quit'),
   isElectron: true,
 });

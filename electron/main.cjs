@@ -2,7 +2,7 @@
 // GPT-Live Avatar: a desk avatar (Tia) on OpenAI GPT-Live-1.
 // The main process owns the API key and session creation; the renderer owns
 // WebRTC, the 3D avatar and the overhead bubble.
-const { app, BrowserWindow, ipcMain, safeStorage, dialog, shell, screen, session: electronSession, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, dialog, shell, screen, session: electronSession, Menu, systemPreferences } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -356,6 +356,19 @@ ipcMain.handle('gla:window:set-bounds', (_event, bounds) => {
 });
 ipcMain.on('gla:window:ignore-mouse', (_event, ignore) => { if (avatarWindow) avatarWindow.setIgnoreMouseEvents(ignore, { forward: true }); });
 ipcMain.handle('gla:open-settings', () => { openSettingsWindow(); return true; });
+// macOS microphone privacy: Chromium reports "granted" even when the system
+// setting is off, and capture then silently delivers silence. Ask at the
+// system level before every call and send the user to the privacy pane if it
+// was denied.
+ipcMain.handle('gla:mic:status', () => (process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted'));
+ipcMain.handle('gla:mic:ask', async () => {
+  if (process.platform !== 'darwin') return true;
+  const status = systemPreferences.getMediaAccessStatus('microphone');
+  if (status === 'granted') return true;
+  if (status === 'not-determined') return systemPreferences.askForMediaAccess('microphone');
+  return false;
+});
+ipcMain.handle('gla:mic:open-privacy', () => { shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'); return true; });
 ipcMain.handle('gla:menu:show', (_event, state) => { showAvatarMenu(state && typeof state === 'object' ? state : {}); return true; });
 ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
 
