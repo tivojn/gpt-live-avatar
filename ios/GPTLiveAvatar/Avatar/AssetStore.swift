@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 final class AssetStore: ObservableObject {
     static let shared = AssetStore()
-    static let releaseBase = URL(string: "https://github.com/tivojn/gpt-live-avatar-assets/releases/download/assets-v1/")!
+    static let releaseBase = URL(string: "https://github.com/tivojn/gpt-live-avatar/releases/download/assets-v1/")!
     static let tiers = ["1k", "2k", "4k"]
     static let tierLabels = ["1k": "1K textures (resource friendly)", "2k": "2K textures (balanced)", "4k": "4K textures (best quality)"]
 

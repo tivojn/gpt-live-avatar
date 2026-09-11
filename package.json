@@ -10,7 +10,8 @@
     "start": "electron .",
     "test": "node qa/qa.js",
     "pack": "electron-builder --mac dir",
-    "dmg": "electron-builder --mac dmg"
+    "dmg": "electron-builder --mac dmg",
+    "fetch-assets": "bash tools/fetch-assets.sh"
   },
   "dependencies": {
     "openai": "^7.15.0"

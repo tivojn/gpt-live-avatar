@@ -6,3 +6,6 @@ ios/build/
 ios/*.xcodeproj/xcuserdata/
 build/*
 !build/entitlements.mac.plist
+ios/Resources/model.glb
+.DS_Store
+ios/build/DerivedData/

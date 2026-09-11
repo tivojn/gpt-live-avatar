@@ -14,7 +14,7 @@ const https = require('node:https');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 
-const RELEASE_BASE = 'https://github.com/tivojn/gpt-live-avatar-assets/releases/download/assets-v1/';
+const RELEASE_BASE = 'https://github.com/tivojn/gpt-live-avatar/releases/download/assets-v1/';
 const TIER_SIZES = { balanced: 2048, best: 4096 };
 const TIER_LABELS = { base: 'Avatar package (1K textures, meshes, motions)', balanced: 'Balanced: 2K textures', best: 'Best quality: 4K textures' };
 
