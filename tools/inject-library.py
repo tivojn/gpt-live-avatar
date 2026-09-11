@@ -6,6 +6,9 @@ bind to the rig) and carries empty pose/outfit/prop catalogues. Usage:
 """
 import json, math, struct, sys
 
+def wardrobe_nodes(wardrobe, key, oid):
+    return next((o.get("nodes", []) for o in wardrobe.get(key, []) if o.get("id") == oid), [])
+
 def trs_matrix(node):
     t = node.get("translation", [0, 0, 0]); q = node.get("rotation", [0, 0, 0, 1]); s = node.get("scale", [1, 1, 1])
     x, y, z, w = q
@@ -17,10 +20,16 @@ def trs_matrix(node):
         c = node["matrix"]; m = [[c[j * 4 + i] for j in range(4)] for i in range(4)]
     return m
 
-src, dst = sys.argv[1], sys.argv[2]
-# Optional: a motion clip whose bone list defines the driven rig subset. The
-# motion runtime requires the library's bone set to equal the clip's.
-driven = set(json.load(open(sys.argv[3]))["bones"]) if len(sys.argv) > 3 else None
+import argparse
+ap = argparse.ArgumentParser()
+ap.add_argument("src"); ap.add_argument("dst")
+ap.add_argument("clip", nargs="?", help="motion clip JSON whose bone list defines the driven rig subset")
+ap.add_argument("--poses-from", help="GLB whose openclamAvatar poses are copied (same rig family)")
+ap.add_argument("--outfits", help="JSON file: {defaultOutfit, outfits:[{id,label,nodes}], props:[...]}")
+args = ap.parse_args()
+src, dst = args.src, args.dst
+# The motion runtime requires the library's bone set to equal the clip's.
+driven = set(json.load(open(args.clip))["bones"]) if args.clip else None
 data = open(src, "rb").read()
 magic, version, length, jlen, jtype = struct.unpack_from("<IIIII", data, 0)
 doc = json.loads(data[20:20 + jlen]); rest = data[20 + jlen:]
@@ -34,6 +43,24 @@ for index in sorted(joints):
     if driven is None or name in driven: library["rest"][name] = trs_matrix(node)
 if driven is not None and driven - names:
     raise SystemExit(f"rig is missing driven bones: {sorted(driven - names)[:10]}")
+if args.poses_from:
+    # Authored poses are bone rotation deltas; a rig with the same bone names
+    # (Tia's Auto-Rig Pro family) can wear them directly.
+    other = open(args.poses_from, "rb").read(); ojlen = struct.unpack_from("<I", other, 12)[0]
+    olib = json.loads(other[20:20 + ojlen]).get("extras", {}).get("openclamAvatar", {})
+    have = set(library["rest"])
+    library["poses"] = [p for p in olib.get("poses", []) if set(p.get("deltas", {})).issubset(have)]
+    if olib.get("playback"): library["playback"] = olib["playback"]
+    print(f"poses copied: {len(library['poses'])} of {len(olib.get('poses', []))}")
+if args.outfits:
+    wardrobe = json.load(open(args.outfits))
+    names = {n.get("name") for n in doc["nodes"]}
+    for key in ("outfits", "props"):
+        library[key] = [{**o, "nodes": [n for n in o.get("nodes", []) if n in names]} for o in wardrobe.get(key, [])]
+        for o in library[key]:
+            missing = [n for n in wardrobe_nodes(wardrobe, key, o["id"]) if n not in names]
+            if missing: print(f"warning: {key} {o['id']} missing nodes {missing}")
+    if wardrobe.get("defaultOutfit"): library["defaultOutfit"] = wardrobe["defaultOutfit"]
 doc.setdefault("extras", {})["openclamAvatar"] = library
 # Material fix-ups the Blender exporter cannot express: the cornea shell is a
 # clear, slightly glossy layer over the iris, not an opaque white cap.

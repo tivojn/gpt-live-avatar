@@ -42,35 +42,35 @@
    "mac": {
     "base": {
      "file": "sarah-base.zip",
-     "bytes": 29757787,
-     "sha256": "4c02b789c29dfcab82f188abaa3a3f009eaecca7badb4b05b8c47021cab4ee0e"
+     "bytes": 93501583,
+     "sha256": "77fde6a4566631a980a8e1021df793e15acf7e497c6fe93d0fef642e081d3d1a"
     },
     "balanced": {
      "file": "sarah-balanced.zip",
-     "bytes": 53733911,
-     "sha256": "39cca5a784a8c6107d529385ea90980e295967841e2950a5e34c8ef2a6508cd9"
+     "bytes": 82090229,
+     "sha256": "f0c7f1893e567491c5a5c2635c4cabdd849b09bc5d44f3eb7d01ed35a013ad37"
     },
     "best": {
      "file": "sarah-best.zip",
-     "bytes": 165126960,
-     "sha256": "e9c9486a391840a41835f792081559d2e445a78644d8eb753cf6130ffc8d64cd"
+     "bytes": 245160746,
+     "sha256": "9da2bb9d71a498bece795dbc99961cf4d5068492a17e35ab094611beeb15f470"
     }
    },
    "ios": {
     "1k": {
      "file": "sarah-1k.glb",
-     "bytes": 56072636,
-     "sha256": "c3a1f0beb8a885652312e4ad85df7932333d096006c96ce0c63dc8dc00011c1e"
+     "bytes": 65737660,
+     "sha256": "0e507fd2bb57ecfc5c9c8769b49976a2f4e41ede901291eea5db822f8e5a8a8f"
     },
     "2k": {
      "file": "sarah-2k.glb",
-     "bytes": 87659580,
-     "sha256": "5ff89a795d2ef4f9043935486b44956945109223b17d917ebff9ca7f79b62dc4"
+     "bytes": 108064264,
+     "sha256": "a59b90d40f40b4d9bd14e74765fecb807cad9493a6edc5bab1f9d78ad15ab4d6"
     },
     "4k": {
      "file": "sarah-4k.glb",
-     "bytes": 203932948,
-     "sha256": "00ecfb6373bd1a17a7771010cebf8134d8fec1d2c9eab98bcb9ce29a7e3fae16"
+     "bytes": 267128420,
+     "sha256": "0509ed3a1c36e31a657dc88b9fbbc96ce1c6565a1df6eba0a4ba040df7ef9bd9"
     }
    }
   },
@@ -81,8 +81,8 @@
    "mac": {
     "base": {
      "file": "sgt-sara-base.zip",
-     "bytes": 37878574,
-     "sha256": "820e16a860dcaf9f13e8954e6d36084be3f8fa9135a1615b4fb8bfde39bd6eec"
+     "bytes": 85643195,
+     "sha256": "0676b689508eb6a3da4199c8abe167f29327b8ddfdf2007d0e07854df19e56c7"
     },
     "balanced": {
      "file": "sgt-sara-balanced.zip",
