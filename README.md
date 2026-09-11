@@ -42,3 +42,7 @@ Pipeline (`tools/`):
 
 Mac: `npm run pack` (app folder) or `npm run dmg` (installer; bundles
 `build/assets/bundle` and `build/assets/index.json`).
+
+## Handoff for other hosts (EnConvo)
+
+See [docs/ENCONVO-HANDOFF.md](docs/ENCONVO-HANDOFF.md) for how to reuse only the avatar layer (renderer, motions, lip-sync, stage) inside another app that owns its own GPT-Live session.
