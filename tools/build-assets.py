@@ -56,6 +56,9 @@ for f in motions.glob("*.json"):
     raw = f.read_bytes()
     comp = zlib.compressobj(9, zlib.DEFLATED, -15); data = comp.compress(raw) + comp.flush()
     (mdst / (f.name + ".deflate")).write_bytes(data)
+# Packages assembled from an already-deflated motion set (Sarah reuses Tia's clips).
+for f in motions.glob("*.json.deflate"):
+    if not (mdst / f.name).exists(): shutil.copy2(f, mdst / f.name)
 
 # ---- download tiers
 def build_tier(name, sizes):

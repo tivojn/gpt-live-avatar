@@ -395,6 +395,8 @@ function showAvatarMenu(state) {
     { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
     { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
     { type: 'separator' },
+    ...avatarCatalogueMenu(state.catalogue, send),
+    { type: 'separator' },
     { label: 'Bubble Only on New Messages', type: 'radio', checked: (state.bubbleMode || 'auto') === 'auto', click: send('bubble:auto') },
     { label: 'Bubble Always On', type: 'radio', checked: state.bubbleMode === 'always', click: send('bubble:always') },
     { label: 'Bubble Off', type: 'radio', checked: state.bubbleMode === 'off', click: send('bubble:off') },
@@ -402,6 +404,20 @@ function showAvatarMenu(state) {
     { type: 'separator' },
     { label: `Quit ${app.name}`, accelerator: 'Cmd+Q', click: send('quit') },
   ]).popup({ window: avatarWindow });
+}
+// Outfits, poses, props and motions from the avatar package, like OpenClam's pet menu.
+function avatarCatalogueMenu(cat, send) {
+  if (!cat || typeof cat !== 'object') return [];
+  const item = (kind, x, checked) => ({ label: String(x.label || x.id).slice(0, 60), type: checked === undefined ? 'normal' : 'radio', checked: Boolean(checked), click: send(`${kind}:${x.id}`) });
+  const byCategory = new Map();
+  for (const c of cat.clips || []) { const key = String(c.category || 'Motions'); if (!byCategory.has(key)) byCategory.set(key, []); byCategory.get(key).push(c); }
+  const motions = [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([category, clips]) => ({ label: category, submenu: clips.slice(0, 40).map(c => item('motion', c)) }));
+  const menu = [];
+  if (motions.length) menu.push({ label: 'Motions', submenu: [...motions, { type: 'separator' }, { label: 'Stay Still', click: send('stay') }] });
+  if ((cat.poses || []).length) menu.push({ label: 'Pose', submenu: [{ label: 'Natural', type: 'radio', checked: !cat.current.pose, click: send('pose:') }, ...cat.poses.slice(0, 60).map(p => item('pose', p, cat.current.pose === p.id))] });
+  if ((cat.outfits || []).length) menu.push({ label: 'Outfit', submenu: cat.outfits.map(o => item('outfit', o, cat.current.outfit === o.id)) });
+  if ((cat.props || []).length) menu.push({ label: 'Props', submenu: [{ label: 'None', type: 'radio', checked: !cat.current.prop, click: send('prop:') }, ...cat.props.map(p => item('prop', p, cat.current.prop === p.id))] });
+  return menu;
 }
 // A live session may only run while she is on screen. The renderer reports
 // whether a session is active; if the window is hidden, minimized or fully

@@ -274,16 +274,17 @@ function paint(now) {
   const expression = { smile: .35, ...(avatar.motion ? avatar.motion.expression(now, reduce) : {}) };
   const state = { reduce, viseme: currentViseme, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, blink: blinkAmounts(now), gaze, speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
   const image = avatar.render(now, state, view);
-  // Reactions and bubble placement never wait on drawing, so a slow texture
-  // swap cannot swallow a motion she already agreed to.
+  // Geometry, reactions and bubble placement never wait on drawing: a texture
+  // swap right after the window grows must not leave stale small-window
+  // coordinates behind, or a walk would start from the wrong place.
+  frameGeometry = { view, scale, layout, fit, pad };
   consumeReaction(now);
+  placeBubble();
   // While a texture-residency swap is in flight the renderer returns without
   // drawing; keep the previous frame instead of flashing an empty window.
   if (avatar.resources && !avatar.resources.ready) return;
   context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, stageEl.width, stageEl.height);
   context.drawImage(image, 0, 0, image.width, image.height, 0, 0, stageEl.width, stageEl.height);
-  frameGeometry = { view, scale, layout, fit, pad };
-  placeBubble();
 }
 // The window may hang past the screen edge (a close-up makes it larger than
 // the display; you can drag her half off screen). Overlays are clamped to the
@@ -407,7 +408,7 @@ function stepStudio(now, surface) {
     blocked: Boolean(motion.active && !avatar.options.isTravelClip(motion.active.id)), reduce });
   if (step.walking && (!stage.travelClip || (!motion.pending && motion.active?.id !== gait))) {
     stage.travelClip = true;
-    void motion.play(gait, { loop: true }).catch(() => { companion.command('stay'); companion.reactions = true; stage.travelClip = false; });
+    void motion.play(gait, { loop: true }).catch(error => { companion.command('stay'); companion.reactions = true; stage.travelClip = false; toast('Walking clip failed: ' + error.message); });
   } else if (!step.walking && stage.travelClip) { stage.travelClip = false; motion.stop(); }
   if (stage.travelClip) motion.setPlaybackRate(step.gaitRate, now);
   if (now >= companion.pauseUntil && (companion.roam || companion.follow || companion.come || companion.destination || step.walking || stage.turning)) {
@@ -426,7 +427,13 @@ async function beginWalk(action) {
   if (!companion || !avatar.motion) return;
   await enterStage();
   if (!stage) return;
-  const surface = { x: 0, y: 0, width: innerWidth, height: innerHeight };
+  // The window has just grown to the stage; paint one stage-space frame before
+  // reading her placement, or the studio would be built from the old compact
+  // window's coordinates and she would jump to an edge on the first step.
+  const surface = { x: 0, y: 0, width: stage.workArea.width, height: stage.workArea.height };
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  if (!stage) return;
+  paint(performance.now());
   await avatar.motion.prepare(action === 'run-around' ? 'hello-run' : avatar.options.walkingClip()).catch(() => {});
   if (!stage) return;
   if (!stage.studio) {
@@ -445,11 +452,21 @@ window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID
   pending: companion && companion.pendingReaction && { kind: companion.pendingReaction.kind, clipID: companion.pendingReaction.clipID, action: companion.pendingReaction.action },
   motionActive: avatar && avatar.motion && avatar.motion.active && avatar.motion.active.id, clips: avatar && avatar.motion ? avatar.motion.clips.size : 0, status: document.querySelector('#status').textContent, played: window.gla_played,
   stage: stage && { anchor: stage.anchor, scale: Number(stage.scale.toFixed(3)), walking: Boolean(stage.studio), travelClip: stage.travelClip }, window: [innerWidth, innerHeight],
+  companionState: companion && { walking: companion.walking, destination: companion.destination, pauseUntil: companion.pauseUntil, roam: companion.roam, come: companion.come, follow: companion.follow, reactions: companion.reactions },
   live: live.state, events: eventLog.slice(-40), lines: [$('#lineUser').textContent, $('#lineAssistant').textContent], bubbleHidden: bubble.classList.contains('hidden') });
 window.gla_played = [];
 const eventLog = []; // [t, type] of the last data-channel events, for diagnosing silent sessions
 window.gla_call = () => toggleCall();
 window.gla_showBubble = ms => showBubble(ms);
+window.gla_stage = () => stage;
+window.gla_companion = () => companion;
+window.gla_visibleBox = () => { // painted pixel bounds in CSS px, for continuity tests
+  const dpr = stageEl.width / innerWidth, step = 4, data = context.getImageData(0, 0, stageEl.width, stageEl.height).data;
+  let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1;
+  for (let y = 0; y < stageEl.height; y += step) for (let x = 0; x < stageEl.width; x += step) if (data[(y * stageEl.width + x) * 4 + 3] > 18) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  return maxX < 0 ? null : { x: minX / dpr, y: minY / dpr, w: (maxX - minX) / dpr, h: (maxY - minY) / dpr, win: [innerWidth, innerHeight] };
+};
+window.gla_geometry = () => frameGeometry && { fit: frameGeometry.fit, joints: avatar && avatar.jointBounds && avatar.jointBounds(), stage: stage && { scale: stage.scale, studio: Boolean(stage.studio), entry: stage.studio && stage.studio.entryWeight } };
 window.gla_play = id => performAction(id.startsWith('clip:') || isSpatialAction(id) || id.startsWith('go-') || ['sit', 'stand', 'wave', 'dance', 'heart', 'stay'].includes(id) ? id : 'clip:' + id);
 function loop(now) {
   renderRequest = 0;
@@ -587,7 +604,15 @@ $('#hushBtn').onclick = () => { live.stopSpeaking(); toast('Asked her to stop.')
 $('#endBtn').onclick = () => { if (live.state !== 'idle') live.stop('user'); };
 $('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); if (e.key === 'Escape') $('#steer').blur(); });
 // Right-click anywhere on her body or the bubble: the native menu holds every control.
-const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode() });
+const catalogue = () => {
+  if (!avatar || !avatar.options) return null;
+  const o = avatar.options, sel = o.selection || {};
+  const clips = avatar.motion ? [...avatar.motion.clips.values()].map(c => ({ id: c.id, label: c.label || c.id, category: c.category || 'Motions' })) : [];
+  const poses = [...(o.poses ? o.poses.values() : [])].filter(p => p.group === 'body').map(p => ({ id: p.id, label: p.label || p.id }));
+  return { clips, poses, outfits: (o.outfits || []).map(x => ({ id: x.id, label: x.label || x.id })), props: (o.props || []).map(x => ({ id: x.id, label: x.label || x.id })),
+    current: { pose: sel.body || '', outfit: sel.outfit || (o.data && o.data.defaultOutfit) || '', prop: sel.prop || '' } };
+};
+const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode(), catalogue: catalogue() });
 addEventListener('contextmenu', event => {
   event.preventDefault();
   if (bubble.contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
@@ -598,6 +623,11 @@ gla.onMenuAction(id => {
   else if (id === 'hush') { live.stopSpeaking(); toast('Asked her to stop.'); }
   else if (id === 'steer') { if (live.state === 'connected') { showBubble(60000); syncBubble(); $('#steer').focus(); } else toast('Start a conversation first.'); }
   else if (id.startsWith('bubble:')) gla.setSettings({ bubbleMode: id.slice(7), bubble: id.slice(7) !== 'off' });
+  else if (id.startsWith('motion:')) void performAction('clip:' + id.slice(7)).catch(e => toast(e.message));
+  else if (id.startsWith('pose:') && avatar && avatar.options) { avatar.motion && avatar.motion.stop(); avatar.options.select({ ...avatar.options.selection, body: id.slice(5), hands: undefined, leftHand: undefined, rightHand: undefined }); wake(); }
+  else if (id.startsWith('outfit:') && avatar && avatar.options) { avatar.options.select({ ...avatar.options.selection, outfit: id.slice(7) }); wake(); }
+  else if (id.startsWith('prop:') && avatar && avatar.options) { avatar.options.select({ ...avatar.options.selection, prop: id.slice(5) }); wake(); }
+  else if (id === 'stay') void performAction('stay');
   else if (id === 'settings') gla.openSettings();
   else if (id === 'quit') { live.stop('quit'); gla.quit(); }
   else if (id.startsWith('end:')) live.stop(id.slice(4));
@@ -682,7 +712,8 @@ const applySettings = next => {
   syncBubble();
   $('#name').textContent = settings.personaName || 'Tia';
   if (avatar && previous.quality !== settings.quality) applyQuality();
-  if (avatar && previous.avatarDir !== settings.avatarDir) { avatar.dispose(); avatar = null; ready = false; void loadAvatar(); }
+  // Switching avatar (picker) or package folder swaps the whole model.
+  if (avatar && (previous.avatarDir !== settings.avatarDir || (previous.avatar && previous.avatar.dir) !== (settings.avatar && settings.avatar.dir) || (previous.avatar && previous.avatar.slug) !== (settings.avatar && settings.avatar.slug))) { if (stage) void exitStage(); avatar.dispose(); avatar = null; companion = null; ready = false; void loadAvatar(); }
   if (!avatar && settings.avatar && settings.avatar.ok && !ready) void loadAvatar();
 };
 gla.onSettings(applySettings);
