@@ -1,0 +1,470 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04A48D0B46E5108D38511A09 /* AvatarModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D8ED5242B46343686FBA04 /* AvatarModel.swift */; };
+		2950E575D9E189F4D513C144 /* GPTLiveAvatarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D1772DDA6129D0DCFA3D0B /* GPTLiveAvatarApp.swift */; };
+		296EB95F03B62A300CF1CF1A /* three.core.js in Resources */ = {isa = PBXBuildFile; fileRef = FF061392B2227AFB45BF3E49 /* three.core.js */; };
+		2E801A16623AE77026396735 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A4592A7F68050FE631A1E8 /* SettingsView.swift */; };
+		30473E1E8C85EACB20326502 /* thumbnail.png in Resources */ = {isa = PBXBuildFile; fileRef = CB1194D6CA6C8C89727E565C /* thumbnail.png */; };
+		350BBA92DDBA15ADE7C23B75 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD316FE05D7B40EACBD9E96E /* ContentView.swift */; };
+		37A6FEF31E5244906E209BBC /* BufferGeometryUtils.js in Resources */ = {isa = PBXBuildFile; fileRef = CAD45216D8A3B4AEA5D35DA5 /* BufferGeometryUtils.js */; };
+		445ABC29342C6E622FFBB757 /* avatar-ios.js in Resources */ = {isa = PBXBuildFile; fileRef = 57762C3DF08119528F59FA71 /* avatar-ios.js */; };
+		5286632C9497D05C111576F4 /* avatar-ios.html in Resources */ = {isa = PBXBuildFile; fileRef = 39D95B16C8C14720937BFC34 /* avatar-ios.html */; };
+		538CB70B9773ACB34570BE19 /* motions in Resources */ = {isa = PBXBuildFile; fileRef = 3B572F8D08FA465224537BD2 /* motions */; };
+		581973404210D4B2350971B9 /* GLTFLoader.js in Resources */ = {isa = PBXBuildFile; fileRef = BDB4CF1CC45E5DAA4F55E808 /* GLTFLoader.js */; };
+		856CDC463BD7040AC294D115 /* avatar3d-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = 6437EFA3DB5B0B121DECB41A /* avatar3d-motion.js */; };
+		8605B4E326D2EA0B22A65EC3 /* AvatarWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07372A35D5961A17D7977AF /* AvatarWebView.swift */; };
+		91F1EA0DE513BFAD5E33714F /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF41DE49BA18BF388DC94759 /* AppSettings.swift */; };
+		A4444B0A3EA269E36CF6C21D /* three.module.js in Resources */ = {isa = PBXBuildFile; fileRef = B5C8F4FAFF34B60FB4F855CE /* three.module.js */; };
+		B3CA8D6851B05CD9A908CAC9 /* model.glb in Resources */ = {isa = PBXBuildFile; fileRef = D0592C49C3A5B9D78DED85D3 /* model.glb */; };
+		D20B66CD99F3921901B8BA36 /* avatar3d-options.js in Resources */ = {isa = PBXBuildFile; fileRef = D64B2A405968C1D4EA3D4C82 /* avatar3d-options.js */; };
+		D30790DC7C0C9B5C69795831 /* avatar3d.js in Resources */ = {isa = PBXBuildFile; fileRef = 5E8EA743D1F05949507C4C46 /* avatar3d.js */; };
+		D3BA6DF624AAC21F557AF33F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CFDD03B15EAAAEADA22CF089 /* Assets.xcassets */; };
+		E2C3E1CB730FB2A1365C17C9 /* avatar3d-companion.js in Resources */ = {isa = PBXBuildFile; fileRef = 0FFE9A84C04C7FFEE89A1298 /* avatar3d-companion.js */; };
+		E631A4E232470ED7F54B068E /* RoomEnvironment.js in Resources */ = {isa = PBXBuildFile; fileRef = F5A556E1DA31DFF450FC9C54 /* RoomEnvironment.js */; };
+		E9F86B036E7DD70F8B48A999 /* SkeletonUtils.js in Resources */ = {isa = PBXBuildFile; fileRef = 17F58F6B2614B233BFEA8582 /* SkeletonUtils.js */; };
+		ED9298499D5BDFAAF8CD8C56 /* ModelResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = E33A6C4CA3C452ACF58B0D4A /* ModelResources.swift */; };
+		F248A0D27F477824EC7DAD64 /* LiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22A95464B29EE8AFE4798721 /* LiveSession.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0FFE9A84C04C7FFEE89A1298 /* avatar3d-companion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "avatar3d-companion.js"; sourceTree = "<group>"; };
+		17F58F6B2614B233BFEA8582 /* SkeletonUtils.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = SkeletonUtils.js; sourceTree = "<group>"; };
+		22A95464B29EE8AFE4798721 /* LiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSession.swift; sourceTree = "<group>"; };
+		23A4592A7F68050FE631A1E8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		332681D3E16028E9D289F105 /* GPTLiveAvatar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GPTLiveAvatar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		37D1772DDA6129D0DCFA3D0B /* GPTLiveAvatarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPTLiveAvatarApp.swift; sourceTree = "<group>"; };
+		39D95B16C8C14720937BFC34 /* avatar-ios.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "avatar-ios.html"; sourceTree = "<group>"; };
+		3B572F8D08FA465224537BD2 /* motions */ = {isa = PBXFileReference; lastKnownFileType = folder; name = motions; path = Resources/motions; sourceTree = SOURCE_ROOT; };
+		57762C3DF08119528F59FA71 /* avatar-ios.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "avatar-ios.js"; sourceTree = "<group>"; };
+		5E8EA743D1F05949507C4C46 /* avatar3d.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = avatar3d.js; sourceTree = "<group>"; };
+		6437EFA3DB5B0B121DECB41A /* avatar3d-motion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "avatar3d-motion.js"; sourceTree = "<group>"; };
+		907E7955B75ABEFC7FCAD524 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AD316FE05D7B40EACBD9E96E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B07372A35D5961A17D7977AF /* AvatarWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarWebView.swift; sourceTree = "<group>"; };
+		B5C8F4FAFF34B60FB4F855CE /* three.module.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = three.module.js; sourceTree = "<group>"; };
+		BDB4CF1CC45E5DAA4F55E808 /* GLTFLoader.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = GLTFLoader.js; sourceTree = "<group>"; };
+		C2D8ED5242B46343686FBA04 /* AvatarModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarModel.swift; sourceTree = "<group>"; };
+		CAD45216D8A3B4AEA5D35DA5 /* BufferGeometryUtils.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = BufferGeometryUtils.js; sourceTree = "<group>"; };
+		CB1194D6CA6C8C89727E565C /* thumbnail.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = thumbnail.png; sourceTree = "<group>"; };
+		CFDD03B15EAAAEADA22CF089 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D0592C49C3A5B9D78DED85D3 /* model.glb */ = {isa = PBXFileReference; path = model.glb; sourceTree = "<group>"; };
+		D64B2A405968C1D4EA3D4C82 /* avatar3d-options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "avatar3d-options.js"; sourceTree = "<group>"; };
+		DF41DE49BA18BF388DC94759 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		E33A6C4CA3C452ACF58B0D4A /* ModelResources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelResources.swift; sourceTree = "<group>"; };
+		F5A556E1DA31DFF450FC9C54 /* RoomEnvironment.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = RoomEnvironment.js; sourceTree = "<group>"; };
+		FF061392B2227AFB45BF3E49 /* three.core.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = three.core.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		123FDE77F0EBB32EA59FCA73 /* GPTLiveAvatar */ = {
+			isa = PBXGroup;
+			children = (
+				DF41DE49BA18BF388DC94759 /* AppSettings.swift */,
+				CFDD03B15EAAAEADA22CF089 /* Assets.xcassets */,
+				AD316FE05D7B40EACBD9E96E /* ContentView.swift */,
+				37D1772DDA6129D0DCFA3D0B /* GPTLiveAvatarApp.swift */,
+				907E7955B75ABEFC7FCAD524 /* Info.plist */,
+				23A4592A7F68050FE631A1E8 /* SettingsView.swift */,
+				B8E5132A118DC75553E91054 /* Avatar */,
+				ADD6C7CF9317B3F8D6668044 /* Live */,
+				3ABA51D5949C4D7BF0682C45 /* Web */,
+			);
+			path = GPTLiveAvatar;
+			sourceTree = "<group>";
+		};
+		28B486F7B74388BB3C97CAC1 /* web */ = {
+			isa = PBXGroup;
+			children = (
+				0FFE9A84C04C7FFEE89A1298 /* avatar3d-companion.js */,
+				6437EFA3DB5B0B121DECB41A /* avatar3d-motion.js */,
+				D64B2A405968C1D4EA3D4C82 /* avatar3d-options.js */,
+				5E8EA743D1F05949507C4C46 /* avatar3d.js */,
+				E6FE10604F11B2544AA190C1 /* vendor */,
+			);
+			path = web;
+			sourceTree = "<group>";
+		};
+		2CA352CAF375ADAD66ED5E3D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				D0592C49C3A5B9D78DED85D3 /* model.glb */,
+				3B572F8D08FA465224537BD2 /* motions */,
+				CB1194D6CA6C8C89727E565C /* thumbnail.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		3ABA51D5949C4D7BF0682C45 /* Web */ = {
+			isa = PBXGroup;
+			children = (
+				39D95B16C8C14720937BFC34 /* avatar-ios.html */,
+				57762C3DF08119528F59FA71 /* avatar-ios.js */,
+			);
+			path = Web;
+			sourceTree = "<group>";
+		};
+		5B81336DA70A4BB13DE2D450 /* three */ = {
+			isa = PBXGroup;
+			children = (
+				CAD45216D8A3B4AEA5D35DA5 /* BufferGeometryUtils.js */,
+				BDB4CF1CC45E5DAA4F55E808 /* GLTFLoader.js */,
+				F5A556E1DA31DFF450FC9C54 /* RoomEnvironment.js */,
+				17F58F6B2614B233BFEA8582 /* SkeletonUtils.js */,
+				FF061392B2227AFB45BF3E49 /* three.core.js */,
+				B5C8F4FAFF34B60FB4F855CE /* three.module.js */,
+			);
+			path = three;
+			sourceTree = "<group>";
+		};
+		6975015A1DD49474E88EC55B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				332681D3E16028E9D289F105 /* GPTLiveAvatar.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A4F44DDC1856AF4FA895D561 /* gpt-live-avatar */ = {
+			isa = PBXGroup;
+			children = (
+				28B486F7B74388BB3C97CAC1 /* web */,
+			);
+			name = "gpt-live-avatar";
+			path = ..;
+			sourceTree = "<group>";
+		};
+		ADD6C7CF9317B3F8D6668044 /* Live */ = {
+			isa = PBXGroup;
+			children = (
+				22A95464B29EE8AFE4798721 /* LiveSession.swift */,
+			);
+			path = Live;
+			sourceTree = "<group>";
+		};
+		B8E5132A118DC75553E91054 /* Avatar */ = {
+			isa = PBXGroup;
+			children = (
+				C2D8ED5242B46343686FBA04 /* AvatarModel.swift */,
+				B07372A35D5961A17D7977AF /* AvatarWebView.swift */,
+				E33A6C4CA3C452ACF58B0D4A /* ModelResources.swift */,
+			);
+			path = Avatar;
+			sourceTree = "<group>";
+		};
+		E6FE10604F11B2544AA190C1 /* vendor */ = {
+			isa = PBXGroup;
+			children = (
+				5B81336DA70A4BB13DE2D450 /* three */,
+			);
+			path = vendor;
+			sourceTree = "<group>";
+		};
+		F0A86E480A6DE0F555C17162 = {
+			isa = PBXGroup;
+			children = (
+				A4F44DDC1856AF4FA895D561 /* gpt-live-avatar */,
+				123FDE77F0EBB32EA59FCA73 /* GPTLiveAvatar */,
+				2CA352CAF375ADAD66ED5E3D /* Resources */,
+				6975015A1DD49474E88EC55B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3454E05E62570D621DCC02AE /* GPTLiveAvatar */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1CF3263A380F900D170B92ED /* Build configuration list for PBXNativeTarget "GPTLiveAvatar" */;
+			buildPhases = (
+				3F00D97C61D0A79C2B55BE77 /* Sources */,
+				7140E3AA3575343138C949EF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GPTLiveAvatar;
+			packageProductDependencies = (
+			);
+			productName = GPTLiveAvatar;
+			productReference = 332681D3E16028E9D289F105 /* GPTLiveAvatar.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5E05C211B03027E1C3BF8DBD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					3454E05E62570D621DCC02AE = {
+						DevelopmentTeam = X7R8N6MMSU;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 47055E99444FC809A6A9D04F /* Build configuration list for PBXProject "GPTLiveAvatar" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F0A86E480A6DE0F555C17162;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 6975015A1DD49474E88EC55B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3454E05E62570D621DCC02AE /* GPTLiveAvatar */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7140E3AA3575343138C949EF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D3BA6DF624AAC21F557AF33F /* Assets.xcassets in Resources */,
+				37A6FEF31E5244906E209BBC /* BufferGeometryUtils.js in Resources */,
+				581973404210D4B2350971B9 /* GLTFLoader.js in Resources */,
+				E631A4E232470ED7F54B068E /* RoomEnvironment.js in Resources */,
+				E9F86B036E7DD70F8B48A999 /* SkeletonUtils.js in Resources */,
+				5286632C9497D05C111576F4 /* avatar-ios.html in Resources */,
+				445ABC29342C6E622FFBB757 /* avatar-ios.js in Resources */,
+				E2C3E1CB730FB2A1365C17C9 /* avatar3d-companion.js in Resources */,
+				856CDC463BD7040AC294D115 /* avatar3d-motion.js in Resources */,
+				D20B66CD99F3921901B8BA36 /* avatar3d-options.js in Resources */,
+				D30790DC7C0C9B5C69795831 /* avatar3d.js in Resources */,
+				B3CA8D6851B05CD9A908CAC9 /* model.glb in Resources */,
+				538CB70B9773ACB34570BE19 /* motions in Resources */,
+				296EB95F03B62A300CF1CF1A /* three.core.js in Resources */,
+				A4444B0A3EA269E36CF6C21D /* three.module.js in Resources */,
+				30473E1E8C85EACB20326502 /* thumbnail.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3F00D97C61D0A79C2B55BE77 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91F1EA0DE513BFAD5E33714F /* AppSettings.swift in Sources */,
+				04A48D0B46E5108D38511A09 /* AvatarModel.swift in Sources */,
+				8605B4E326D2EA0B22A65EC3 /* AvatarWebView.swift in Sources */,
+				350BBA92DDBA15ADE7C23B75 /* ContentView.swift in Sources */,
+				2950E575D9E189F4D513C144 /* GPTLiveAvatarApp.swift in Sources */,
+				F248A0D27F477824EC7DAD64 /* LiveSession.swift in Sources */,
+				ED9298499D5BDFAAF8CD8C56 /* ModelResources.swift in Sources */,
+				2E801A16623AE77026396735 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		189BA4B28574F303AC5F3A8F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = X7R8N6MMSU;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A11996732B2E09FABB5C21C6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = GPTLiveAvatar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lionheart.gptliveavatar;
+				PRODUCT_NAME = "GPT-Live Avatar";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		DCEDB21BA2E49B103EF97E3B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = GPTLiveAvatar/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lionheart.gptliveavatar;
+				PRODUCT_NAME = "GPT-Live Avatar";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EC8D95F24C6B039FA8224B4E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = X7R8N6MMSU;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1CF3263A380F900D170B92ED /* Build configuration list for PBXNativeTarget "GPTLiveAvatar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DCEDB21BA2E49B103EF97E3B /* Debug */,
+				A11996732B2E09FABB5C21C6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		47055E99444FC809A6A9D04F /* Build configuration list for PBXProject "GPTLiveAvatar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EC8D95F24C6B039FA8224B4E /* Debug */,
+				189BA4B28574F303AC5F3A8F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5E05C211B03027E1C3BF8DBD /* Project object */;
+}

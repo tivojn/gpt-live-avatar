@@ -1,0 +1,72 @@
+name: GPTLiveAvatar
+
+options:
+  bundleIdPrefix: com.lionheart
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: X7R8N6MMSU
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  GPTLiveAvatar:
+    type: application
+    platform: iOS
+    sources:
+      - path: GPTLiveAvatar
+        excludes: ["Web/**"]
+      - path: GPTLiveAvatar/Web/avatar-ios.html
+        buildPhase: resources
+      - path: GPTLiveAvatar/Web/avatar-ios.js
+        buildPhase: resources
+      - path: ../web/avatar3d.js
+        buildPhase: resources
+      - path: ../web/avatar3d-options.js
+        buildPhase: resources
+      - path: ../web/avatar3d-motion.js
+        buildPhase: resources
+      - path: ../web/avatar3d-companion.js
+        buildPhase: resources
+      - path: ../web/vendor/three/three.module.js
+        buildPhase: resources
+      - path: ../web/vendor/three/three.core.js
+        buildPhase: resources
+      - path: ../web/vendor/three/GLTFLoader.js
+        buildPhase: resources
+      - path: ../web/vendor/three/RoomEnvironment.js
+        buildPhase: resources
+      - path: ../web/vendor/three/BufferGeometryUtils.js
+        buildPhase: resources
+      - path: ../web/vendor/three/SkeletonUtils.js
+        buildPhase: resources
+      - path: Resources/model.glb
+        buildPhase: resources
+      - path: Resources/thumbnail.png
+        buildPhase: resources
+      - path: Resources/motions
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lionheart.gptliveavatar
+        PRODUCT_NAME: GPT-Live Avatar
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_STRICT_CONCURRENCY: minimal
+    info:
+      path: GPTLiveAvatar/Info.plist
+      properties:
+        CFBundleDisplayName: GPT-Live Avatar
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: GPT-Live Avatar uses the microphone only during a live conversation; ending the conversation stops capture.
+        UIBackgroundModes: [audio]
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
