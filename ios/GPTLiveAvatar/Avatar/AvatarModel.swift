@@ -125,6 +125,23 @@ struct MouthDriver: Equatable, Sendable {
     }
     mutating func reset(at time: TimeInterval) { smoothed = 0; lastSampleAt = time; band = .silence; previous = .silence; current = .silence; transitionedAt = time }
 
+    /// Spectral lip-sync: the viseme comes from the audio analyser; the level
+    /// only decides whether she is speaking. Mouth shapes crossfade as before.
+    mutating func update(viseme: AvatarViseme, level: Double, at time: TimeInterval) {
+        let raw = level.isFinite ? min(1, max(0, level)) : 0
+        if let last = lastSampleAt {
+            let elapsed = min(0.5, max(0, time - last))
+            let tau = raw > smoothed ? Self.attack : Self.release
+            smoothed += (raw - smoothed) * (1 - exp(-elapsed / tau))
+        } else { smoothed = raw }
+        lastSampleAt = time
+        let speakingNow = band == .silence ? smoothed >= Self.speechEnter : smoothed >= Self.speechExit
+        let candidate: AvatarViseme = speakingNow ? (viseme == .silence ? .nearClose : viseme) : .silence
+        band = speakingNow ? .narrow : .silence
+        guard candidate != current, time - transitionedAt >= 0.07 else { return }
+        previous = current; current = candidate; transitionedAt = time
+    }
+
     /// Viseme targets at `time`: a crossfade between the previous and current shapes.
     func targets(at time: TimeInterval) -> [AvatarViseme: Double] {
         var result: [AvatarViseme: Double] = [:]

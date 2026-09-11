@@ -799,6 +799,17 @@ class Avatar3D {
     this.preparedMotionFrame={now,reduce};
   }
 
+  // Bounds of the animated joints plus the crown, in projected units before
+  // the fit scale is applied (the same units keepMotionInViewport works in).
+  jointBounds() {
+    if (!this.options?.bones?.length) return null;
+    const points = this.options.bones.map(({ node }) => this.project(node.getWorldPosition(new THREE.Vector3())));
+    const crown = this.crownProjection(); if (crown) points.push(crown);
+    if (!points.length || !points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return null;
+    const xs = points.map(p => p.x), ys = points.map(p => p.y);
+    const x = Math.min(...xs), y = Math.min(...ys);
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+  }
   keepMotionInViewport(fit, surface) {
     // Portrait gestures preserve an intentional close-up, including the lower
     // body being below the frame. A raised hand must not relocate the actor.

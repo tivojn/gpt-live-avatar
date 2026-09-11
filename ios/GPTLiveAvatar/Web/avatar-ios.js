@@ -5,6 +5,24 @@ let avatar, latest, loading, reported = false, failed = false;
 let companion, lastConversation = '', actionGeneration = 0, lastMotion = '';
 let travelOffset={x:0,y:0}, travelClip=false, approachWalking=false, approachNativeCrop, lastNativeLayout='';
 let displayedViewport, stagePreparing=false, stageTurning=false, previousSurface;
+// A lunge or kick wider than the phone used to be clamped at the edge every
+// frame, which read as bumping. Instead zoom out just enough for the animated
+// joints to fit, and ease every viewport change so nothing jumps.
+let motionSmooth=null, motionFitAt=0;
+function motionFit(base,surface){
+  let fit=base;
+  const b=avatar.jointBounds?.();
+  if(b&&!avatar.motion?.active?.gesture&&b.width>0&&b.height>0){
+    const pad=Math.max(8,surface.width*.04);
+    const needed=Math.min((surface.width-2*pad)/b.width,(surface.height-2*pad)/b.height);
+    if(needed<base.scale){
+      const s=Math.max(base.scale*.5,needed);
+      const cx=base.x+(b.x+b.width/2)*base.scale, cy=base.y+(b.y+b.height)*base.scale;
+      fit={scale:s,x:cx-(b.x+b.width/2)*s,y:cy-(b.y+b.height)*s};
+    }
+  }
+  return avatar.keepMotionInViewport(fit,surface)||fit;
+}
 let animationFrame = 0, disposed = false;
 const originalError = console.error;
 const generation = Number(new URLSearchParams(location.search).get('generation'));
@@ -247,11 +265,15 @@ function draw(now) {
   }
   previousSurface={width:surface.width,height:surface.height};
   if(!avatar.studioStage)avatar.prepareMotionFrame?.(now,Boolean(state.reduce));
-  if((avatar.motion?.active||avatar.options?.transition)&&avatar.keepMotionInViewport){
-    const scale=surface.width/viewport.w;
-    const fit=avatar.keepMotionInViewport({scale,x:-viewport.x*scale,y:-viewport.y*scale},
-      {x:0,y:0,width:surface.width,height:surface.height});
-    viewport={...viewport,x:-fit.x/scale,y:-fit.y/scale};
+  const motionOn=Boolean((avatar.motion?.active||avatar.options?.transition)&&avatar.keepMotionInViewport);
+  if(motionOn||motionSmooth){
+    const scale=surface.width/viewport.w, base={scale,x:-viewport.x*scale,y:-viewport.y*scale};
+    const target=motionOn?motionFit(base,{x:0,y:0,width:surface.width,height:surface.height}):base;
+    const k=motionSmooth?1-Math.exp(-Math.min(100,now-motionFitAt)/140):1;motionFitAt=now;
+    motionSmooth=motionSmooth?{scale:motionSmooth.scale+(target.scale-motionSmooth.scale)*k,x:motionSmooth.x+(target.x-motionSmooth.x)*k,y:motionSmooth.y+(target.y-motionSmooth.y)*k}:target;
+    if(!motionOn&&Math.abs(motionSmooth.scale-base.scale)<1e-4*base.scale&&Math.abs(motionSmooth.x-base.x)<.5&&Math.abs(motionSmooth.y-base.y)<.5)motionSmooth=null;
+    const f=motionSmooth||base;
+    viewport={...viewport,x:-f.x/f.scale,y:-f.y/f.scale,w:surface.width/f.scale,h:surface.height/f.scale};
   }
   displayedViewport={...viewport};
   const lookTarget = latest.pointer ? avatar.gazePoint({

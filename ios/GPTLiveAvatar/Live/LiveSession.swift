@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import Foundation
 
@@ -20,6 +21,11 @@ final class LiveSession: ObservableObject {
     @Published private(set) var assistantLine = ""
     @Published private(set) var speaking = false
     @Published private(set) var outputLevel: Float = 0
+    /// Viseme classified from the audio as it plays (same rules as the Mac app).
+    @Published private(set) var outputViseme: AvatarViseme = .silence
+    private let analyzer = SpeechVisemeAnalyzer()
+    /// Speaker gain applied before playback; voice-processing output is quiet.
+    static let playbackGain: Float = 2.2
     @Published private(set) var muted = false
     @Published private(set) var inputLevel: Float = 0
     @Published private(set) var sentAudioBytes = 0
@@ -47,6 +53,11 @@ final class LiveSession: ObservableObject {
     private var assistantTurn = ""
     private var turnID = "live:greeting"
     private var levelDecay: Task<Void, Never>?
+    /// Hang-up insurance: a session that hears nothing from the user for this
+    /// long ends on its own (the app already ends it when backgrounded).
+    static let silenceLimit: TimeInterval = 5 * 60
+    private var lastUserActivity = Date()
+    private var watchdog: Task<Void, Never>?
 
     init(apiKey: @escaping () -> String, sessionConfig: @escaping () -> [String: Any]) {
         apiKeyProvider = apiKey
@@ -83,6 +94,18 @@ final class LiveSession: ObservableObject {
         task.resume()
         send(["type": "session.start", "session": configProvider()])
         receiveLoop()
+        lastUserActivity = Date()
+        watchdog?.cancel()
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard let self, self.state == .connected else { continue }
+                if Date().timeIntervalSince(self.lastUserActivity) > Self.silenceLimit {
+                    self.lastError = "Ended after 5 minutes without you speaking."
+                    self.stop(reason: "silence")
+                }
+            }
+        }
     }
 
     func stop(reason: String = "user") {
@@ -92,6 +115,7 @@ final class LiveSession: ObservableObject {
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil; urlSession?.invalidateAndCancel(); urlSession = nil
         stopAudioEngine()
+        watchdog?.cancel(); watchdog = nil
         state = .idle
         speaking = false; outputLevel = 0
     }
@@ -100,7 +124,10 @@ final class LiveSession: ObservableObject {
         muted = value
         send(["type": value ? "session.input_audio.mute" : "session.input_audio.unmute"])
     }
-    func appendInstructions(_ text: String) { send(["type": "session.instructions.append", "content": text, "delegation_id": NSNull()]) }
+    func appendInstructions(_ text: String) { lastUserActivity = Date(); send(["type": "session.instructions.append", "content": text, "delegation_id": NSNull()]) }
+    /// Commentary is acted on immediately (she replies); an instruction append
+    /// only adjusts her standing instructions and may produce no reply.
+    func appendCommentary(_ text: String) { lastUserActivity = Date(); send(["type": "session.commentary.append", "content": text, "delegation_id": NSNull()]) }
     func stopSpeaking() { appendInstructions("Stop speaking now and wait quietly for the user.") }
 
     // MARK: - websocket
@@ -135,10 +162,10 @@ final class LiveSession: ObservableObject {
         case "session.started":
             sessionID = ((event["session"] as? [String: Any])?["id"] as? String) ?? ""
             state = .connected
-            appendInstructions("Greet the user warmly in one short sentence right now, then pause and listen.")
+            appendCommentary("Greet the user warmly in one short sentence right now, then pause and listen.")
         case "session.output_audio.delta":
             if let b64 = event["delta"] as? String, let data = Data(base64Encoded: b64) { play(data) }
-        case "session.input_transcript.delta": transcript(role: "user", event)
+        case "session.input_transcript.delta": lastUserActivity = Date(); transcript(role: "user", event)
         case "session.output_transcript.delta": transcript(role: "assistant", event)
         case "session.closed":
             stop(reason: event["reason"] as? String ?? "closed")
@@ -192,9 +219,11 @@ final class LiveSession: ObservableObject {
 
     private func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        // videoChat keeps echo cancellation but drives the speaker much louder than voiceChat.
+        try session.setCategory(.playAndRecord, mode: .videoChat, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setPreferredSampleRate(48_000)
         try session.setActive(true)
+        try? session.overrideOutputAudioPort(.speaker)
     }
 
     private func startAudioEngine() throws {
@@ -211,6 +240,20 @@ final class LiveSession: ObservableObject {
         input.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { [weak self] buffer, _ in
             self?.capture(buffer)
         }
+        engine.mainMixerNode.outputVolume = 1
+        player.volume = 1
+        // Lip-sync follows what is actually coming out of the speaker, not what
+        // has merely been scheduled: tap the player output as it plays.
+        player.removeTap(onBus: 0)
+        player.installTap(onBus: 0, bufferSize: 1_024, format: playFormat) { [weak self] buffer, _ in
+            guard let self, let channel = buffer.floatChannelData, buffer.frameLength > 0 else { return }
+            let frames = Int(buffer.frameLength)
+            let result = self.analyzer.analyze(samples: channel[0], count: frames, sampleRate: Float(buffer.format.sampleRate))
+            Task { @MainActor [weak self] in
+                guard let self, self.state != .idle else { return }
+                self.outputLevel = result.level; self.outputViseme = result.viseme; self.speaking = result.speaking
+            }
+        }
         engine.prepare()
         try engine.start()
         player.play()
@@ -220,7 +263,10 @@ final class LiveSession: ObservableObject {
     private func stopAudioEngine() {
         captureQueue.sync { captureActive = false; captureConverter = nil }
         engine.inputNode.removeTap(onBus: 0)
+        player.removeTap(onBus: 0)
         player.stop()
+        analyzer.reset()
+        outputViseme = .silence
         engine.stop()
         converter = nil
         pendingByte = nil
@@ -281,24 +327,14 @@ final class LiveSession: ObservableObject {
         let frames = AVAudioFrameCount(pcm.count / 2)
         guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: playFormat, frameCapacity: frames) else { return }
         buffer.frameLength = frames
-        var sum: Float = 0
+        let gain = Self.playbackGain
         pcm.withUnsafeBytes { raw in
             guard let channel = buffer.floatChannelData else { return }
             let samples = raw.bindMemory(to: Int16.self)
             for i in 0..<Int(frames) {
-                let v = Float(Int16(littleEndian: samples[i])) / 32_768
-                channel[0][i] = v; sum += v * v
+                // Soft-clipped gain: louder speech without hard distortion on peaks.
+                channel[0][i] = tanhf(Float(Int16(littleEndian: samples[i])) / 32_768 * gain)
             }
-        }
-        // Output level for lip-sync: RMS of this chunk, decayed between chunks.
-        let rms = sqrt(sum / Float(frames))
-        outputLevel = max(outputLevel * 0.6, min(1, rms * 6))
-        speaking = outputLevel > 0.04
-        levelDecay?.cancel()
-        levelDecay = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run { self?.outputLevel = 0; self?.speaking = false }
         }
         player.scheduleBuffer(buffer, completionHandler: nil)
         if !player.isPlaying { player.play() }

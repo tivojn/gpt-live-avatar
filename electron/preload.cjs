@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('gla', {
   chooseAvatarFolder: () => ipcRenderer.invoke('gla:avatar:choose'),
   // live session: the renderer owns WebRTC, main owns the API key
   createLiveSession: sdp => ipcRenderer.invoke('gla:live:create', sdp),
+  live: { heartbeat: active => ipcRenderer.send('gla:live:heartbeat', Boolean(active)) },
+  // native right-click menu; main answers with an action id
+  showMenu: state => ipcRenderer.invoke('gla:menu:show', state),
+  onMenuAction: callback => subscribe('gla:menu-action', callback),
   // window controls for the avatar window
   window: {
     moveBy: (dx, dy) => ipcRenderer.send('gla:window:move-by', { dx, dy }),

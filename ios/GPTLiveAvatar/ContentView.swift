@@ -54,7 +54,7 @@ struct ContentView: View {
                     await live.start()
                     if let text = env["GLA_STEER_AFTER"], !text.isEmpty {
                         try? await Task.sleep(nanoseconds: 9_000_000_000)
-                        live.appendInstructions(text)
+                        live.appendCommentary(text)
                     }
                 }
             }
@@ -114,7 +114,7 @@ struct ContentView: View {
         if !settings.hasKey { showSettings = true; return }
         if live.state == .idle { Task { await live.start() } } else { live.stop() }
     }
-    private func sendSteer() { let text = steer.trimmingCharacters(in: .whitespaces); guard !text.isEmpty else { return }; live.appendInstructions(text); steer = "" }
+    private func sendSteer() { let text = steer.trimmingCharacters(in: .whitespaces); guard !text.isEmpty else { return }; live.appendCommentary(text); steer = "" }
 
     /// Full body crop, zoomed around the figure; the renderer widens it to the screen aspect.
     private func visibleRect(in size: CGSize) -> CGRect {
@@ -128,7 +128,7 @@ struct ContentView: View {
     private func pose(at date: Date) -> AvatarPose {
         let time = date.timeIntervalSinceReferenceDate
         var driver = mouth
-        driver.update(level: Double(live.outputLevel), at: time)
+        driver.update(viseme: live.outputViseme, level: Double(live.outputLevel), at: time)
         if driver != mouth { DispatchQueue.main.async { mouth = driver } }
         var pose = AvatarPose()
         pose.reduceMotion = reduceMotion

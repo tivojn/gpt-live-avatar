@@ -297,6 +297,40 @@ ipcMain.handle('gla:window:set-bounds', (_event, bounds) => {
 });
 ipcMain.on('gla:window:ignore-mouse', (_event, ignore) => { if (avatarWindow) avatarWindow.setIgnoreMouseEvents(ignore, { forward: true }); });
 ipcMain.handle('gla:open-settings', () => { openSettingsWindow(); return true; });
+ipcMain.handle('gla:menu:show', (_event, state) => { showAvatarMenu(state && typeof state === 'object' ? state : {}); return true; });
+ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
+
+// ---------------------------------------------------------------- avatar menu and hang-up watchdog
+function showAvatarMenu(state) {
+  if (!avatarWindow || avatarWindow.isDestroyed()) return;
+  const send = id => () => { if (avatarWindow && !avatarWindow.isDestroyed()) avatarWindow.webContents.send('gla:menu-action', id); };
+  const live = state.live || 'idle';
+  Menu.buildFromTemplate([
+    { label: live === 'idle' ? 'Start Conversation' : live === 'connecting' ? 'Connecting…' : 'End Conversation', enabled: live !== 'connecting' && (live !== 'idle' || Boolean(state.hasKey)), click: send('call') },
+    { label: 'Mute Microphone', type: 'checkbox', checked: Boolean(state.muted), enabled: live === 'connected', click: send('mute') },
+    { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
+    { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
+    { type: 'separator' },
+    { label: 'Show Speech Bubble', type: 'checkbox', checked: state.bubble !== false, click: send('bubble') },
+    { label: 'Settings…', accelerator: 'Cmd+,', click: () => openSettingsWindow() },
+    { type: 'separator' },
+    { label: `Quit ${app.name}`, accelerator: 'Cmd+Q', click: send('quit') },
+  ]).popup({ window: avatarWindow });
+}
+// A live session may only run while she is on screen. The renderer reports
+// whether a session is active; if the window is hidden, minimized or fully
+// transparent for 15 s, the session is ended from here.
+let liveActive = false, liveHeartbeatAt = 0, invisibleSince = 0;
+const HIDDEN_LIMIT_MS = 15000;
+setInterval(() => {
+  if (!avatarWindow || avatarWindow.isDestroyed()) { invisibleSince = 0; return; }
+  const fresh = Date.now() - liveHeartbeatAt < 6000;
+  if (!liveActive || !fresh) { invisibleSince = 0; return; }
+  const visible = avatarWindow.isVisible() && !avatarWindow.isMinimized() && avatarWindow.getOpacity() > .02 && Number(config.opacity ?? 1) > .02;
+  if (visible) { invisibleSince = 0; return; }
+  invisibleSince = invisibleSince || Date.now();
+  if (Date.now() - invisibleSince >= HIDDEN_LIMIT_MS) { invisibleSince = 0; avatarWindow.webContents.send('gla:menu-action', 'end:hidden'); }
+}, 2000);
 ipcMain.handle('gla:quit', () => { app.quit(); return true; });
 
 // ---------------------------------------------------------------- app

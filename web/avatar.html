@@ -7,40 +7,40 @@
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-user-select: none; user-select: none; font: 13px/1.4 -apple-system, system-ui, sans-serif; color: #f4f4f6; }
   #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
   #stage.dragging { cursor: grabbing; }
-  #bubble { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: min(92%, 340px); background: rgba(24, 24, 28, .86); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 8px 10px 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35); backdrop-filter: blur(14px); -webkit-app-region: no-drag; transition: opacity .18s ease, transform .18s ease; }
+  #bubble { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 340px; box-sizing: border-box; background: rgba(24, 24, 28, .86); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 8px 10px 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35); backdrop-filter: blur(14px); -webkit-app-region: no-drag; transition: opacity .18s ease, transform .18s ease; }
   #bubble.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(-6px); }
   #bubble .head { display: flex; align-items: center; gap: 8px; }
   #bubble .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a7a82; flex: 0 0 auto; }
   #bubble .dot.connecting { background: #f5b942; animation: pulse 1s infinite; } #bubble .dot.live { background: #4cd964; } #bubble .dot.speaking { background: #4cd964; box-shadow: 0 0 0 4px rgba(76,217,100,.25); } #bubble .dot.error { background: #ff5b4d; }
   @keyframes pulse { 50% { opacity: .35; } }
   #bubble .name { font-weight: 600; } #bubble .status { color: #b9b9c2; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
-  #bubble .lines { margin: 6px 0 4px; max-height: 110px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
+  #bubble .lines { margin: 6px 0 2px; max-height: 96px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
   #bubble .line { font-size: 12.5px; line-height: 1.35; padding: 5px 8px; border-radius: 9px; background: rgba(255,255,255,.07); }
   #bubble .line.user { background: rgba(72,120,255,.24); align-self: flex-end; max-width: 92%; } #bubble .line.assistant { align-self: flex-start; max-width: 92%; }
   #bubble .line.pending { opacity: .7; } #bubble .line:empty { display: none; }
-  #bubble .row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
-  #bubble button { flex: 0 0 auto; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.08); color: inherit; border-radius: 8px; padding: 5px 9px; font: inherit; font-size: 12px; cursor: pointer; }
-  #bubble button:hover { background: rgba(255,255,255,.16); } #bubble button.pri { background: #2f6df6; border-color: #2f6df6; } #bubble button.danger { background: rgba(255,91,77,.35); border-color: rgba(255,91,77,.5); }
-  #bubble button[disabled] { opacity: .45; cursor: default; }
-  #bubble input { flex: 1; min-width: 0; border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.25); color: inherit; border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; }
-  #bubble .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 11px; color: #9a9aa4; }
-  #bubble .foot button { padding: 2px 6px; font-size: 11px; border: 0; background: transparent; color: #9a9aa4; } #bubble .foot button:hover { color: #fff; background: transparent; }
+  #bubble .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; } #bubble .row[hidden] { display: none; }
+  #bubble button.icon { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(128,128,128,.2); color: inherit; display: grid; place-items: center; padding: 0; cursor: pointer; }
+  #bubble button.icon:hover { background: rgba(128,128,128,.34); } #bubble button.icon.active { background: rgba(255,91,77,.55); }
+  #bubble button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  #bubble input { flex: 1; min-width: 0; border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.12); color: inherit; border-radius: 14px; padding: 6px 10px; font: inherit; font-size: 12.5px; outline: none; }
+  #bubble input:focus { border-color: rgba(127,181,255,.8); }
   #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(24,24,28,.9); color: #fff; padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 <canvas id="stage"></canvas>
-<div id="bubble">
+<!-- Speech bubble: conversation only. It appears while she talks and fades
+     when the conversation goes quiet; every control lives in the right-click menu. -->
+<div id="bubble" class="hidden">
   <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="status" id="status">Loading…</span></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
-  <div class="row">
-    <button class="pri" id="callBtn" disabled>Start conversation</button>
-    <button id="muteBtn" disabled title="Mute your microphone">Mute</button>
-    <button id="hushBtn" disabled title="Ask her to stop talking">Stop talking</button>
+  <div class="row" id="steerRow">
+    <button class="icon" id="muteBtn" title="Mute microphone"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg></button>
+    <button class="icon" id="hushBtn" title="Stop talking"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg></button>
+    <input id="steer" placeholder="Steer or follow up…" maxlength="2000" autocomplete="off">
+    <button class="icon" id="steerBtn" title="Send"><svg viewBox="0 0 20 20"><path d="M10 16V4M4.5 9.5 10 4l5.5 5.5"/></svg></button>
   </div>
-  <div class="row"><input id="steer" placeholder="Steer her: e.g. speak more slowly, do a wave…" disabled><button id="steerBtn" disabled>Send</button></div>
-  <div class="foot"><span id="usage"></span><span><button id="settingsBtn">Settings</button><button id="hideBubbleBtn" title="Hide the bubble (double-click Tia to show it)">Hide</button><button id="quitBtn">Quit</button></span></div>
 </div>
 <div id="toast"></div>
 <script type="module" src="/avatar3d.js"></script>
@@ -58,7 +58,18 @@ matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => {
 const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 24, idleFps: 8, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 24, maxTexture: Infinity } };
 const quality = () => QUALITY[settings.quality] || QUALITY.balanced;
 const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
-const setStatus = (text, dot = '') => { $('#status').textContent = text; $('#dot').className = 'dot ' + dot; };
+const setStatus = (text, dot = '', ms = 3500) => { $('#status').textContent = text; $('#dot').className = 'dot ' + dot; showBubble(ms); };
+// Bubble visibility: on while connecting, while she speaks or lines are fresh,
+// while the steer box is open, and briefly after a status change.
+let bubbleUntil = 0;
+const showBubble = (ms = 4000) => { bubbleUntil = Math.max(bubbleUntil, performance.now() + ms); syncBubble(); };
+const syncBubble = () => {
+  const show = settings.bubble !== false && (live.state !== 'idle' || performance.now() < bubbleUntil);
+  bubble.classList.toggle('hidden', !show);
+  $('#steerRow').hidden = live.state !== 'connected';
+};
+setInterval(syncBubble, 300);
+const BUBBLE_RESERVE = 170; // fixed headroom: the bubble has a constant size and never scales with her
 
 // ---------------------------------------------------------------- audio analysis (lip-sync)
 const audio = new Audio(); audio.autoplay = true;
@@ -149,8 +160,7 @@ async function loadAvatar() {
   userOrbit = { yaw: Number(settings.orbitYaw) || 0, pitch: Number(settings.orbitPitch) || 0 }; avatar.setOrbit(userOrbit);
   if (avatar.options) { companion = new CompanionController(); companion.reactions = true; avatar.companion = companion; }
   $('#name').textContent = settings.personaName || info.name || 'Tia';
-  setStatus(settings.hasKey ? 'Ready. Double-click me or press Start.' : 'Add your OpenAI key in Settings.');
-  $('#callBtn').disabled = !settings.hasKey;
+  setStatus(settings.hasKey ? 'Ready. Double-click my head to talk.' : 'Add your OpenAI key in Settings.');
   wake();
 }
 function applyQuality() {
@@ -179,7 +189,7 @@ function paint(now) {
   if (stageEl.width !== Math.round(cssW * dpr) || stageEl.height !== Math.round(cssH * dpr)) { stageEl.width = Math.round(cssW * dpr); stageEl.height = Math.round(cssH * dpr); }
   const layout = avatar.layout();
   const [bx, by, bw, bh] = layout.bounds; const pad = Math.max(bw, bh) * .04;
-  const reserveCss = bubble.classList.contains('hidden') ? 10 : bubble.offsetHeight + 18;
+  const reserveCss = BUBBLE_RESERVE;
   let fit, surface;
   if (stage) {
     // Stage mode: the window covers the whole display; her size is fixed and
@@ -215,6 +225,9 @@ function paint(now) {
   const expression = { smile: .35, ...(avatar.motion ? avatar.motion.expression(now, reduce) : {}) };
   const state = { reduce, viseme: currentViseme, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, blink: blinkAmounts(now), gaze, speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
   const image = avatar.render(now, state, view);
+  // Reactions and bubble placement never wait on drawing, so a slow texture
+  // swap cannot swallow a motion she already agreed to.
+  consumeReaction(now);
   // While a texture-residency swap is in flight the renderer returns without
   // drawing; keep the previous frame instead of flashing an empty window.
   if (avatar.resources && !avatar.resources.ready) return;
@@ -222,7 +235,6 @@ function paint(now) {
   context.drawImage(image, 0, 0, image.width, image.height, 0, 0, stageEl.width, stageEl.height);
   frameGeometry = { view, scale, layout, fit, pad };
   placeBubble();
-  consumeReaction(now);
 }
 function placeBubble() {
   if (!frameGeometry || !bubble) return;
@@ -262,7 +274,6 @@ async function exitStage() {
   if (!stage || !avatar || !frameGeometry) return;
   const current = stage; stage = null;
   const { fit, layout, pad } = frameGeometry; const [bx, by, bw, bh] = layout.bounds;
-  const reserveCss = bubble.classList.contains('hidden') ? 10 : bubble.offsetHeight + 18;
   const scale = fit.scale;
   // Keep the window she had before the stage, scaled only if she was pinched
   // while on stage; the compact fit recomputes the same scale from that size.
@@ -319,8 +330,11 @@ async function beginWalk(action) {
 window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID, speaking, viseme: currentViseme, relative: Number(audioSignal.relative.toFixed(2)),
   pending: companion && companion.pendingReaction && { kind: companion.pendingReaction.kind, clipID: companion.pendingReaction.clipID, action: companion.pendingReaction.action },
   motionActive: avatar && avatar.motion && avatar.motion.active && avatar.motion.active.id, clips: avatar && avatar.motion ? avatar.motion.clips.size : 0, status: document.querySelector('#status').textContent, played: window.gla_played,
-  stage: stage && { anchor: stage.anchor, scale: Number(stage.scale.toFixed(3)), walking: Boolean(stage.studio), travelClip: stage.travelClip }, window: [innerWidth, innerHeight] });
+  stage: stage && { anchor: stage.anchor, scale: Number(stage.scale.toFixed(3)), walking: Boolean(stage.studio), travelClip: stage.travelClip }, window: [innerWidth, innerHeight],
+  live: live.state, events: eventLog.slice(-40), lines: [$('#lineUser').textContent, $('#lineAssistant').textContent], bubbleHidden: bubble.classList.contains('hidden') });
 window.gla_played = [];
+const eventLog = []; // [t, type] of the last data-channel events, for diagnosing silent sessions
+window.gla_call = () => toggleCall();
 window.gla_play = id => performAction(id.startsWith('clip:') || isSpatialAction(id) || id.startsWith('go-') || ['sit', 'stand', 'wave', 'dance', 'heart', 'stay'].includes(id) ? id : 'clip:' + id);
 function loop(now) {
   renderRequest = 0;
@@ -360,28 +374,48 @@ const considerReply = reply => { if (!companion) return; companion.consider(late
 
 // ---------------------------------------------------------------- live session
 const live = new LiveClient({ createSession: sdp => gla.createLiveSession(sdp) });
+window.gla_live = live; // debug handle
+live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
+live.addEventListener('error', ({ detail }) => eventLog.push([performance.now() | 0, 'error:' + detail.message]));
 let assistantTurn = ''; let usage = null;
+const ENDED_REASONS = { user: 'Conversation ended.', close_requested: 'Conversation ended.', hidden: 'Ended: Tia was hidden for 15 seconds.', silence: 'Ended after 5 minutes without you speaking.', quit: 'Conversation ended.', unload: 'Conversation ended.' };
 live.addEventListener('state', ({ detail }) => {
-  const s = detail.state; $('#callBtn').textContent = s === 'idle' ? 'Start conversation' : s === 'connecting' ? 'Connecting…' : 'End conversation';
-  $('#callBtn').className = s === 'idle' ? 'pri' : 'danger'; $('#callBtn').disabled = s === 'connecting' || !settings.hasKey;
-  for (const id of ['muteBtn', 'hushBtn', 'steer', 'steerBtn']) $('#' + id).disabled = s !== 'connected';
-  if (s === 'idle') { setStatus(detail.reason === 'user' || detail.reason === 'close_requested' ? 'Conversation ended.' : `Ended (${detail.reason}).`); analyser = null; audio.srcObject = null; currentViseme = 'sil'; speaking = false; $('#muteBtn').textContent = 'Mute'; }
-  if (s === 'connecting') setStatus('Connecting to GPT-Live…', 'connecting');
-  if (s === 'connected') { setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; live.appendInstructions('Greet the user warmly in one short sentence right now, then pause and listen.'); }
+  const s = detail.state;
+  if (s === 'idle') { setStatus(ENDED_REASONS[detail.reason] || `Ended (${detail.reason}).`, '', 4000); analyser = null; audio.srcObject = null; currentViseme = 'sil'; speaking = false; $('#muteBtn').classList.remove('active'); }
+  if (s === 'connecting') { setStatus('Connecting to GPT-Live…', 'connecting'); $('#lineUser').textContent = ''; $('#lineAssistant').textContent = ''; }
+  if (s === 'connected') { setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; lastUserActivity = performance.now(); live.appendCommentary('Greet the user warmly in one short sentence right now, then pause and listen.'); }
+  gla.live.heartbeat(s !== 'idle');
   wake();
 });
+live.addEventListener('event', ({ detail }) => { eventLog.push([performance.now() | 0, detail.type]); if (eventLog.length > 80) eventLog.splice(0, eventLog.length - 80); });
 live.addEventListener('remote-track', ({ detail }) => attachRemoteAudio(detail.stream));
 live.addEventListener('error', ({ detail }) => { setStatus(detail.message, 'error'); toast(detail.message, 5000); });
-live.addEventListener('usage', ({ detail }) => { if (detail && Number.isFinite(detail.duration_seconds)) $('#usage').textContent = `${Math.round(detail.duration_seconds)} s`; });
+live.addEventListener('usage', ({ detail }) => { if (detail && Number.isFinite(detail.duration_seconds)) toast(`Session: ${Math.round(detail.duration_seconds)} s`); });
 live.addEventListener('transcript', ({ detail }) => {
   const { role, text, final } = detail; if (!text) return;
   const line = role === 'user' ? $('#lineUser') : $('#lineAssistant');
   line.textContent = text; line.classList.toggle('pending', !final);
   if (role === 'user') {
+    lastUserActivity = performance.now();
     if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } }
     else latestUser = text;
   } else if (final) { assistantTurn = assistantTurn ? assistantTurn + ' ' + text : text; considerReply(assistantTurn); }
 });
+// Hang-up rules: no session may run while she cannot be seen, and none may
+// idle forever. Both are cheap insurance against a forgotten call.
+let lastUserActivity = 0, hiddenSince = 0;
+const HIDDEN_LIMIT = 15000, SILENCE_LIMIT = 5 * 60 * 1000;
+setInterval(() => {
+  const active = live.state !== 'idle';
+  gla.live.heartbeat(active);
+  if (!active) { hiddenSince = 0; return; }
+  const now = performance.now();
+  if (document.visibilityState !== 'visible') { hiddenSince = hiddenSince || now; if (now - hiddenSince >= HIDDEN_LIMIT) live.stop('hidden'); }
+  else hiddenSince = 0;
+  if (live.state === 'connected' && now - lastUserActivity > SILENCE_LIMIT) live.stop('silence');
+}, 1000);
+addEventListener('pagehide', () => live.stop('unload'));
+addEventListener('beforeunload', () => live.stop('unload'));
 setInterval(() => { if (live.state === 'connected') $('#dot').className = 'dot ' + (speaking ? 'speaking' : 'live'); }, 250);
 
 const toggleCall = () => {
@@ -389,30 +423,48 @@ const toggleCall = () => {
   if (live.state === 'idle') { if (audioContext && audioContext.state === 'suspended') audioContext.resume(); audio.play().catch(() => {}); live.start(); }
   else live.stop('user');
 };
-$('#callBtn').onclick = toggleCall;
-$('#muteBtn').onclick = () => { live.setMuted(!live.muted); $('#muteBtn').textContent = live.muted ? 'Unmute' : 'Mute'; };
+// Steering / follow-up: commentary makes her act on it right away; a plain
+// instruction append is absorbed silently and may never produce a reply.
+const steer = () => { const text = $('#steer').value.trim(); if (!text || live.state !== 'connected') return; live.appendCommentary(text); lastUserActivity = performance.now(); $('#steer').value = ''; };
+const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.toggle('active', live.muted); $('#muteBtn').title = live.muted ? 'Unmute microphone' : 'Mute microphone'; };
+$('#steerBtn').onclick = steer;
+$('#muteBtn').onclick = toggleMute;
 $('#hushBtn').onclick = () => { live.stopSpeaking(); toast('Asked her to stop.'); };
-const steer = () => { const text = $('#steer').value.trim(); if (!text) return; live.appendInstructions(text); $('#steer').value = ''; toast('Sent.'); };
-$('#steerBtn').onclick = steer; $('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); });
-$('#settingsBtn').onclick = () => gla.openSettings();
-$('#quitBtn').onclick = () => gla.quit();
-$('#hideBubbleBtn').onclick = () => bubble.classList.add('hidden');
+$('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); if (e.key === 'Escape') $('#steer').blur(); });
+// Right-click anywhere on her body or the bubble: the native menu holds every control.
+const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false });
+addEventListener('contextmenu', event => {
+  event.preventDefault();
+  if (bubble.contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
+});
+gla.onMenuAction(id => {
+  if (id === 'call') toggleCall();
+  else if (id === 'mute') toggleMute();
+  else if (id === 'hush') { live.stopSpeaking(); toast('Asked her to stop.'); }
+  else if (id === 'steer') { if (live.state === 'connected') $('#steer').focus(); else toast('Start a conversation first.'); }
+  else if (id === 'bubble') gla.setSettings({ bubble: settings.bubble === false });
+  else if (id === 'settings') gla.openSettings();
+  else if (id === 'quit') { live.stop('quit'); gla.quit(); }
+  else if (id.startsWith('end:')) live.stop(id.slice(4));
+});
 
 // ---------------------------------------------------------------- interaction: drag, rotate, pinch, hit testing
 const paintedAt = (x, y) => { if (!frameGeometry) return false; const dpr = stageEl.width / innerWidth; try { return context.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data[3] > 18; } catch { return true; } };
+// Hold to drag: press and keep still for a moment, then move her. A quick
+// swipe does nothing, so two-finger scrolling (rotate) never drags her.
+const HOLD_MS = 220;
 let gesture = null;
 stageEl.addEventListener('pointerdown', event => {
   if (event.button !== 0 || !paintedAt(event.clientX, event.clientY)) return;
-  gesture = { x: event.screenX, y: event.screenY, startOrbit: avatar ? { ...avatar.orbit } : null, rotating: Boolean(avatar && event.altKey), moved: false };
+  gesture = { x: event.screenX, y: event.screenY, startX: event.screenX, startY: event.screenY, held: false, timer: 0 };
+  gesture.timer = setTimeout(() => { if (!gesture) return; gesture.held = true; dragging = true; stageEl.classList.add('dragging'); }, HOLD_MS);
   stageEl.setPointerCapture(event.pointerId);
 });
 stageEl.addEventListener('pointermove', event => {
   pointer.x = event.clientX; pointer.y = event.clientY; pointer.seen = true; wake();
   if (!gesture) return;
+  if (!gesture.held) { if (Math.hypot(event.screenX - gesture.startX, event.screenY - gesture.startY) > 8) { clearTimeout(gesture.timer); gesture = null; } return; }
   const dx = event.screenX - gesture.x, dy = event.screenY - gesture.y;
-  if (gesture.rotating && avatar) { userOrbit = { yaw: gesture.startOrbit.yaw - dx * .008, pitch: gesture.startOrbit.pitch + dy * .008 }; avatar.setOrbit(userOrbit); manualUntil = performance.now() + 300; gesture.moved = true; return; }
-  if (!gesture.moved && Math.hypot(dx, dy) < 4) return;
-  gesture.moved = true; dragging = true; stageEl.classList.add('dragging');
   if (stage) {
     stage.anchor.x += dx; stage.anchor.y += dy;
     if (stage.studio) { const { fit } = frameGeometry; stage.studio.manual({ ...fit, x: fit.x + dx, y: fit.y + dy }, { x: 0, y: 0, width: innerWidth, height: innerHeight }); companion.pause(performance.now()); }
@@ -421,12 +473,26 @@ stageEl.addEventListener('pointermove', event => {
   gesture.x = event.screenX; gesture.y = event.screenY;
 });
 const endGesture = () => {
-  if (gesture && gesture.rotating && avatar) gla.setSettings({ orbitYaw: userOrbit.yaw, orbitPitch: userOrbit.pitch });
+  if (gesture) clearTimeout(gesture.timer);
   gesture = null; dragging = false; stageEl.classList.remove('dragging');
 };
 stageEl.addEventListener('pointerup', endGesture); stageEl.addEventListener('pointercancel', endGesture);
-stageEl.addEventListener('dblclick', event => { if (!paintedAt(event.clientX, event.clientY)) return; if (bubble.classList.contains('hidden')) { bubble.classList.remove('hidden'); return; } toggleCall(); });
+// Double-click her head to start or end a conversation.
+const onHead = (x, y) => {
+  if (!frameGeometry) return false;
+  const { fit, layout } = frameGeometry; const [, by, , bh] = layout.bounds;
+  const crown = avatar && avatar.crownProjection ? avatar.crownProjection() : null;
+  const top = crown && Number.isFinite(crown.y) ? fit.y + crown.y * fit.scale : fit.y + by * fit.scale;
+  return y <= top + bh * fit.scale * .3;
+};
+stageEl.addEventListener('dblclick', event => {
+  if (!paintedAt(event.clientX, event.clientY)) return;
+  if (!onHead(event.clientX, event.clientY)) { toast(live.state === 'idle' ? 'Double-click my head to start talking.' : 'Double-click my head to end the conversation.'); return; }
+  toggleCall();
+});
 let resizeTimer = 0, pendingScale = 1;
+const MIN_WINDOW_WIDTH = 360; // the bubble is 340 px wide and never shrinks with her
+if (innerWidth < MIN_WINDOW_WIDTH) void gla.window.resizeTo(MIN_WINDOW_WIDTH, Math.round(innerHeight * MIN_WINDOW_WIDTH / innerWidth));
 addEventListener('wheel', event => {
   if (!avatar) return;
   event.preventDefault();
@@ -435,7 +501,7 @@ addEventListener('wheel', event => {
     const delta = Math.max(-90, Math.min(90, event.deltaY * unit));
     pendingScale *= Math.exp(-delta * .0075);
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(async () => { const s = pendingScale; pendingScale = 1; if (stage) { stage.scale = Math.min(6, Math.max(.15, stage.scale * s)); lastFrame = 0; wake(); return; } await gla.window.resizeTo(innerWidth * s, innerHeight * s); lastFrame = 0; wake(); }, 40);
+    resizeTimer = setTimeout(async () => { let s = pendingScale; pendingScale = 1; if (stage) { stage.scale = Math.min(6, Math.max(.15, stage.scale * s)); lastFrame = 0; wake(); return; } s = Math.max(s, MIN_WINDOW_WIDTH / innerWidth); await gla.window.resizeTo(innerWidth * s, innerHeight * s); lastFrame = 0; wake(); }, 40);
     return;
   }
   const dx = Math.max(-120, Math.min(120, event.deltaX * unit || 0)), dy = Math.max(-120, Math.min(120, event.deltaY * unit || 0));
@@ -458,9 +524,8 @@ addEventListener('resize', () => { lastFrame = 0; wake(); });
 const applySettings = next => {
   const previous = settings; settings = next;
   stageEl.style.opacity = String(settings.opacity ?? 1);
-  bubble.classList.toggle('hidden', settings.bubble === false);
+  syncBubble();
   $('#name').textContent = settings.personaName || 'Tia';
-  $('#callBtn').disabled = !settings.hasKey || live.state === 'connecting';
   if (avatar && previous.quality !== settings.quality) applyQuality();
   if (avatar && previous.avatarDir !== settings.avatarDir) { avatar.dispose(); avatar = null; ready = false; void loadAvatar(); }
   if (!avatar && settings.avatar && settings.avatar.ok && !ready) void loadAvatar();
