@@ -7,29 +7,33 @@
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-user-select: none; user-select: none; font: 13px/1.4 -apple-system, system-ui, sans-serif; color: #f4f4f6; }
   #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
   #stage.dragging { cursor: grabbing; }
-  #bubble { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 340px; box-sizing: border-box; background: rgba(24, 24, 28, .86); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 8px 10px 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35); backdrop-filter: blur(14px); -webkit-app-region: no-drag; transition: opacity .18s ease, transform .18s ease; }
+  /* The bubble follows the system appearance: light tokens by default, dark under prefers-color-scheme: dark. */
+  :root { --bubble-bg: rgba(250,250,250,.94); --bubble-line: rgba(0,0,0,.09); --bubble-text: #1d1d1f; --bubble-dim: #6e6e73; --bubble-user: rgba(72,120,255,.18); --bubble-assistant: rgba(0,0,0,.05); --bubble-chip: rgba(0,0,0,.07); --bubble-chip-hover: rgba(0,0,0,.13); --bubble-input: rgba(0,0,0,.05); --bubble-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  @media (prefers-color-scheme: dark) { :root { --bubble-bg: rgba(24,24,28,.88); --bubble-line: rgba(255,255,255,.14); --bubble-text: #f4f4f6; --bubble-dim: #b9b9c2; --bubble-user: rgba(72,120,255,.28); --bubble-assistant: rgba(255,255,255,.08); --bubble-chip: rgba(128,128,128,.22); --bubble-chip-hover: rgba(128,128,128,.36); --bubble-input: rgba(128,128,128,.14); --bubble-shadow: 0 10px 30px rgba(0,0,0,.35); } }
+  #bubble { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 340px; box-sizing: border-box; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); border-radius: 14px; padding: 8px 10px 8px; box-shadow: var(--bubble-shadow); backdrop-filter: blur(14px); -webkit-app-region: no-drag; transition: opacity .18s ease, transform .18s ease; }
   #bubble.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(-6px); }
   #bubble .head { display: flex; align-items: center; gap: 8px; }
   #bubble .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a7a82; flex: 0 0 auto; }
   #bubble .dot.connecting { background: #f5b942; animation: pulse 1s infinite; } #bubble .dot.live { background: #4cd964; } #bubble .dot.speaking { background: #4cd964; box-shadow: 0 0 0 4px rgba(76,217,100,.25); } #bubble .dot.error { background: #ff5b4d; }
   @keyframes pulse { 50% { opacity: .35; } }
-  #bubble .name { font-weight: 600; } #bubble .status { color: #b9b9c2; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  #bubble .name { font-weight: 600; } #bubble .status { color: var(--bubble-dim); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   #bubble .lines { margin: 6px 0 2px; max-height: 96px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
-  #bubble .line { font-size: 12.5px; line-height: 1.35; padding: 5px 8px; border-radius: 9px; background: rgba(255,255,255,.07); }
-  #bubble .line.user { background: rgba(72,120,255,.24); align-self: flex-end; max-width: 92%; } #bubble .line.assistant { align-self: flex-start; max-width: 92%; }
+  #bubble .line { font-size: 12.5px; line-height: 1.35; padding: 5px 8px; border-radius: 9px; background: var(--bubble-assistant); }
+  #bubble .line.user { background: var(--bubble-user); align-self: flex-end; max-width: 92%; } #bubble .line.assistant { align-self: flex-start; max-width: 92%; }
   #bubble .line.pending { opacity: .7; } #bubble .line:empty { display: none; }
   #bubble .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; } #bubble .row[hidden] { display: none; }
-  #bubble button.icon { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(128,128,128,.2); color: inherit; display: grid; place-items: center; padding: 0; cursor: pointer; }
-  #bubble button.icon:hover { background: rgba(128,128,128,.34); } #bubble button.icon.active { background: rgba(255,91,77,.55); }
+  #bubble button.icon { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--bubble-chip); color: inherit; display: grid; place-items: center; padding: 0; cursor: pointer; }
+  #bubble button.icon:hover { background: var(--bubble-chip-hover); } #bubble button.icon.active { background: rgba(255,91,77,.55); }
   /* Mic: plain icon while listening (its ring grows with your voice level); the same icon with a slash when muted. */
   #bubble button.icon svg.off { display: none; } #bubble button.icon.active svg.on { display: none; } #bubble button.icon.active svg.off { display: block; }
-  #bubble button.icon.active { background: rgba(128,128,128,.2); opacity: .75; }
-  #bubble button.icon.listening { box-shadow: 0 0 0 calc(var(--mic-level, 0) * 7px) rgba(255,255,255,.28); }
+  #bubble button.icon.active { background: var(--bubble-chip); opacity: .75; }
+  #bubble button.icon.listening { box-shadow: 0 0 0 calc(var(--mic-level, 0) * 7px) var(--bubble-chip-hover); }
   #bubble button.icon.end { background: rgba(255,91,77,.75); color: #fff; } #bubble button.icon.end:hover { background: rgba(255,91,77,.95); }
   #bubble button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-  #bubble input { flex: 1; min-width: 0; border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.12); color: inherit; border-radius: 14px; padding: 6px 10px; font: inherit; font-size: 12.5px; outline: none; }
+  #bubble input { flex: 1; min-width: 0; border: 1px solid var(--bubble-line); background: var(--bubble-input); color: inherit; border-radius: 14px; padding: 6px 10px; font: inherit; font-size: 12.5px; outline: none; }
+  #bubble input::placeholder { color: var(--bubble-dim); }
   #bubble input:focus { border-color: rgba(127,181,255,.8); }
-  #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(24,24,28,.9); color: #fff; padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--bubble-bg); color: var(--bubble-text); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
 </style>
 </head>
@@ -69,13 +73,26 @@ const setStatus = (text, dot = '', ms = 3500) => { $('#status').textContent = te
 // while the steer box is open, and briefly after a status change.
 let bubbleUntil = 0;
 const showBubble = (ms = 4000) => { bubbleUntil = Math.max(bubbleUntil, performance.now() + ms); syncBubble(); };
+// Visibility policy (right-click menu): "auto" shows the bubble only when a
+// message arrives (her reply, your voice or typed text) and hides it during a
+// motion and after a quiet spell; "always" keeps it up for the whole
+// conversation; "off" never shows it.
+const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
 const syncBubble = () => {
-  const show = settings.bubble !== false && (live.state !== 'idle' || performance.now() < bubbleUntil);
+  const now = performance.now(), mode = bubbleMode();
+  const inMotion = Boolean(avatar && avatar.motion && avatar.motion.active && !avatar.motion.active.gesture) || Boolean(stage && stage.studio);
+  const typing = document.activeElement === $('#steer');
+  let show;
+  if (mode === 'off') show = false;
+  else if (mode === 'always') show = live.state !== 'idle' || now < bubbleUntil;
+  else { if (inMotion && !typing) bubbleUntil = 0; show = typing || now < bubbleUntil; }
   bubble.classList.toggle('hidden', !show);
   $('#steerRow').hidden = live.state !== 'connected';
 };
+$('#steer').addEventListener('focus', () => showBubble(60000));
 setInterval(syncBubble, 300);
-const BUBBLE_RESERVE = 170; // fixed headroom: the bubble has a constant size and never scales with her
+const BUBBLE_RESERVE = 190; // fixed headroom: the bubble has a constant size and never scales with her
+const BUBBLE_GAP = 26; // clear air between her crown and the bubble, even mid-motion
 
 // ---------------------------------------------------------------- audio analysis (lip-sync)
 const audio = new Audio(); audio.autoplay = true;
@@ -268,8 +285,18 @@ function placeBubble() {
   const headTop = crown && Number.isFinite(crown.y) ? fit.y + crown.y * fit.scale : fit.y + by * fit.scale;
   const centerX = crown && Number.isFinite(crown.x) ? fit.x + crown.x * fit.scale : fit.x + (bx + bw / 2) * fit.scale;
   const half = bubble.offsetWidth / 2 || 170;
-  bubble.style.left = Math.max(half + 6, Math.min(innerWidth - half - 6, centerX)) + 'px';
-  bubble.style.top = Math.max(6, Math.min(innerHeight - bubble.offsetHeight - 6, headTop - bubble.offsetHeight - 8)) + 'px';
+  const targetX = Math.max(half + 6, Math.min(innerWidth - half - 6, centerX));
+  const targetY = Math.max(6, Math.min(innerHeight - bubble.offsetHeight - 6, headTop - bubble.offsetHeight - BUBBLE_GAP));
+  // Ease toward the target so a lunge or a jump does not yank the bubble; it
+  // floats above her instead of reading as glued to her hair.
+  const now = performance.now(), dt = Math.min(100, now - (placeBubble.at || now)); placeBubble.at = now;
+  const k = placeBubble.x === undefined ? 1 : 1 - Math.exp(-dt / 90);
+  placeBubble.x = (placeBubble.x ?? targetX) + (targetX - (placeBubble.x ?? targetX)) * k;
+  placeBubble.y = (placeBubble.y ?? targetY) + (targetY - (placeBubble.y ?? targetY)) * k;
+  // Never let the eased position overlap her: the crown is a hard floor.
+  const floor = headTop - bubble.offsetHeight - BUBBLE_GAP * .6;
+  bubble.style.left = placeBubble.x + 'px';
+  bubble.style.top = Math.max(6, Math.min(placeBubble.y, floor)) + 'px';
 }
 
 // ---------------------------------------------------------------- stage mode (screen-wide motion)
@@ -358,6 +385,7 @@ window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID
 window.gla_played = [];
 const eventLog = []; // [t, type] of the last data-channel events, for diagnosing silent sessions
 window.gla_call = () => toggleCall();
+window.gla_showBubble = ms => showBubble(ms);
 window.gla_play = id => performAction(id.startsWith('clip:') || isSpatialAction(id) || id.startsWith('go-') || ['sit', 'stand', 'wave', 'dance', 'heart', 'stay'].includes(id) ? id : 'clip:' + id);
 function loop(now) {
   renderRequest = 0;
@@ -419,6 +447,7 @@ live.addEventListener('transcript', ({ detail }) => {
   const { role, text, final } = detail; if (!text) return;
   const line = role === 'user' ? $('#lineUser') : $('#lineAssistant');
   line.textContent = text; line.classList.toggle('pending', !final);
+  showBubble(9000); // a real message: your words or her reply
   if (role === 'user') {
     lastUserActivity = performance.now();
     if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } }
@@ -470,6 +499,7 @@ const steer = () => {
   // Echo what you typed as your side of the conversation and start a new turn.
   turnID = 'typed-' + Date.now().toString(36); assistantTurn = ''; latestUser = text;
   $('#lineUser').textContent = text; $('#lineUser').classList.remove('pending'); $('#lineAssistant').textContent = '';
+  showBubble(9000); $('#steer').blur();
 };
 const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.toggle('active', live.muted); $('#muteBtn').title = live.muted ? 'Unmute microphone' : 'Mute microphone'; };
 $('#steerBtn').onclick = steer;
@@ -478,7 +508,7 @@ $('#hushBtn').onclick = () => { live.stopSpeaking(); toast('Asked her to stop.')
 $('#endBtn').onclick = () => { if (live.state !== 'idle') live.stop('user'); };
 $('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); if (e.key === 'Escape') $('#steer').blur(); });
 // Right-click anywhere on her body or the bubble: the native menu holds every control.
-const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false });
+const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode() });
 addEventListener('contextmenu', event => {
   event.preventDefault();
   if (bubble.contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
@@ -487,8 +517,8 @@ gla.onMenuAction(id => {
   if (id === 'call') toggleCall();
   else if (id === 'mute') toggleMute();
   else if (id === 'hush') { live.stopSpeaking(); toast('Asked her to stop.'); }
-  else if (id === 'steer') { if (live.state === 'connected') $('#steer').focus(); else toast('Start a conversation first.'); }
-  else if (id === 'bubble') gla.setSettings({ bubble: settings.bubble === false });
+  else if (id === 'steer') { if (live.state === 'connected') { showBubble(60000); syncBubble(); $('#steer').focus(); } else toast('Start a conversation first.'); }
+  else if (id.startsWith('bubble:')) gla.setSettings({ bubbleMode: id.slice(7), bubble: id.slice(7) !== 'off' });
   else if (id === 'settings') gla.openSettings();
   else if (id === 'quit') { live.stop('quit'); gla.quit(); }
   else if (id.startsWith('end:')) live.stop(id.slice(4));

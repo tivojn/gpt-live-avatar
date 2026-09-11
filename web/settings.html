@@ -81,7 +81,8 @@
     </div>
     <label for="opacity">Opacity</label>
     <div class="range"><input id="opacity" type="range" min="15" max="100" step="5"><output id="opacityOut"></output></div>
-    <label><input id="bubble" type="checkbox"> Show the overhead bubble</label>
+    <label for="bubbleMode">Speech bubble</label>
+    <select id="bubbleMode"><option value="auto">Only when a message arrives (hidden during motions)</option><option value="always">Always on during a conversation</option><option value="off">Off</option></select>
   </section>
 
   <section>
@@ -103,7 +104,7 @@
     renderAvatars(settings);
     for (const input of document.querySelectorAll('#quality input')) { input.checked = input.value === settings.quality; input.parentElement.classList.toggle('on', input.checked); }
     $('#opacity').value = Math.round((settings.opacity || 1) * 100); $('#opacityOut').value = $('#opacity').value + '%';
-    $('#bubble').checked = settings.bubble !== false;
+    $('#bubbleMode').value = settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
     const a = settings.avatar || {};
     setState($('#avatarState'), a.ok ? `${a.name}: ${a.clips} motions${a.modelBytes ? `, model ${(a.modelBytes / 1048576).toFixed(0)} MB` : ''}.` : (a.problem || 'No avatar.'), a.ok ? 'ok' : 'bad');
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
@@ -172,7 +173,7 @@
   for (const input of document.querySelectorAll('#quality input')) input.onchange = () => save({ quality: input.value });
   $('#opacity').oninput = () => { $('#opacityOut').value = $('#opacity').value + '%'; };
   $('#opacity').onchange = () => save({ opacity: Number($('#opacity').value) / 100 });
-  $('#bubble').onchange = () => save({ bubble: $('#bubble').checked });
+  $('#bubbleMode').onchange = () => save({ bubbleMode: $('#bubbleMode').value, bubble: $('#bubbleMode').value !== 'off' });
   gla.onSettings(render);
   gla.getSettings().then(s => { render(s); if (s.hasKey) loadModels(); });
 </script>

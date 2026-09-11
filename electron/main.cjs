@@ -37,6 +37,7 @@ const DEFAULTS = {
   orbitPitch: 0,
   zoom: 1,
   bubble: true,
+  bubbleMode: 'auto', // auto: only on new messages; always: whole conversation; off
 };
 
 let config = { ...DEFAULTS };
@@ -268,7 +269,7 @@ function openSettingsWindow() {
 ipcMain.handle('gla:settings:get', () => publicSettings());
 ipcMain.handle('gla:settings:set', (_event, patch) => {
   if (!patch || typeof patch !== 'object') return publicSettings();
-  const allowed = ['backendModel', 'voice', 'quality', 'avatar', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble'];
+  const allowed = ['backendModel', 'voice', 'quality', 'avatar', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble', 'bubbleMode'];
   for (const key of allowed) if (key in patch) config[key] = patch[key];
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
   if (!QUALITIES.includes(config.quality)) config.quality = DEFAULTS.quality;
@@ -383,7 +384,9 @@ function showAvatarMenu(state) {
     { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
     { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
     { type: 'separator' },
-    { label: 'Show Speech Bubble', type: 'checkbox', checked: state.bubble !== false, click: send('bubble') },
+    { label: 'Bubble Only on New Messages', type: 'radio', checked: (state.bubbleMode || 'auto') === 'auto', click: send('bubble:auto') },
+    { label: 'Bubble Always On', type: 'radio', checked: state.bubbleMode === 'always', click: send('bubble:always') },
+    { label: 'Bubble Off', type: 'radio', checked: state.bubbleMode === 'off', click: send('bubble:off') },
     { label: 'Settings…', accelerator: 'Cmd+,', click: () => openSettingsWindow() },
     { type: 'separator' },
     { label: `Quit ${app.name}`, accelerator: 'Cmd+Q', click: send('quit') },
