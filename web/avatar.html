@@ -16,6 +16,9 @@
   #bubble .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a7a82; flex: 0 0 auto; }
   #bubble .dot.connecting { background: #f5b942; animation: pulse 1s infinite; } #bubble .dot.live { background: #4cd964; } #bubble .dot.speaking { background: #4cd964; box-shadow: 0 0 0 4px rgba(76,217,100,.25); } #bubble .dot.error { background: #ff5b4d; }
   @keyframes pulse { 50% { opacity: .35; } }
+  #bubble .meter { display: inline-flex; align-items: center; gap: 2px; height: 14px; width: 26px; flex: 0 0 auto; }
+  #bubble .meter i { display: block; width: 3px; height: 3px; border-radius: 2px; background: var(--bubble-dim); transition: height .06s linear, background .2s; }
+  #bubble .meter.user i { background: #3b82f6; } #bubble .meter.ai i { background: #34c759; }
   #bubble .name { font-weight: 600; } #bubble .status { color: var(--bubble-dim); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   #bubble .lines { margin: 6px 0 2px; max-height: 96px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
   #bubble .line { font-size: 12.5px; line-height: 1.35; padding: 5px 8px; border-radius: 9px; background: var(--bubble-assistant); }
@@ -42,7 +45,7 @@
 <!-- Speech bubble: conversation only. It appears while she talks and fades
      when the conversation goes quiet; every control lives in the right-click menu. -->
 <div id="bubble" class="hidden">
-  <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="status" id="status">Loading…</span></div>
+  <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
   <div class="row" id="steerRow">
     <button class="icon" id="muteBtn" title="Mute microphone"><svg class="on" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><svg class="off" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M3 17 17 3"/></svg></button>
@@ -284,19 +287,34 @@ function placeBubble() {
   const crown = avatar && avatar.crownProjection ? avatar.crownProjection() : null;
   const headTop = crown && Number.isFinite(crown.y) ? fit.y + crown.y * fit.scale : fit.y + by * fit.scale;
   const centerX = crown && Number.isFinite(crown.x) ? fit.x + crown.x * fit.scale : fit.x + (bx + bw / 2) * fit.scale;
-  const half = bubble.offsetWidth / 2 || 170;
-  const targetX = Math.max(half + 6, Math.min(innerWidth - half - 6, centerX));
-  const targetY = Math.max(6, Math.min(innerHeight - bubble.offsetHeight - 6, headTop - bubble.offsetHeight - BUBBLE_GAP));
+  const width = bubble.offsetWidth || 340, height = bubble.offsetHeight || 120, half = width / 2;
+  const margin = 6, maxX = innerWidth - half - margin, maxY = innerHeight - height - margin;
+  let targetX, targetY;
+  if (headTop - height - BUBBLE_GAP >= margin) {
+    // Room above her: centred over the crown.
+    targetX = Math.max(half + margin, Math.min(maxX, centerX));
+    targetY = headTop - height - BUBBLE_GAP;
+  } else {
+    // No headroom (she came close or stands at the top): sit beside her head
+    // on the side with more space, level with the crown.
+    const [bx, , bw] = layout.bounds; const headHalf = Math.max(40, bw * fit.scale * .28);
+    const rightX = centerX + headHalf + BUBBLE_GAP + half, leftX = centerX - headHalf - BUBBLE_GAP - half;
+    const roomRight = innerWidth - (centerX + headHalf), roomLeft = centerX - headHalf;
+    targetX = roomRight >= roomLeft ? Math.min(maxX, rightX) : Math.max(half + margin, leftX);
+    targetY = Math.max(margin, Math.min(maxY, headTop + BUBBLE_GAP * .5));
+  }
+  targetX = Math.max(half + margin, Math.min(maxX, targetX)); targetY = Math.max(margin, Math.min(maxY, targetY));
   // Ease toward the target so a lunge or a jump does not yank the bubble; it
   // floats above her instead of reading as glued to her hair.
   const now = performance.now(), dt = Math.min(100, now - (placeBubble.at || now)); placeBubble.at = now;
   const k = placeBubble.x === undefined ? 1 : 1 - Math.exp(-dt / 90);
   placeBubble.x = (placeBubble.x ?? targetX) + (targetX - (placeBubble.x ?? targetX)) * k;
   placeBubble.y = (placeBubble.y ?? targetY) + (targetY - (placeBubble.y ?? targetY)) * k;
-  // Never let the eased position overlap her: the crown is a hard floor.
-  const floor = headTop - bubble.offsetHeight - BUBBLE_GAP * .6;
-  bubble.style.left = placeBubble.x + 'px';
-  bubble.style.top = Math.max(6, Math.min(placeBubble.y, floor)) + 'px';
+  // Stay inside the window after easing, and never sink onto her crown when placed above.
+  const above = targetY <= headTop - height - BUBBLE_GAP * .6;
+  const floor = above ? headTop - height - BUBBLE_GAP * .6 : maxY;
+  bubble.style.left = Math.max(half + margin, Math.min(maxX, placeBubble.x)) + 'px';
+  bubble.style.top = Math.max(margin, Math.min(placeBubble.y, floor)) + 'px';
 }
 
 // ---------------------------------------------------------------- stage mode (screen-wide motion)
@@ -470,9 +488,21 @@ setInterval(() => {
 addEventListener('pagehide', () => live.stop('unload'));
 addEventListener('beforeunload', () => live.stop('unload'));
 setInterval(() => { if (live.state === 'connected') $('#dot').className = 'dot ' + (speaking ? 'speaking' : 'live'); }, 250);
+// Five bars flash with whoever is talking: blue for you, green for her.
+const meterBars = [...document.querySelectorAll('#meter i')];
+const meterShape = [.45, .8, 1, .8, .45];
+const paintMeter = () => {
+  const her = speaking ? Math.max(.25, audioSignal.relative || 0) : 0;
+  const you = Math.min(1, micLevel);
+  const level = Math.max(her, you * 1.2), who = her >= you ? 'ai' : you > .05 ? 'user' : '';
+  $('#meter').className = 'meter ' + (level > .05 ? who : '');
+  const wobble = performance.now() / 90;
+  meterBars.forEach((bar, i) => { const h = level > .05 ? 3 + 11 * Math.min(1, level) * meterShape[i] * (.75 + .25 * Math.abs(Math.sin(wobble + i))) : 3; bar.style.height = h + 'px'; });
+};
 setInterval(() => {
   const listening = live.state === 'connected' && !live.muted;
   if (listening) sampleMicrophone(); else micLevel = 0;
+  paintMeter();
   const mic = $('#muteBtn'); mic.classList.toggle('listening', listening);
   mic.style.setProperty('--mic-level', String(Math.min(1, micLevel)));
   mic.title = live.muted ? 'Unmute microphone' : listening ? 'Listening · click to mute' : 'Mute microphone';
