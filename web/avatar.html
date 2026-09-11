@@ -21,6 +21,8 @@
   #bubble .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; } #bubble .row[hidden] { display: none; }
   #bubble button.icon { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(128,128,128,.2); color: inherit; display: grid; place-items: center; padding: 0; cursor: pointer; }
   #bubble button.icon:hover { background: rgba(128,128,128,.34); } #bubble button.icon.active { background: rgba(255,91,77,.55); }
+  /* Listening: the mic glows green and its ring grows with your voice level. */
+  #bubble button.icon.listening { background: rgba(76,217,100,.35); box-shadow: 0 0 0 calc(var(--mic-level, 0) * 6px) rgba(76,217,100,.35); color: #bff5c8; }
   #bubble button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   #bubble input { flex: 1; min-width: 0; border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.12); color: inherit; border-radius: 14px; padding: 6px 10px; font: inherit; font-size: 12.5px; outline: none; }
   #bubble input:focus { border-color: rgba(127,181,255,.8); }
@@ -121,6 +123,23 @@ const attachRemoteAudio = stream => {
   } catch (error) { console.warn('analyser', error); }
 };
 let visemeNames = ['sil', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou'];
+// Microphone meter: proof that she can hear you, shown on the mic icon.
+let micAnalyser = null, micData = null, micLevel = 0;
+const attachMicrophone = stream => {
+  try {
+    audioContext = audioContext || new AudioContext();
+    micAnalyser = audioContext.createAnalyser(); micAnalyser.fftSize = 512; micData = new Uint8Array(micAnalyser.fftSize);
+    audioContext.createMediaStreamSource(stream).connect(micAnalyser);
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+  } catch (error) { console.warn('mic analyser', error); }
+};
+const sampleMicrophone = () => {
+  if (!micAnalyser) { micLevel = 0; return; }
+  micAnalyser.getByteTimeDomainData(micData);
+  let sum = 0; for (let i = 0; i < micData.length; i++) { const v = (micData[i] - 128) / 128; sum += v * v; }
+  const rms = Math.sqrt(sum / micData.length);
+  micLevel = Math.max(rms * 4, micLevel * .85);
+};
 
 // ---------------------------------------------------------------- avatar
 const avatarApi = () => window.OpenClamAvatar3D ? Promise.resolve(window.OpenClamAvatar3D) : new Promise((resolve, reject) => { const t = setTimeout(() => reject(new Error('3D renderer did not load')), 10000); addEventListener('openclam-avatar3d-ready', () => { clearTimeout(t); resolve(window.OpenClamAvatar3D); }, { once: true }); });
@@ -418,6 +437,14 @@ setInterval(() => {
 addEventListener('pagehide', () => live.stop('unload'));
 addEventListener('beforeunload', () => live.stop('unload'));
 setInterval(() => { if (live.state === 'connected') $('#dot').className = 'dot ' + (speaking ? 'speaking' : 'live'); }, 250);
+setInterval(() => {
+  const listening = live.state === 'connected' && !live.muted;
+  if (listening) sampleMicrophone(); else micLevel = 0;
+  const mic = $('#muteBtn'); mic.classList.toggle('listening', listening);
+  mic.style.setProperty('--mic-level', String(Math.min(1, micLevel)));
+  mic.title = live.muted ? 'Unmute microphone' : listening ? 'Listening · click to mute' : 'Mute microphone';
+}, 80);
+live.addEventListener('state', ({ detail }) => { if (detail.state === 'connected' && live.microphone) attachMicrophone(live.microphone); if (detail.state === 'idle') micAnalyser = null; });
 
 const toggleCall = () => {
   if (!settings.hasKey) { gla.openSettings(); return; }
@@ -426,7 +453,13 @@ const toggleCall = () => {
 };
 // Steering / follow-up: commentary makes her act on it right away; a plain
 // instruction append is absorbed silently and may never produce a reply.
-const steer = () => { const text = $('#steer').value.trim(); if (!text || live.state !== 'connected') return; live.appendCommentary(text); lastUserActivity = performance.now(); $('#steer').value = ''; };
+const steer = () => {
+  const text = $('#steer').value.trim(); if (!text || live.state !== 'connected') return;
+  live.appendCommentary(text); lastUserActivity = performance.now(); $('#steer').value = '';
+  // Echo what you typed as your side of the conversation and start a new turn.
+  turnID = 'typed-' + Date.now().toString(36); assistantTurn = ''; latestUser = text;
+  $('#lineUser').textContent = text; $('#lineUser').classList.remove('pending'); $('#lineAssistant').textContent = '';
+};
 const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.toggle('active', live.muted); $('#muteBtn').title = live.muted ? 'Unmute microphone' : 'Mute microphone'; };
 $('#steerBtn').onclick = steer;
 $('#muteBtn').onclick = toggleMute;
