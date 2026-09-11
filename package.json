@@ -10,7 +10,7 @@
     "start": "electron .",
     "test": "node qa/qa.js",
     "pack": "electron-builder --mac dir",
-    "dmg": "electron-builder --mac dmg",
+    "dmg": "bash tools/dmg.sh",
     "fetch-assets": "bash tools/fetch-assets.sh"
   },
   "dependencies": {
@@ -43,7 +43,8 @@
       },
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "notarize": true
     },
     "extraResources": [
       {

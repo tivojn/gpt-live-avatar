@@ -42,6 +42,12 @@ Pipeline (`tools/`):
 
 Mac: `npm run pack` (app folder) or `npm run dmg` (installer; bundles
 `build/assets/bundle` and `build/assets/index.json`).
+Notarization: put an App Store Connect API key (Developer role) at
+`~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` and create
+`~/.config/gpt-live-avatar/notarize.env` exporting `APPLE_API_KEY` (path),
+`APPLE_API_KEY_ID` and `APPLE_API_ISSUER`; `npm run dmg` then notarizes and
+staples automatically. Without that file the DMG is signed but not notarized.
+
 
 ## Handoff for other hosts (EnConvo)
 
