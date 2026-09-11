@@ -179,17 +179,20 @@ function paint(now) {
   if (stage.width !== Math.round(cssW * dpr) || stage.height !== Math.round(cssH * dpr)) { stage.width = Math.round(cssW * dpr); stage.height = Math.round(cssH * dpr); }
   avatar.prepareMotionFrame(now, reduce);
   const layout = avatar.layout();
-  // Frame the whole resting body with a little air, keeping the window aspect,
-  // and reserve room above her head for the bubble.
+  // Fit maps logical portrait pixels to CSS pixels: css = fit.x + logical * fit.scale.
+  // Frame the resting body with a little air and headroom for the bubble, then let
+  // the renderer nudge the fit so animated joints (a lunge, a raised hand) stay
+  // inside the window instead of leaving a fixed crop.
   const [bx, by, bw, bh] = layout.bounds; const pad = Math.max(bw, bh) * .04;
   const reserveCss = bubble.classList.contains('hidden') ? 10 : bubble.offsetHeight + 18;
-  const aspect = cssW / cssH;
-  // logical height needed = body + bottom pad + reserve (in logical units, solved with the final scale)
-  let vh = (bh + pad) / (1 - reserveCss / cssH); let vw = vh * aspect;
-  if (vw < bw + pad * 2) { vw = bw + pad * 2; vh = vw / aspect; }
-  const view = { x: bx + bw / 2 - vw / 2, y: by + bh + pad - vh, w: vw, h: vh };
-  const scale = cssW / vw; const cap = q.cap / Math.max(cssW * dpr, cssH * dpr, 1); const density = scale * dpr * Math.min(1, cap);
-  view.projectedHeight = 1536 * scale; view.pixelWidth = Math.max(8, Math.round(vw * density)); view.pixelHeight = Math.max(8, Math.round(vh * density));
+  const surface = { x: 0, y: reserveCss, width: cssW, height: Math.max(40, cssH - reserveCss) };
+  const scale0 = Math.min(surface.width / (bw + pad * 2), surface.height / (bh + pad * 2));
+  let fit = { scale: scale0, x: surface.x + surface.width / 2 - (bx + bw / 2) * scale0, y: surface.y + surface.height - (by + bh + pad) * scale0 };
+  fit = avatar.keepMotionInViewport ? (avatar.keepMotionInViewport(fit, surface) || fit) : fit;
+  const scale = fit.scale;
+  const view = { x: -fit.x / scale, y: -fit.y / scale, w: cssW / scale, h: cssH / scale };
+  const cap = q.cap / Math.max(cssW * dpr, cssH * dpr, 1); const density = scale * dpr * Math.min(1, cap);
+  view.projectedHeight = 1536 * scale; view.pixelWidth = Math.max(8, Math.round(view.w * density)); view.pixelHeight = Math.max(8, Math.round(view.h * density));
   sampleAudio(now);
   const target = pointer.seen ? { x: Math.max(-1, Math.min(1, (pointer.x / cssW - .5) * 2)) * .6, y: Math.max(-1, Math.min(1, (pointer.y / cssH - .5) * -2)) * .35 } : { x: 0, y: 0 };
   gaze = { x: gaze.x + (target.x - gaze.x) * .08, y: gaze.y + (target.y - gaze.y) * .08 };
@@ -201,20 +204,21 @@ function paint(now) {
   if (avatar.resources && !avatar.resources.ready) return;
   context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, stage.width, stage.height);
   context.drawImage(image, 0, 0, image.width, image.height, 0, 0, stage.width, stage.height);
-  frameGeometry = { view, scale, layout };
+  frameGeometry = { view, scale, layout, fit };
   placeBubble();
   consumeReaction(now);
 }
 function placeBubble() {
   if (!frameGeometry || !bubble) return;
-  const { view, scale, layout } = frameGeometry;
-  const headTop = (layout.bounds[1] - view.y) * scale;
+  const { fit, layout } = frameGeometry;
+  const headTop = fit.y + layout.bounds[1] * fit.scale;
   bubble.style.top = Math.max(6, Math.min(innerHeight - bubble.offsetHeight - 6, headTop - bubble.offsetHeight - 8)) + 'px';
 }
 window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID, speaking, viseme: currentViseme, relative: Number(audioSignal.relative.toFixed(2)),
   pending: companion && companion.pendingReaction && { kind: companion.pendingReaction.kind, clipID: companion.pendingReaction.clipID, action: companion.pendingReaction.action },
   motionActive: avatar && avatar.motion && avatar.motion.active && avatar.motion.active.id, clips: avatar && avatar.motion ? avatar.motion.clips.size : 0, status: document.querySelector('#status').textContent, played: window.gla_played });
 window.gla_played = [];
+window.gla_play = id => performAction(id.startsWith('clip:') || ['sit', 'stand', 'wave', 'dance', 'heart'].includes(id) ? id : 'clip:' + id);
 function loop(now) {
   renderRequest = 0;
   const q = quality();
