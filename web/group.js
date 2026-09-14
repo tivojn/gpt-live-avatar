@@ -6,6 +6,7 @@ import {GroupVoice} from '/group-voice.js';
 import {AvatarHitMask} from '/avatar-hit-mask.js';
 import {groupAction} from '/group-actions.js';
 import {LiveGroup} from '/group-live.js';
+import {installGroupPanel} from '/group-panel.js';
 import {GroupMicrophone} from '/group-input.js';
 const $=s=>document.querySelector(s),api=window.gla.group,voice=new GroupVoice(api),actors=new Map();
 let catalogue,loadGeneration=0,runGeneration=0,running=false,loading=false,speaker='',listener='',history=[],drag=null,ignore=false,lastFrame=0;
@@ -38,8 +39,9 @@ const agentUI=installAgentUI({api:window.gla.agent,onStatus:message=>status(mess
  throw Error('Unknown avatar action.');
 }});
 
+const panel=installGroupPanel($('.panel'),{onInteraction:()=>{api.setIgnoreMouse(false);ignore=false;}});
 const selected=()=>[...document.querySelectorAll('.choice input:checked')].map(i=>i.value);
-function compact(value){$('.panel').classList.toggle('compact',value);$('#compact').textContent=value?'Show controls':'Minimize';$('#compact').setAttribute('aria-expanded',String(!value));}
+function compact(value){$('.panel').classList.toggle('compact',value);$('#compact').textContent=value?'Show controls':'Hide controls';$('#compact').setAttribute('aria-expanded',String(!value));}
 function controls(){const available=actors.size>=2&&!loading;$('#start').disabled=!available||running||!catalogue?.hasKey;$('#stop').disabled=!running;for(const id of ['topic','rounds','format','join','humanName','liveMode'])$('#'+id).disabled=running;for(const el of document.querySelectorAll('.choice input,.choice select'))el.disabled=running;$('#liveControls').hidden=!running||!liveMode();$('#raise').hidden=liveMode()||!running||!human.enabled;$('#raise').disabled=waitingHuman||wantsTurn||currentTurn>=totalTurns-1;$('#raise').textContent=wantsTurn?'You’re next':'I’d like a turn';$('#humanTurn').hidden=!waitingHuman;$('#send').disabled=!waitingHuman||microphone.state!=='idle'||!$('#humanText').value.trim();}
 function position(actor){
  const scale=Math.min(1,innerWidth/actor.w,(innerHeight-90)/actor.h);actor.w*=scale;actor.h*=scale;
@@ -110,7 +112,7 @@ async function start(){
 async function startLive(){
  if(running||loading||actors.size<2)return;const topic=$('#topic').value.trim();if(!topic){status('Add a topic first.',true);return;}
  stop('Starting live talk…');running=true;compact(true);human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};history=[];$('#transcript').replaceChildren();controls();
- await liveGroup.start({cast:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,voice:document.querySelector(`[data-voice="${a.slug}"]`).value})),topic,mode:$('#format').value,human});
+ await liveGroup.start({agentEnabled:catalogue.agentEnabled,cast:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,voice:document.querySelector(`[data-voice="${a.slug}"]`).value})),topic,mode:$('#format').value,human});
 }
 function animate(now){requestAnimationFrame(animate);if(document.visibilityState!=='visible')return;const due=frameDue(now,lastFrame,30);if(due===null)return;const dt=Math.min(.12,(now-lastFrame)/1000);lastFrame=due;const signal=liveGroup.running?liveGroup.sample():voice.sample();
  for(const actor of actors.values()){
@@ -122,7 +124,7 @@ function animate(now){requestAnimationFrame(animate);if(document.visibilityState
   actor.yaw+= (targetYaw-actor.yaw)*(1-Math.exp(-actorDt*2.8));if(Math.abs(actor.yaw-(actor.renderYaw??999))>.001||pitch!==actor.renderPitch){a.setOrbit({yaw:actor.yaw,pitch});actor.renderYaw=actor.yaw;actor.renderPitch=pitch;}
   let lookTarget;if(!audience){lookTarget=a.camera.position.clone();lookTarget.x+=direction*1.5;}
   const cursor=a.options.enabled('followCursor'),gaze=cursor&&hoverPoint?{x:Math.max(-1,Math.min(1,(hoverPoint.x-actor.x-actor.w/2)/(actor.w/2))),y:Math.max(-1,Math.min(1,-(hoverPoint.y-actor.y-actor.h/2)/(actor.h/2)))}:{x:0,y:0};
-  a.render(now,{reduce:false,breathe:1,fitContent:true,viseme:talking?(signal.relative>.7?'aa':signal.relative>.4?'oh':'ih'):'sil',speaking:talking,audioSignal:signal,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:{}});
+  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?(signal.relative>.7?'aa':signal.relative>.4?'oh':'ih'):'sil',speaking:talking,audioSignal:signal,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:{}});
   refreshBubble(actor);
   if(now-actor.maskAt>80){actor.hitMask.update(a.canvas);actor.maskAt=now;}
  }
@@ -135,7 +137,7 @@ function actorAt(event){
 }
 function syncMouse(){
  if(agentUI.dialog.open){if(ignore){ignore=false;api.setIgnoreMouse(false);}return;}
- if(!hoverPoint||drag||gestureSize||wheelActor||menuOpen)return;
+ if(!hoverPoint||panel.dragging||drag||gestureSize||wheelActor||menuOpen)return;
  const top=document.elementFromPoint(hoverPoint.x,hoverPoint.y),interactive=Boolean(top?.closest('.panel'))||Boolean(actorAt({clientX:hoverPoint.x,clientY:hoverPoint.y,target:top}));
  if(ignore===interactive){ignore=!interactive;api.setIgnoreMouse(ignore);}
 }
@@ -219,6 +221,6 @@ $('#raise').onclick=()=>{if(liveMode()||!running||!human.enabled||waitingHuman||
 $('#humanText').oninput=controls;$('#humanText').onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();finishHuman();}};$('#send').onclick=()=>finishHuman();$('#pass').onclick=()=>finishHuman(true);$('#mic').onclick=()=>microphone.state==='recording'?microphone.finish():void microphone.start();
 let hiddenTimer;addEventListener('visibilitychange',()=>{clearTimeout(hiddenTimer);if(document.visibilityState!=='visible'){microphone.cancel();liveGroup.setMuted(true);hiddenTimer=setTimeout(()=>stop('Conversation ended because the group was hidden.'),15000);}});
 api.onReset(arrange);api.onStop(()=>stop('Conversation ended because the group was hidden.'));addEventListener('resize',arrange);addEventListener('beforeunload',()=>{stop();for(const a of actors.values())a.avatar.dispose();actors.clear();});addEventListener('keydown',event=>{if(event.key==='Escape')stop();});
-(async()=>{try{catalogue=await api.catalogue();if(!catalogue.ok)throw Error(catalogue.error);const preferred=[catalogue.selected,...catalogue.avatars.map(x=>x.slug)].filter((x,i,arr)=>arr.indexOf(x)===i).slice(0,2);catalogue.avatars.forEach((info,i)=>{const row=document.createElement('label');row.className='choice';const check=document.createElement('input');check.type='checkbox';check.value=info.slug;check.checked=preferred.includes(info.slug);check.onchange=()=>{if(selected().length>5){check.checked=false;return;}void loadCast();};const voices=document.createElement('select');voices.dataset.voice=info.slug;voices.setAttribute('aria-label',info.name+' voice');for(const v of catalogue.voices){const option=document.createElement('option');option.value=v;option.textContent=v;voices.append(option);}voices.value=['marin','ripple','vesper','willow','bossa'][i%5];row.append(check,document.createTextNode(info.name),voices);$('#cast').append(row);});await loadCast();requestAnimationFrame(animate);}catch(e){status(e.message,true);}})();
+(async()=>{try{catalogue=await api.catalogue();if(!catalogue.ok)throw Error(catalogue.error);const preferred=[catalogue.selected,...catalogue.avatars.map(x=>x.slug)].filter((x,i,arr)=>arr.indexOf(x)===i).slice(0,2);catalogue.avatars.forEach((info,i)=>{const row=document.createElement('label');row.className='choice';const check=document.createElement('input');check.type='checkbox';check.value=info.slug;check.checked=preferred.includes(info.slug);check.onchange=()=>{if(selected().length>5){check.checked=false;return;}void loadCast();};const voices=document.createElement('select');voices.dataset.voice=info.slug;voices.setAttribute('aria-label',info.name+' voice');for(const v of catalogue.voices){const option=document.createElement('option');option.value=v;option.textContent=v;voices.append(option);}voices.value=catalogue.groupVoices?.[info.slug]||({tia:'marin',sarah:'gleam',iselda:'quartz','ming-mei':'willow',seraphim:'bossa'}[info.slug])||'marin';voices.onchange=()=>{void gla.setSettings({groupVoices:{...catalogue.groupVoices,[info.slug]:voices.value}}).then(next=>{catalogue.groupVoices=next.groupVoices;});};row.append(check,document.createTextNode(info.name),voices);$('#cast').append(row);});await loadCast();requestAnimationFrame(animate);}catch(e){status(e.message,true);}})();
 // Read-only diagnostics are useful for installation verification.
 window.gla_group={actors,voice,microphone,liveGroup,actorAt,actorCatalogue,actorMenuAction,actOnSpeech,start,stop,arrange,loadCast,get state(){return {running,loading,speaker,listener,history:[...history],generation:runGeneration,waitingHuman,wantsTurn,human:{...human},currentTurn,totalTurns};}};

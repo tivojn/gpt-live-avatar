@@ -920,13 +920,21 @@ class Avatar3D {
     }
     if (this.cameraApproach) this.camera.copy(this.cameraApproach.camera);
     if(!view&&state.fitContent&&this.options){
-      const points=this.options.visiblePoints();
+      const points=this.options.visiblePoints({ignoreFaceMorphs:Boolean(state.stableFitContent)});
       if(points.length&&points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))){
         const pad=Math.max(12,this.height*.04),xs=points.map(p=>p.x),ys=points.map(p=>p.y);
         const left=Math.min(0,Math.min(...xs)-pad),right=Math.max(this.width,Math.max(...xs)+pad);
         const top=Math.min(0,Math.min(...ys)-pad),bottom=Math.max(this.height,Math.max(...ys)+pad);
         const scale=Math.max((right-left)/this.width,(bottom-top)/this.height);
         view={x:(left+right-this.width*scale)/2,y:(top+bottom-this.height*scale)/2,w:this.width*scale,h:this.height*scale,pixelWidth:this.width,pixelHeight:this.height};
+        if(state.stableFitContent){
+          // Facial morph radii used to zoom the entire actor on each syllable.
+          // Keep a stable envelope, growing only for genuinely wider poses or props.
+          const key=JSON.stringify([this.width,this.height,this.options.selection]);
+          const old=this.stableContentView?.key===key?this.stableContentView.view:null;
+          if(old){const l=Math.min(old.x,view.x),t=Math.min(old.y,view.y),r=Math.max(old.x+old.w,view.x+view.w),b=Math.max(old.y+old.h,view.y+view.h),s=Math.max((r-l)/this.width,(b-t)/this.height);view={...view,x:(l+r-this.width*s)/2,y:(t+b-this.height*s)/2,w:this.width*s,h:this.height*s};}
+          this.stableContentView={key,view};
+        }
       }
     }
     this.applyView(view);
@@ -981,7 +989,7 @@ class Avatar3D {
     const attentionY = clamp(Number(gaze.y) || 0, -1, 1);
     const { x: gx, y: gy } = this.pose(now, elapsed, {
       gx: attentionX, gy: attentionY, reduce, speaking: Boolean(state.speaking),
-      breathe: Number(state.breathe) || 1, head: state.head || {}, target: state.lookTarget,cameraFocus:state.cameraFocus, eyeOffset:state.eyeOffset||attention.eyeOffset, propActive,
+      breathe: Number(state.breathe) || 1, head: state.head || {}, target: state.lookTarget,cameraFocus:state.cameraFocus, eyeOffset:state.eyeOffset||attention.eyeOffset, propActive, bodyMotion:state.bodyMotion,
     });
     // +x is the viewer's right, which is the character's own left.
     if (!(state.lookTarget && this.bones.eye.l && this.bones.eye.r)) {
@@ -1071,9 +1079,9 @@ class Avatar3D {
     bone.quaternion.copy(base).premultiply(localDelta);
   }
 
-  pose(now, elapsed, { gx, gy, reduce, speaking, breathe, head, target, cameraFocus=false, eyeOffset={x:0,y:0}, propActive=false }) {
+  pose(now, elapsed, { gx, gy, reduce, speaking, breathe, head, target, cameraFocus=false, eyeOffset={x:0,y:0}, propActive=false, bodyMotion=true }) {
     const t = now / 1000;
-    const idle = reduce || propActive ? 0 : 1;
+    const idle = reduce || propActive || !bodyMotion ? 0 : 1;
     // The eyes acquire the cursor first; the head catches up over ~180 ms.
     // As it turns, the eyes settle back toward the middle of their sockets.
     let wantedYaw = gx * .46, wantedPitch = gy * .28;

@@ -21,6 +21,11 @@ const repo=path.resolve(__dirname,'../..'),dir=path.join(repo,'build/protected')
  const response=await fetch(baseURL+'index.json',{headers:{Authorization:'Bearer '+privateBuild.downloadToken},redirect:'error',signal:AbortSignal.timeout(15000)}),envelope=await response.json();
  if(!response.ok||!crypto.verify(null,Buffer.from(envelope.payload),privateBuild.publicKey,Buffer.from(envelope.signature,'base64')))throw Error('The live signed catalogue did not verify.');
  if((await fetch(baseURL+'index.json',{redirect:'error'})).status!==401)throw Error('The gateway must reject unauthenticated downloads.');
+ const inventory=JSON.parse(fs.readFileSync(path.join(dir,'inventory.json'))),part=inventory.objects.find(p=>p.file!=='index.json');
+ const download=await fetch(baseURL+part.file,{headers:{Authorization:'Bearer '+privateBuild.downloadToken},redirect:'error',signal:AbortSignal.timeout(120000)});
+ if(!download.ok)throw Error('The deployed gateway could not read an encrypted download part.');
+ const digest=crypto.createHash('sha256');let bytes=0;for await(const chunk of download.body){digest.update(chunk);bytes+=chunk.length;}
+ if(bytes!==part.bytes||digest.digest('hex')!==part.sha256)throw Error('The live encrypted download did not verify.');
  const target=path.join(repo,'electron/asset-download.json'),appConfig=JSON.parse(fs.readFileSync(target));appConfig.baseURL=baseURL;fs.writeFileSync(target,JSON.stringify(appConfig,null,2)+'\n');
  fs.writeFileSync(path.join(dir,'deployment.json'),JSON.stringify({account:config.account_id,storageAccount,baseURL,verifiedAt:new Date().toISOString(),billingPlan:'Workers Free',files:verified.files,bytes:verified.bytes},null,2));
  console.log('Verified the live gateway and configured the app: '+baseURL);

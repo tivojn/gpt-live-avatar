@@ -77,7 +77,7 @@ function loadConfig() {
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
   if (!['auto', 'always', 'off'].includes(config.bubbleMode)) config.bubbleMode = 'auto';
   if (!QUALITIES.includes(config.quality)) config.quality = DEFAULTS.quality;
-  if (typeof config.avatar !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(config.avatar)) config.avatar = DEFAULTS.avatar;
+  if (['sgt-sara','sgt-sarah'].includes(config.avatar)||typeof config.avatar !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(config.avatar)) config.avatar = DEFAULTS.avatar;
 }
 // Where the selected avatar's files live: a custom package folder, or the
 // bundled package overlaid with whatever tiers were downloaded.
@@ -151,7 +151,7 @@ function avatarInfo(selection = config) {
     if (manifest.renderer !== '3d') { result.problem = 'This folder is not a 3D avatar package.'; return result; }
     result.name = String(manifest.name || 'Avatar');
     result.manifest = manifest;
-    const packageID = crypto.createHash('sha256').update(JSON.stringify(roots)).digest('hex').slice(0, 16);
+    const packageID = crypto.createHash('sha256').update(JSON.stringify({roots,revision:manifest.assetRevision,tiers:selection.avatarDir?[]:['base','balanced','best'].map(t=>assets.hasTier(selection.avatar,t))})).digest('hex').slice(0, 16);
     packageRoots.set(packageID, roots);
     const baseURL = `/avatar-package/${packageID}/`;
     // Prefer the split "resident" model: it streams textures at the size the
@@ -334,6 +334,7 @@ ipcMain.handle('gla:settings:set', (_event, patch) => {
   if(['chrome','safari','edge','brave'].includes(patch.agentBrowser))config.agentBrowser=patch.agentBrowser;
   Object.assign(config,normalizeDelegate(config,patch));
   if(before!==JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentBrowser])) { delegateBackend?.cancelAll(); for(const p of ['openai','xai']) if(delegateAuth?.pending.has(p))delegateAuth.cancel(p); }
+  if(patch.groupVoices&&typeof patch.groupVoices==='object')config.groupVoices=Object.fromEntries(Object.entries(patch.groupVoices).filter(([slug,v])=>/^[a-z0-9_-]{1,40}$/.test(slug)&&VOICES.includes(v)));
   const allowed = ['backendModel', 'voice', 'quality', 'avatar', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble', 'bubbleMode'];
   for (const key of allowed) if (key in patch) config[key] = patch[key];
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;

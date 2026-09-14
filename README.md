@@ -28,6 +28,19 @@ Existing local packages still work. The iOS source requires a protected-loader
 port before a new public iOS release; its old GitHub download URLs are not a
 supported distribution path.
 
+## Together live conversations
+
+Right-click an avatar and choose **Bring Characters Together**. Each character
+keeps independent drag, pinch, rotation and right-click controls. Transparent
+spaces let clicks reach the app underneath. Drag the Together title bar, resize
+its bottom-right corner, or minimize it to a title bar while talk continues.
+
+The five characters start with feminine voices; voice choices are saved per
+character. Speech is indicated by the overhead wave and highlighted name,
+without a body shake or speech-driven camera zoom. With actions enabled in
+Settings, a human's spoken or typed file/page request uses the same real tools
+as solo mode. Address a character by name; it reports the verified outcome.
+
 ## Avatars and texture tiers
 
 The updated local Mac portrait build includes Tia's original 2K/4K maps,
@@ -51,7 +64,7 @@ Pipeline (`tools/`):
 - `inject-library.py in.glb out.glb [clip.json]`: embeds the `openclamAvatar`
   options library (rig bones the motion clips drive), fixes cornea materials
   and rebinds unweighted vertices; needed for models not built by OpenClam.
-- Sarah and SGT Sara come from the Auto-Rig Pro Sara blend
+- Sarah comes from the Auto-Rig Pro Sara blend
   (`~/Downloads/Sara-003_ARP3`), exported headless with Blender
   (materials flattened to Principled BSDF, hair bound to the head bone), then
   `inject-library.py`, OpenClam's `avatar_resources.py` for the resident

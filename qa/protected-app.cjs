@@ -1,10 +1,10 @@
 'use strict';
 const {app,BrowserWindow}=require('electron');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const live=process.argv.includes('--live'),offline=process.argv.includes('--offline');
-const repo=path.resolve(__dirname,'..'),output=path.join(repo,live?'build/qa-protected-live':'build/qa-protected-app'),profile=path.join(output,'profile'),protectedDir=path.join(repo,'build/protected');
+const live=process.argv.includes('--live'),offline=process.argv.includes('--offline'),tiaOnly=process.argv.includes('--tia-only');
+const repo=path.resolve(__dirname,'..'),output=path.join(repo,live?(tiaOnly?'build/qa-protected-tia-live':'build/qa-protected-live'):'build/qa-protected-app'),profile=path.join(output,'profile'),protectedDir=path.join(repo,'build/protected');
 const starterOnly=process.argv.includes('--starter-only');
-if(live&&!offline)fs.rmSync(profile,{recursive:true,force:true});
+if(live&&!offline&&!process.argv.includes('--resume'))fs.rmSync(profile,{recursive:true,force:true});
 fs.mkdirSync(profile,{recursive:true});app.setPath('userData',profile);
 const inventory=JSON.parse(fs.readFileSync(path.join(protectedDir,'inventory.json')));
 for(const [slug,entry] of live?[]:Object.entries(inventory.index.avatars)){
@@ -22,10 +22,10 @@ async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end)
 app.whenReady().then(async()=>{try{
  const w=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'avatar window');
  const js=s=>w.webContents.executeJavaScript('(async()=>{'+s+'})()'),report=[];
- for(const slug of starterOnly?['tia']:Object.keys(inventory.index.avatars)){
+ for(const slug of starterOnly||tiaOnly?['tia']:Object.keys(inventory.index.avatars)){
   if(live&&!offline){
    for(const tier of starterOnly?[]:['base','balanced','best']){
-    if(slug==='tia'&&tier==='base')continue;
+    if(slug==='tia'&&tier==='base'||process.argv.includes('--resume')&&fs.existsSync(path.join(profile,'avatars',slug,tier+'.gla')))continue;
     const result=await js(`return await gla.assets.download(${JSON.stringify(slug)},${JSON.stringify(tier)});`);assert(result.ok,result.error);console.log(slug+' '+tier+' downloaded from the live gateway.');
    }
   }
@@ -40,4 +40,4 @@ app.whenReady().then(async()=>{try{
  }
  if(live)assert(fs.existsSync(path.join(profile,'avatars/content-keys.bin')),'Live authorization persists protected keys');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,offline?'offline-report.json':'report.json'),JSON.stringify({passed:true,live,offline,report,errors},null,2));
- }catch(e){console.error(e);console.error(errors);process.exitCode=1;}app.exit(process.exitCode||0);});
+ }catch(e){console.error(e);console.error(errors.slice(0,8));for(const w of BrowserWindow.getAllWindows()){console.log(await w.webContents.executeJavaScript(`JSON.stringify({url:location.href,text:document.body.innerText,settings:window.gla&&await gla.getSettings(),avatar:window.gla_avatar&&{model:!!gla_avatar.model,resources:gla_avatar.resources&&{ready:gla_avatar.resources.ready},motion:gla_avatar.motion?.clips.size,appearance:gla_avatar.appearance?.indexURL}})`).catch(e=>e.message));}process.exitCode=1;}app.exit(process.exitCode||0);});

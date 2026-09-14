@@ -28,6 +28,6 @@ export function createWorker(catalogue,objects){
   if(request.method==='HEAD')return new Response(null,{headers});
   if(request.headers.has('Range'))return fail(416,'Retry this download part in full.');
   const storage=env.AVATAR_ASSETS||createR2Reader(env);if(!storage)return fail(503,'Downloads are not activated.');
-  try{const object=await storage.get(name);if(!object||object.size!==entry.bytes){await object?.body?.cancel();return fail(503,'This download is temporarily unavailable.');}return new Response(object.body,{headers});}catch{return fail(503,'Please try this download again later.');}
+  try{const object=await storage.get(name);if(!object||object.size!==entry.bytes){await object?.body?.cancel();return fail(503,'This download is temporarily unavailable.');}return new Response(object.body,{headers});}catch(error){console.error('Protected storage read failed:', error.message);return fail(503,'Please try this download again later.');}
  }};
 }

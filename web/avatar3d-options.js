@@ -505,13 +505,13 @@ export class Avatar3DOptions {
     return this.meshPoints(meshes);
   }
 
-  visiblePoints() {
+  visiblePoints({ignoreFaceMorphs=false}={}) {
     const meshes=new Set();
     this.avatar.model.traverseVisible(n=>{if(n.isMesh&&n.layers.test(this.avatar.camera.layers))meshes.add(n);});
-    return this.meshPoints(meshes);
+    return this.meshPoints(meshes,{ignoreFaceMorphs});
   }
 
-  meshPoints(meshes) {
+  meshPoints(meshes,{ignoreFaceMorphs=false}={}) {
     if(this.avatar.resources&&!this.avatar.resources.ready)return [];
     this.geometryBoundsCache ||= new WeakMap();
     const box=new THREE.Box3(),point=new THREE.Vector3(),local=new THREE.Vector3();
@@ -550,7 +550,7 @@ export class Avatar3DOptions {
         });
         cached={geometry,position,version:position.version,groups:[...groups.values()],morphRadii};this.geometryBoundsCache.set(mesh,cached);
       }
-      const radius=cached.morphRadii.reduce((sum,r,i)=>sum+r*Math.abs(mesh.morphTargetInfluences?.[i]||0),0);
+      const radius=ignoreFaceMorphs?0:cached.morphRadii.reduce((sum,r,i)=>sum+r*Math.abs(mesh.morphTargetInfluences?.[i]||0),0);
       for(const group of cached.groups){
         const transform=mesh.matrixWorld.clone();
         if(group.bone>=0)transform.multiply(mesh.bindMatrixInverse).multiply(mesh.skeleton.bones[group.bone].matrixWorld);

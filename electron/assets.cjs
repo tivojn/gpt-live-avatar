@@ -147,7 +147,7 @@ class AvatarAssets {
   avatars() {
     const index = this.loadIndexSync(); const slugs = new Set(Object.keys(index.avatars || {}));
     for (const root of [this.developmentRoot, this.bundledRoot, this.downloadsRoot].filter(Boolean)) { try { for (const d of fs.readdirSync(root)) if (this.exists(path.join(root,d),'manifest.json')) slugs.add(d); } catch {} }
-    return [...slugs].map(slug => ({ slug, name: ((index.avatars || {})[slug] || {}).name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug) }));
+    return [...slugs].filter(slug=>!['sgt-sara','sgt-sarah'].includes(slug)).map(slug => ({ slug, name: ((index.avatars || {})[slug] || {}).name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug) }));
   }
 
   // ---- model.gltf with only the texture variants that exist locally

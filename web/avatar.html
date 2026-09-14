@@ -907,7 +907,7 @@ const applySettings = next => {
   syncBubble();
   $('#name').textContent = settings.personaName || 'Tia';
   if (avatar && previous.quality !== settings.quality) applyQuality();
-  const changedAvatar = previous.avatarDir !== settings.avatarDir || previous.avatar?.dir !== settings.avatar?.dir || previous.avatar?.slug !== settings.avatar?.slug;
+  const changedAvatar = previous.avatarDir !== settings.avatarDir || previous.avatar?.dir !== settings.avatar?.dir || previous.avatar?.slug !== settings.avatar?.slug || previous.avatar?.modelURL !== settings.avatar?.modelURL;
   if (changedAvatar) {
     // Stage exit changes the native window's aspect ratio. Hide the old
     // bitmap until the replacement's first complete frame is drawn.

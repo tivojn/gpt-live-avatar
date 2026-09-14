@@ -1,5 +1,6 @@
 import {LiveClient} from '/live-client.js';
 import {commentaryChunks} from '/delegate-client.js';
+import {needsAgent} from '/group-agent-request.js';
 
 // Hysteresis rejects clicks and brief noise; release tolerates ordinary pauses.
 export class SpeechGate {
@@ -18,9 +19,9 @@ const rmsOf=(analyser,samples)=>{if(!analyser)return 0;analyser.getFloatTimeDoma
 export class LiveGroup {
  constructor(api,callbacks={}){this.api=api;this.callbacks=callbacks;this.generation=0;this.peers=new Map();this.history=[];this.active='';this.running=false;this.muted=false;}
  emit(type,detail){this.callbacks[type]?.(detail);}
- async start({cast,topic,mode,human,inputStream=null,monitor=true}){
+ async start({cast,topic,mode,human,inputStream=null,monitor=true,agentEnabled=false}){
   this.stop();const generation=this.generation,current=()=>generation===this.generation;
-  Object.assign(this,{cast,topic,mode,human,monitor,running:true,history:[],turn:0,active:'',userSpeaking:false,muted:false,gate:new SpeechGate()});
+  Object.assign(this,{cast,topic,mode,human,monitor,agentEnabled,running:true,history:[],turn:0,active:'',userSpeaking:false,muted:false,gate:new SpeechGate()});
   try{
    this.context=new AudioContext();await this.context.resume();if(!current())return;
    if(human.enabled){
@@ -66,9 +67,10 @@ export class LiveGroup {
  }
  fail(message){this.stop();this.emit('error',message);}
  contextText(){return this.history.slice(-6).map(x=>`${this.cast.find(c=>c.slug===x.speaker)?.name||this.human.name}: ${x.text}`).join('\n').slice(-1400);}
- open(slug,first=false){
-  if(!this.running)return;this.active=slug;const p=this.peers.get(slug),now=performance.now();
-  p.segments.clear();p.heard=false;p.lastAudio=p.lastText=now;p.openAt=now;p.delegating=false;p.acceptUser=false;this.advanceAt=0;
+ open(slug,first=false,humanInput=null){
+  if(!this.running)return;this.active=slug;this.turn=this.cast.findIndex(c=>c.slug===slug);const p=this.peers.get(slug),now=performance.now();
+  p.segments.clear();p.heard=false;p.lastAudio=p.lastText=now;p.openAt=now;p.delegating=false;p.acceptUser=false;p.agentDue=0;p.agentHandledText='';p.agentResult=null;this.advanceAt=0;
+  if(humanInput){if(!this.history.slice(-3).some(l=>l.speaker==='_human'&&l.text.trim()===humanInput.text.trim())){const line={speaker:'_human',text:humanInput.text.trim()};this.history.push(line);this.emit('line',line);}p.acceptUser=true;p.lastHumanText=humanInput.text;p.lastHumanId=humanInput.id;p.humanSegments=new Map([[humanInput.id,humanInput.text]]);p.humanChangedAt=now;p.agentDue=now+700;}
   for(const peer of this.peers.values()){
    const active=peer===p;peer.micGain.gain.value=active&&!this.muted?1:0;peer.audio.muted=!active||!this.monitor||this.userSpeaking;
    if(!active)peer.client.appendInstructions('Floor CLOSED. Listen silently. Wait for an explicit floor-open instruction before speaking.');
@@ -95,29 +97,36 @@ export class LiveGroup {
    p.lastHumanText=[...p.humanSegments.values()].join(' ').slice(0,6000);p.lastHumanId=detail.id;
    this.emit('text',{speaker:'_human',text:detail.text});
    if(detail.final&&detail.text.trim()){
+    p.agentDue=performance.now()+700;
     this.history=this.history.slice(-95);this.history.push({speaker:'_human',text:detail.text.trim()});this.emit('line',this.history.at(-1));
     if(!p.delegating&&!p.heard&&!this.userSpeaking){p.client.appendCommentary('Respond now to the human contribution you just heard, briefly and naturally.');p.openAt=performance.now();}
    }
   }
  }
- async delegate(p,id){
+ async delegate(p,id,application=false){
   if(!this.running||this.active!==p.slug||p.client.reasoningMode!=='delegate')return;
+  if(p.delegating)return;
+  if(p.acceptUser&&p.agentHandledText===p.lastHumanText&&p.agentResult){if(!application)for(const chunk of commentaryChunks(p.agentResult))p.client.appendCommentary(chunk,id);return;}
+  p.agentDue=0;
   p.delegatedIds ||= new Set();if(p.delegatedIds.has(id))return;p.delegatedIds.add(id);if(p.delegatedIds.size>128)p.delegatedIds.delete(p.delegatedIds.values().next().value);
   const generation=this.generation,floor=p.openAt;p.delegating=true;
-  if(p.acceptUser){const until=performance.now()+1800;while((!p.lastHumanText||performance.now()-(p.humanChangedAt||0)<350)&&performance.now()<until&&this.running&&this.generation===generation)await new Promise(r=>setTimeout(r,100));}
+  {const until=performance.now()+1800;while((!p.acceptUser||!p.lastHumanText||this.userSpeaking||performance.now()-(p.humanChangedAt||0)<350)&&performance.now()<until&&this.running&&this.generation===generation)await new Promise(r=>setTimeout(r,100));}
   if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;
-  const history=[...this.history,...p.client.conversation().filter(x=>x.role==='user').slice(-1).map(x=>({speaker:'_human',text:x.text}))];
+  const target=p.acceptUser&&this.cast.find(c=>p.lastHumanText?.trimStart().toLowerCase().startsWith(c.name?.toLowerCase()))?.slug;
+  if(target&&target!==p.slug){p.delegating=false;this.open(target,false,{text:p.lastHumanText,id:p.lastHumanId});return;}
+  // Peer input includes relayed avatars. Only the shared, origin-tagged transcript identifies the real human.
+  const history=[...this.history];
   let result;try{result=await this.api.reply({id,speaker:p.slug,participants:this.cast.map(c=>c.slug),topic:this.topic,mode:this.mode,human:this.human,history,humanRequest:p.acceptUser?p.lastHumanText:'',turnId:p.lastHumanId});}catch(e){result={ok:false,error:e.message};}
-  if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;p.delegating=false;
-  const text=result.ok?result.text:'The reasoning connection failed. Say briefly that you could not complete that request.';
-  for(const chunk of commentaryChunks(text))p.client.appendCommentary(chunk,id);
+  if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;p.delegating=false;p.agentHandledText=p.lastHumanText;p.agentDue=0;this.finishLine(p);p.heard=false;p.openAt=p.lastText=p.lastAudio=performance.now();this.advanceAt=0;
+  const text=result.ok?result.text:'The tool request could not be completed. Report this actual error briefly: '+String(result.error||'No result was returned.').slice(0,500);p.agentResult=text;
+  for(const chunk of commentaryChunks(text))p.client.appendCommentary(chunk,application?null:id);
  }
  interrupt(now){
   void this.api.cancel();
   this.userSpeaking=true;this.advanceAt=0;this.userUntil=now+1600;
   const p=this.peers.get(this.active);if(p){
    const continuing=p.acceptUser&&!p.heard&&!p.segments.size&&now-(p.humanChangedAt||0)<4000;
-   if(!continuing){p.humanSegments=new Map();p.lastHumanText='';p.lastHumanId='';}
+   if(!continuing){p.humanSegments=new Map();p.lastHumanText='';p.lastHumanId='';p.agentHandledText='';p.agentDue=0;}
    p.acceptUser=true;p.delegating=false;this.finishLine(p,true);p.segments.clear();p.heard=false;p.lastText=now;p.openAt=now;p.client.appendInstructions('The human is interrupting. Pause your current speech immediately, listen, then answer their actual contribution when they finish. Your speaking floor remains open.');}
   for(const peer of this.peers.values())peer.audio.muted=true;this.routeAudio();
   this.emit('floor',{speaker:'_human',listener:this.active});this.emit('status','Listening · go ahead');this.emit('interruption',{at:now});
@@ -136,6 +145,11 @@ export class LiveGroup {
    if(p.slug===this.active&&rms>.008&&!this.userSpeaking){p.heard=true;p.lastAudio=now;}
   }
   const p=this.peers.get(this.active);if(!p||this.userSpeaking||now<(this.userUntil||0))return;
+  if(p.acceptUser&&p.agentDue&&now>=p.agentDue&&!p.delegating){const target=this.cast.find(c=>p.lastHumanText?.trimStart().toLowerCase().startsWith(c.name.toLowerCase()))?.slug;if(target&&target!==p.slug){p.agentDue=0;this.open(target,false,{text:p.lastHumanText,id:p.lastHumanId});return;}}
+  if(this.agentEnabled&&p.acceptUser&&p.agentDue&&now>=p.agentDue&&!p.delegating&&p.agentHandledText!==p.lastHumanText&&needsAgent(p.lastHumanText)){
+   p.client.appendInstructions('The application is executing the real human request using its local agent tools. Wait for its verified result before claiming success or lack of access.');
+   void this.delegate(p,'human-'+p.lastHumanId.replace(/[^a-z0-9_-]/gi,'').slice(-80),true);return;
+  }
   if(p.heard&&p.segments.size&&now-p.lastAudio>1100&&now-p.lastText>1000&&!p.delegating){
    this.finishLine(p);p.heard=false;this.advanceAt=now+180;
    // Stop unsolicited continuations while the next voice is taking the floor.
@@ -155,7 +169,7 @@ export class LiveGroup {
  say(text){
   text=String(text||'').trim().slice(0,1200);if(!text||!this.running)return;
   this.history=this.history.slice(-95);this.history.push({speaker:'_human',text});this.emit('line',this.history.at(-1));
-  this.open(this.active);const peer=this.peers.get(this.active);if(peer){peer.acceptUser=true;peer.lastHumanText=text;peer.lastHumanId='typed-'+Date.now();peer.humanSegments=new Map([[peer.lastHumanId,text]]);peer.humanChangedAt=performance.now();} // Explicit typed interruption, using the same live voice.
+  void this.api.cancel();const target=this.cast.find(c=>text.trimStart().toLowerCase().startsWith(c.name.toLowerCase()))?.slug||this.active;this.open(target,false,{text,id:'typed-'+Date.now()}); // Store authorization before opening the floor.
  }
  stop(){
   this.generation++;this.running=false;clearInterval(this.timer);this.timer=null;

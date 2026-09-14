@@ -1,5 +1,5 @@
 {
-  "baseURL": null,
+  "baseURL": "https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/",
   "storageCapBytes": 10000000000,
   "format": "gla-pack-v1"
 }

@@ -1,6 +1,7 @@
 const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('node:path');
 (async()=>{
  const source=fs.readFileSync(path.join(__dirname,'../web/group-live.js'),'utf8').replace(/^import .*;$/gm,'');
+ globalThis.needsAgent=(await import('data:text/javascript;base64,'+Buffer.from(fs.readFileSync(path.join(__dirname,'../web/group-agent-request.js'),'utf8')).toString('base64'))).needsAgent;
  const {SpeechGate,LiveGroup}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const gate=new SpeechGate();for(let n=1;n<2000;n+=35)assert.equal(gate.sample(.003,n),null);assert.equal(gate.sample(.12,2030),null);assert.equal(gate.sample(.002,2065),null);assert(!gate.active,'A click does not interrupt');
  let onset;for(let n=2100;n<2400;n+=35)if(gate.sample(.05,n)===true)onset=n;assert(onset>=2190&&onset<2250);assert(gate.active);assert.equal(gate.sample(0,2500),null);assert.equal(gate.sample(0,3000),false);
@@ -19,6 +20,11 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('n
  grouped.transcript(humanPeer,{role:'user',id:'two',text:'hello.txt in the selected folder.',final:true});assert.equal(humanPeer.openAt,floor,'Transcript final does not invalidate an active delegation');
  finishTool({ok:true,text:'Created hello.txt.'});await tool;assert.deepEqual(spoken,['Created hello.txt.']);
  humanPeer.heard=true;grouped.interrupt(performance.now());assert.equal(humanPeer.lastHumanText,'','A fresh human interruption cannot reuse earlier authorization');
+
+ assert(needsAgent('Sarah, create a file called hello.txt on the desktop.'));assert(needsAgent('你怎么看这个网页'));assert(!needsAgent('Let us tell a story about a dragon.'));
+ // A typed request must be authorized before the model can request tools.
+ const typed=new LiveGroup({cancel(){}});Object.assign(typed,{running:true,active:'tia',human:{enabled:true,name:'You'},cast:[{slug:'tia',name:'Tia'},{slug:'sarah',name:'Sarah'}]});
+ let opened;typed.open=(slug,first,input)=>{opened={slug,input};};typed.say('Sarah, create hello.txt on the desktop.');assert.equal(opened.slug,'sarah');assert.equal(opened.input.text,'Sarah, create hello.txt on the desktop.');assert(opened.input.id.startsWith('typed-'));
  // Late permission after Stop must release capture without opening a peer.
  let deliver;globalThis.AudioContext=class{resume(){return Promise.resolve();}close(){return Promise.resolve();}};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:()=>new Promise(r=>deliver=r)}}});const waiting=live.start({cast:[],topic:'hello',human:{enabled:true}});await new Promise(r=>setTimeout(r,0));live.stop();deliver({getTracks:()=>[{stop(){released++;}}]});await waiting;assert.equal(live.peers.size,0);assert.equal(released,2);assert(!live.running);
  // Stop during negotiation settles the startup promise as well as releasing

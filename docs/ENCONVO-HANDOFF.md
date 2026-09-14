@@ -3,17 +3,18 @@
 Audience: the EnConvo developer and the coding agent working in the EnConvo
 codebase. Goal: let an EnConvo agent (for example Mavis) that already talks
 through EnConvo's own GPT-Live-1 session appear as a 3D avatar (Tia, Sarah,
-SGT Sara) with lip-sync, reactions ("do a kung fu punch") and screen-wide
+Iselda, Ming-Mei and Seraphim) with lip-sync, reactions ("do a kung fu punch") and screen-wide
 movement. EnConvo keeps its own GPT-Live session, credentials and prompts;
 this repository contributes only the avatar.
 
-Repository: https://github.com/tivojn/gpt-live-avatar (source) and its
-`assets-v1` release (models, texture tiers, motion clips, catalogue).
+Repository: https://github.com/tivojn/gpt-live-avatar (source). Licensed assets
+use protected R2 delivery; see [Protected assets](PROTECTED-ASSETS.md).
+The legacy raw-model release is retired and must not be used for integration.
 
 ## 0. See it running first
 
 Install the notarized Mac build from
-https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.1.0, paste any
+https://github.com/tivojn/gpt-live-avatar/releases/latest, paste any
 OpenAI key with GPT-Live-1 access, double-click her head and say "do a kung fu
 punch", "come closer", "go to the upper right corner". Right-click her for the
 menu (motions, poses, outfits, bubble modes). That is the behaviour the
@@ -132,11 +133,11 @@ and the `/avatar/` branch of `electron/main.cjs`):
    `avatar.load` and `options.select`; the resources module chooses tiers from
    the projected height.
 
-Distribution: the release `assets-v1` holds `index.json` (catalogue with sizes
-and sha256), `tia-bundle.zip` (the friendly 1K package), `<slug>-balanced.zip`
-(2K images), `<slug>-best.zip` (4K images), `<slug>-base.zip` for non-bundled
-avatars, and `<slug>-{1k,2k,4k}.glb` single-file models for iOS. The apps
-refresh `index.json` at start so new avatars appear without an update.
+Distribution: the Mac installer includes encrypted Tia and a signed catalogue.
+Other characters and texture tiers are encrypted downloads from a private R2
+bucket through a bounded Worker service. Integrations must preserve that
+protection or use their own licensed local assets. Do not restore raw GLB/ZIP
+release URLs. The legacy iOS source requires its own protected-loader port.
 
 Making a new avatar from a GLB: the renderer refuses motions unless the model
 embeds `extras.openclamAvatar` with `rest` listing exactly the bones the

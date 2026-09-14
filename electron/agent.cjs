@@ -11,7 +11,7 @@ function setupAgent(deps){
   signal.throwIfAborted();const id=crypto.randomUUID(),finish=(error,result)=>{const p=pending.get(id);if(!p)return;pending.delete(id);clearTimeout(p.timer);signal.removeEventListener('abort',abort);error?reject(error):resolve(result);},abort=()=>{if(!sender.isDestroyed())sender.send('gla:agent:action-cancel',{id});finish(Error('Request cancelled.'));};
   const timer=setTimeout(()=>finish(Error('The avatar did not confirm the action.')),30000);pending.set(id,{sender,timer,finish});signal.addEventListener('abort',abort,{once:true});sender.send('gla:agent:action',{id,action,args});
  });}
- async function answer(sender,{id,history,turnId}={}){
+ async function answer(sender,{id,history,turnId,character}={}){
   const config=deps.getConfig();if(!config.agentEnabled)throw Error('Enable actions and page context in Settings first.');
   if(typeof id!=='string'||!/^[\w-]{1,160}$/.test(id))throw Error('Invalid agent request.');
   if(!Array.isArray(history))throw Error('A user request is required.');const latest=latestUserRequest(history);if(!latest||latest.length>6000)throw Error('Use a request of up to 6,000 characters.');
@@ -20,7 +20,7 @@ function setupAgent(deps){
   const choice=config.reasoningMode==='delegate'?config:{...config,...normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:config.backendModel||'gpt-5.6-luna'})};
   const agent=createAgentTools({config,request:latest,avatarCommand:(action,args,signal)=>command(sender,action,args,signal),progress:value=>progress(sender,{id,...value})});
   progress(sender,{id,state:'thinking',tool:''});
-  const work=deps.backend.answer(sender.id,id,choice,history,`You are ${config.personaName||'Tia'}, a desktop companion completing a real user's request. Give a concise plain-language result without markdown or code blocks, suitable to read aloud. ${agent.instructions}`,agent);
+  const work=deps.backend.answer(sender.id,id,choice,history,`You are ${typeof character==='string'?character.slice(0,60):config.personaName||'Tia'}, a desktop companion completing a real user's request. Give a concise plain-language result without markdown or code blocks, suitable to read aloud. ${agent.instructions}`,agent);
   completed.set(key,work);while(completed.size>64)completed.delete(completed.keys().next().value);
   try{const result=await work;progress(sender,{id,state:'complete',tool:'',text:result.text,receipts:result.receipts});return result;}
   catch(e){completed.delete(key);progress(sender,{id,state:'error',tool:'',error:e.message});throw e;}
