@@ -13,8 +13,10 @@ function recording(request){
 async function transcribe(request,readApiKey,signal){
  const data=recording(request),apiKey=readApiKey();if(!apiKey)throw Error('Add a voice API key in Settings to use microphone replies.');
  const OpenAI=require('openai'),client=new OpenAI({apiKey,maxRetries:0});
- const result=await client.audio.transcriptions.create({model:'gpt-4o-mini-transcribe',file:await OpenAI.toFile(data.bytes,data.filename,{type:data.type}),response_format:'json'}, {signal});
- const text=typeof result.text==='string'?result.text.trim().slice(0,1200):'';
+ const names=(request.names||[]).filter(n=>typeof n==='string'&&/^[\p{L} -]{1,40}$/u.test(n)).slice(0,5);
+ const prompt=names.length?'Conversation participants may be addressed by these names: '+names.join(', ')+'. Preserve the words spoken. Names are spelling hints, not required output.':undefined;
+ const result=await client.audio.transcriptions.create({model:'gpt-4o-mini-transcribe',file:await OpenAI.toFile(data.bytes,data.filename,{type:data.type}),response_format:'json',prompt}, {signal});
+ const text=typeof result.text==='string'?result.text.trim().slice(0,6000):'';
  if(!text)throw Error('No words were heard. Try again, or type your reply.');
  return {text};
 }

@@ -30,6 +30,22 @@ const jwt='header.'+Buffer.from(JSON.stringify({'https://api.openai.com/auth':{c
   for(const file of ['../outside.txt','/tmp/outside.txt','.env','nested/../secret'])await assert.rejects(scoped(root,file,{creating:true}));
   await fs.symlink(os.tmpdir(),path.join(root,'escape'));await assert.rejects(scoped(root,'escape/outside.txt',{creating:true}),/outside/);
   const readonly=createAgentTools({config:{agentFolder:root},request:'Read this webpage.',avatarCommand:async()=>({ok:true})});await assert.rejects(readonly.execute('create_text_file',{file:'injected.txt',text:'bad'},signal),/did not request/);await assert.rejects(readonly.execute('move_avatar',{character:'Tia',destination:'center'},signal),/did not request/);
+  // Deletion is recoverable, scoped and authorized by this request only.
+  const trash=path.join(root,'Trash');await fs.mkdir(trash);const receipts=[];
+  const removal=createAgentTools({config:{agentFolder:root},request:'Sarah, delete that file.',referenceFile:made.path,onReceipt:r=>receipts.push(r),trashFile:async f=>fs.rename(f,path.join(trash,path.basename(f)))});
+  await fs.writeFile(path.join(root,'unrelated.txt'),'keep');
+  await assert.rejects(removal.execute('trash_file',{file:'unrelated.txt'},signal),/No verified file reference/);
+  await assert.rejects(readonly.execute('trash_file',{file:'tia.txt'},signal),/did not request/);
+  for(const request of ['Delete this not-tia.txt','Delete tia.txt.backup','Delete that unrelated.txt']){
+   const mismatch=createAgentTools({config:{agentFolder:root},request,referenceFile:made.path,trashFile:async()=>{throw Error('Must not remove the old reference when another filename is explicit');}});
+   await assert.rejects(mismatch.execute('trash_file',{file:'tia.txt'},signal),/No verified file reference/);
+  }
+  await fs.symlink(made.path,path.join(root,'linked.txt'));
+  const explicit=createAgentTools({config:{agentFolder:root},request:'Delete the file linked.txt and the folder Trash',trashFile:async()=>{throw Error('Must not reach Trash for links or folders');}});
+  await assert.rejects(explicit.execute('trash_file',{file:'linked.txt'},signal),/regular file/);await assert.rejects(explicit.execute('trash_file',{file:'Trash'},signal),/regular file/);
+  const removed=await removal.execute('trash_file',{file:'tia.txt'},signal);assert(removed.trashed&&removed.recoverable);await assert.rejects(fs.stat(made.path),/ENOENT/);assert.equal(await fs.readFile(path.join(trash,'tia.txt'),'utf8'),'test');assert.equal(receipts.at(-1).path,made.path);assert(receipts.at(-1).trashed);assert.equal(await fs.readFile(path.join(root,'unrelated.txt'),'utf8'),'keep');
+  // A completed side effect must be retained even if the next instant is cancelled.
+  const race=new AbortController(),kept=[];const interrupted=createAgentTools({config:{agentFolder:root},request:'Create kept.txt',onReceipt:r=>{kept.push(r);race.abort();}});await assert.rejects(interrupted.execute('create_text_file',{file:'kept.txt',text:'kept'},race.signal));assert.equal(kept[0].path,await fs.realpath(path.join(root,'kept.txt')));assert.equal(await fs.readFile(kept[0].path,'utf8'),'kept');
   const aborted=new AbortController();aborted.abort();await assert.rejects(agent.execute('create_text_file',{file:'cancelled.txt',text:''},aborted.signal));await assert.rejects(fs.stat(path.join(root,'cancelled.txt')),/ENOENT/);
   const c=new AbortController();let steps=0;const cancelBackend=new DelegateBackend({auth:{bearer:async()=>({access:jwt})},fetchImpl:async()=>sse([{type:'response.completed',response:{output:[1,2].map(i=>({type:'function_call',name:'avatar_state',arguments:'{}',call_id:'c'+i}))}}])});
   await assert.rejects(cancelBackend.answer(2,'cancel',{},[{role:'user',text:'show motions'}],'',{tools:TOOLS,execute:async()=>{steps++;cancelBackend.cancel(2);return {ok:true};}}));assert.equal(steps,1);

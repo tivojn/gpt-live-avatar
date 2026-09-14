@@ -2,7 +2,8 @@
 // emit a delegation. Never run this against avatar dialogue or page content.
 export function needsAgent(text){
  const t=String(text||'');
- return /\b(create|make|write|save|read|open|list|edit|rename|delete)\b[\s\S]{0,220}\b(file|folder|directory|desktop|document)\b/i.test(t)
+ return /\b(create|make|write|save|read|open|list|edit|rename|delete|remove|trash)\b[\s\S]{0,220}\b(file|folder|directory|desktop|document)\b/i.test(t)
+  ||/\b(delete|remove|trash|discard)\b[\s\S]{0,100}\b(it|that|this)\b/i.test(t)
   ||/\b(create|make|write|save|read|open|edit)\b[\s\S]{0,180}\.[a-z0-9]{1,8}\b/i.test(t)
   ||/\b(this|current|open)\s+(web\s*page|page|tab|website)\b/i.test(t)
   ||/\bwhat do you think (of|about) this\b/i.test(t)

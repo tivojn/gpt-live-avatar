@@ -5,6 +5,7 @@ import * as THREE from '/vendor/three/three.module.js';
 import {GroupVoice} from '/group-voice.js';
 import {AvatarHitMask} from '/avatar-hit-mask.js';
 import {groupAction} from '/group-actions.js';
+import {needsAgent} from '/group-agent-request.js';
 import {LiveGroup} from '/group-live.js';
 import {installGroupPanel} from '/group-panel.js';
 import {GroupMicrophone} from '/group-input.js';
@@ -20,7 +21,7 @@ const liveGroup=new LiveGroup(api,{
  status:message=>status(message),error:message=>{stop();status(message,true);},
  floor:floor=>{speaker=floor.speaker;listener=floor.listener;for(const a of actors.values()){a.el.classList.toggle('speaking',a.slug===speaker);if(a.slug!==speaker)setBubble(a,'');}},
  text:line=>{const actor=actors.get(line.speaker);if(actor)setBubble(actor,line.text);},
- line:line=>{if(line.speaker==='_human')void actOnSpeech(line.text);history.push(line);appendLine(actors.get(line.speaker)||{info:{name:human.name+' (you)'}},line.text);},
+ line:line=>{if(line.speaker==='_human'&&!(catalogue?.agentEnabled&&needsAgent(line.text)))void actOnSpeech(line.text);history.push(line);appendLine(actors.get(line.speaker)||{info:{name:human.name+' (you)'}},line.text);},
  microphone:state=>{$('#liveMic').textContent=!state.active?'Microphone off':state.muted?'Unmute microphone':'Mute microphone';$('#liveMic').disabled=!state.active;$('#liveMic').setAttribute('aria-pressed',String(state.active&&!state.muted));},
 });
 function liveMode(){return $('#liveMode').checked;}
@@ -142,7 +143,7 @@ function syncMouse(){
  if(ignore===interactive){ignore=!interactive;api.setIgnoreMouse(ignore);}
 }
 async function actOnSpeech(text){
- const request=groupAction(text,[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,clips:a.avatar.motion?.clips})),liveGroup.active||speaker);
+ const request=groupAction(text,[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,clips:a.avatar.motion?.clips})),liveGroup.directed||liveGroup.active||speaker);
  if(!request)return;const actor=actors.get(request.slug),a=actor.avatar;let action=request.action;
  if(action==='stay'){a.motion?.stop();return;}
  if(action==='smile'||action==='laugh'){a.appearance?.face.react(action);return;}

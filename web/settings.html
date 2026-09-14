@@ -93,7 +93,7 @@
   <section>
     <h2>Actions and page context</h2>
     <label><input id="agentEnabled" type="checkbox"> Let avatars help with files and the current page</label>
-    <p class="note">Ask in live talk or right-click → Help with this. Avatars can create new text files, read files in the selected folder, read a browser page when asked, and move or play motions. Existing files are preserved. Requested page and file text is sent to your selected reasoning provider.</p>
+    <p class="note">Ask in live talk or right-click → Help with this. Avatars can create new text files, read files in the selected folder, read a browser page when asked, and move or play motions. Files are never overwritten; explicitly requested deletions move individual files to Trash. Requested page and file text is sent to your selected reasoning provider.</p>
     <label>File folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
     <label for="agentBrowser">Browser when the avatar is in front</label><select id="agentBrowser"><option value="chrome">Chrome</option><option value="safari">Safari</option><option value="edge">Edge</option><option value="brave">Brave</option></select>
     <p class="note">An active supported browser takes priority. Reading needs macOS Automation permission and the browser’s “Allow JavaScript from Apple Events” option. The avatar reads the page only when requested.</p>

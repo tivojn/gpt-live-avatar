@@ -137,6 +137,9 @@ export class LiveClient extends EventTarget {
     this.remember(role, seg.text.trim());
     this._emit('transcript', { role, id: seg.id, text: seg.text.trim(), final: true });
   }
+  resetInputTranscript() {
+    clearTimeout(this._segments.user?.timer);this._segments.user=null;
+  }
   remember(role, text) {
     if (text && ['user', 'assistant'].includes(role)) this.history.push({ role, text: String(text).slice(-1800) });
     this.history = this.history.slice(-48);

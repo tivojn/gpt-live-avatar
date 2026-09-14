@@ -1,6 +1,6 @@
 {
   "name": "gpt-live-avatar",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Tia, a full-duplex desk avatar on OpenAI GPT-Live-1",
   "author": "Adam Cohen",
   "license": "MIT",
