@@ -22,7 +22,7 @@ export class AvatarResources {
       if(!deferred.has(primitives))return original(primitives);
       const index=deferred.get(primitives);
       return Promise.resolve(primitives.map((p,i)=>{
-        const geometry=this.emptyGeometry();
+        const geometry=this.emptyGeometry(p);
         geometry.userData.deferredMesh=index;geometry.userData.deferredPrimitive=i;
         return geometry;
       }));
@@ -46,9 +46,13 @@ export class AvatarResources {
       return Promise.resolve(texture);
     }};
   }
-  emptyGeometry(){
+  emptyGeometry(primitive){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute([],3));
+    // GLTFLoader chooses the material's shading from this placeholder. An
+    // absent normal attribute permanently makes a deferred outfit flat shaded,
+    // even after its authored smooth geometry has arrived.
+    if(primitive?.attributes?.NORMAL!==undefined)g.setAttribute('normal',new THREE.Float32BufferAttribute([],3));
     g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute([],4));
     g.setAttribute('skinWeight',new THREE.Float32BufferAttribute([],4));
     return g;

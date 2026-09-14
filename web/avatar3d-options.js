@@ -1,4 +1,6 @@
 import * as THREE from '/vendor/three/three.module.js';
+import { AvatarPortrait } from '/avatar3d-portrait.js';
+import { AvatarFace } from '/avatar3d-face.js';
 
 // These controls use targets already present in the model. Authored asset
 // packs can add their own facial targets; they are identified separately.
@@ -6,6 +8,9 @@ export const expressionChoices = [
   {id:'neutral',label:'Neutral',weights:{}},
   {id:'smile',label:'Gentle smile',weights:{mouthSmileLeft:.55,mouthSmileRight:.55,cheekSquintLeft:.15,cheekSquintRight:.15}},
   {id:'happy',label:'Happy',weights:{mouthSmileLeft:.8,mouthSmileRight:.8,cheekSquintLeft:.3,cheekSquintRight:.3,eyeSquintLeft:.15,eyeSquintRight:.15}},
+  {id:'open-smile',label:'Open smile · original',weights:{portraitSmile:1}},
+  {id:'laugh',label:'Laugh · original',weights:{portraitLaugh:1}},
+  {id:'grin',label:'Toothy grin · original',weights:{portraitGrin:1}},
   {id:'surprised',label:'Surprised',weights:{eyeWideLeft:.55,eyeWideRight:.55,browInnerUp:.6,jawOpen:.25}},
   {id:'thoughtful',label:'Thoughtful',weights:{browInnerUp:.25,mouthPucker:.2,browDownRight:.2}},
   {id:'sad',label:'Sad',weights:{browInnerUp:.6,mouthFrownLeft:.55,mouthFrownRight:.55}},
@@ -16,8 +21,9 @@ export const expressionChoices = [
 
 export class Avatar3DAppearance {
   constructor(avatar) {
-    this.avatar=avatar;this.materials=new Map();this.generation=0;this.resources=[];
+    this.avatar=avatar;this.materials=new Map();this.generation=0;this.resources=[];this.maskUniforms=new Map();
     this.packs=[];this.items=[];this.textureSelections=new Map();this.faceMeshes=new Map();
+    this.face=new AvatarFace(avatar,this);
     this.originalEnvironment=avatar.scene.environment;this.originalVisibility=new Map();
     avatar.model.traverse(node=>{
       this.originalVisibility.set(node,node.visible);
@@ -29,14 +35,17 @@ export class Avatar3DAppearance {
       }
     });
     this.isTia=[...this.materials.keys()].some(m=>m.name==='Top_Tia01A_M');
-    this.defaultLighting=this.isTia?'studio':'classic';
+    this.hasPortraitSkin=[...this.materials.keys()].some(m=>m.userData.avatarSurface==='skin'||m.name==='Top_Tia01A_M'||/^Top_Sara01A_M(?:\.\d+)?$/.test(m.name));
+    this.defaultLighting=this.hasPortraitSkin?'studio':'classic';
+    if(this.isTia||[...this.materials.keys()].some(m=>m.userData.avatarPortrait))this.portrait=new AvatarPortrait(avatar,this);
     this.select({});
   }
 
   select(value) {
     this.updateAssets(value);
+    this.updateBodyMasks(value);
     const style=['studio','soft','classic'].includes(value.lighting)?value.lighting:this.defaultLighting;
-    if(style===this.style)return;
+    if(style===this.style){this.portrait?.quality(value.performance);return;}
     this.style=style;
     const avatar=this.avatar, enhanced=style!=='classic';
     if(avatar.studioLights)avatar.studioLights.visible=!enhanced;
@@ -59,7 +68,7 @@ export class Avatar3DAppearance {
     avatar.scene.environment=enhanced&&this.environmentTarget?this.environmentTarget.texture:this.originalEnvironment;
     avatar.scene.environmentRotation.y=enhanced&&this.environmentTarget?this.environmentRotation:0;
     for(const [material,base] of this.materials) {
-      if(material.name==='Top_Tia01A_M') {
+      if(material.userData.avatarSurface==='skin'||material.name==='Top_Tia01A_M'||/^Top_Sara01A_M(?:\.\d+)?$/.test(material.name)) {
         material.onBeforeCompile=base.onBeforeCompile;
         material.customProgramCacheKey=base.customProgramCacheKey;
         if(enhanced) {
@@ -80,17 +89,62 @@ export class Avatar3DAppearance {
           material.customProgramCacheKey=()=> 'openclam-skin-wrap-v1';
         }
       }
-      if(material.name==='Hed_clr_M') {
+      if(material.userData.avatarSurface==='cornea'||/^Hed_clr_M(?:\.\d+)?$/.test(material.name)) {
         material.roughness=enhanced?.035:base.roughness;
         material.ior=enhanced?1.376:base.ior;
         material.envMapIntensity=enhanced?1.05:base.envMapIntensity;
       }
       material.needsUpdate=true;
     }
+    this.portrait?.configure(style,value.performance);
+    // Compose clothing cutouts after portrait shading so neither shader
+    // silently replaces the other when changing lighting styles.
+    for(const [material,base] of this.materials) {
+      if(material.userData.avatarBodyMasks) {
+        // Wrap the current skin shader, or the original cloth shader. Mask
+        // coordinates are authored rest-space positions, so they follow all
+        // skeletal poses without clipping hands or other exposed skin.
+        if(!this.portrait?.materials.has(material)&&material.userData.avatarSurface!=='skin') {
+          material.onBeforeCompile=base.onBeforeCompile;material.customProgramCacheKey=base.customProgramCacheKey;
+        }
+        const previous=material.onBeforeCompile,previousKey=material.customProgramCacheKey;
+        const masks=this.maskUniforms.get(material);
+        material.onBeforeCompile=shader=>{
+          previous.call(material,shader,avatar.renderer);
+          Object.assign(shader.uniforms,masks);
+          shader.vertexShader='varying vec3 avatarRestPosition;\n'+shader.vertexShader;
+          shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\navatarRestPosition = position;');
+          shader.fragmentShader='varying vec3 avatarRestPosition;\nuniform int avatarMaskCount;\nuniform vec3 avatarMaskMin[3];\nuniform vec3 avatarMaskMax[3];\n'+shader.fragmentShader;
+          shader.fragmentShader=shader.fragmentShader.replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
+            for (int i=0; i<3; i++) {
+              if (i < avatarMaskCount && all(greaterThanEqual(avatarRestPosition,avatarMaskMin[i])) && all(lessThanEqual(avatarRestPosition,avatarMaskMax[i]))) discard;
+            }`);
+        };
+        material.customProgramCacheKey=()=>previousKey.call(material)+'-avatar-body-mask-v1';
+      }
+      material.needsUpdate=true;
+    }
+    this.portrait?.bindDiffusion();
+  }
+
+  updateBodyMasks(selection) {
+    const options=this.avatar.options;
+    const outfit=options?.outfits.find(x=>x.id===(selection.outfit||options.data.defaultOutfit));
+    for(const material of this.materials.keys()) {
+      if(!material.userData.avatarBodyMasks)continue;
+      if(!this.maskUniforms.has(material))this.maskUniforms.set(material,{
+        avatarMaskCount:{value:0},avatarMaskMin:{value:Array.from({length:3},()=>new THREE.Vector3())},avatarMaskMax:{value:Array.from({length:3},()=>new THREE.Vector3())},
+      });
+      const uniform=this.maskUniforms.get(material);
+      const boxes=(outfit?.bodyMasks?.[material.name]||[]).slice(0,3).filter(b=>[b.min,b.max].every(v=>Array.isArray(v)&&v.length===3&&v.every(Number.isFinite)));
+      uniform.avatarMaskCount.value=boxes.length;
+      boxes.forEach((b,i)=>{uniform.avatarMaskMin.value[i].fromArray(b.min);uniform.avatarMaskMax.value[i].fromArray(b.max);});
+    }
   }
 
   choices() {
     return [...expressionChoices.filter(choice=>choice.id==='neutral'||Object.keys(choice.weights).some(k=>this.avatar.channels.has(k))),
+      ...(this.avatar.authoredExpressions||[]).filter(choice=>Object.keys(choice.weights||{}).every(k=>this.avatar.channels.has(k))),
       ...this.items.filter(x=>x.kind==='expression')];
   }
 
@@ -112,7 +166,7 @@ export class Avatar3DAppearance {
     this.packs=value.packs;
     this.items=[];
     for(const pack of value.packs) {
-      if(!/^[a-z0-9][a-z0-9.-]{0,99}$/.test(pack.directory)||!Array.isArray(pack.items)||pack.items.length>256)throw Error('Invalid appearance pack.');
+      if(typeof pack.directory!=='string'||!/^[a-z0-9][a-z0-9.-]{0,99}$/.test(pack.directory)||!Array.isArray(pack.items)||pack.items.length>256)throw Error('Invalid appearance pack.');
       pack.base=new URL(pack.directory+'/',base);
       for(const item of pack.items) {
         if(!/^[a-z0-9][a-z0-9-]{0,47}$/.test(item.id))throw Error('Invalid appearance choice.');
@@ -122,6 +176,8 @@ export class Avatar3DAppearance {
     const environment=this.packs.find(p=>p.environment);
     if(environment)await this.loadEnvironment(environment);
     else {this.environmentTarget?.dispose();this.environmentTarget=null;this.environmentRotation=0;}
+    await this.portrait?.load(this.packs.find(p=>p.portrait),(pack,file)=>this.bytes(pack,file));
+    await this.face.load(this.packs.find(p=>p.facialRig),(pack,file)=>this.bytes(pack,file));
     this.style=null;
     this.assetSelectionKey=null;
     this.select(this.avatar.options?.selection||{});
@@ -129,7 +185,7 @@ export class Avatar3DAppearance {
 
   async bytes(pack,file) {
     const spec=pack.files[file];
-    if(!/^[a-z0-9][a-z0-9._-]{0,79}$/.test(file)||!spec||spec.bytes>32*1024*1024)throw Error('Invalid appearance resource.');
+    if(!/^[a-z0-9][a-z0-9._-]{0,79}$/.test(file)||!spec||spec.bytes>64*1024*1024)throw Error('Invalid appearance resource.');
     const response=await fetch(new URL(file,pack.base),{cache:'no-store'});
     if(!response.ok)throw Error('Appearance resource could not be loaded.');
     const bytes=await response.arrayBuffer();
@@ -153,7 +209,7 @@ export class Avatar3DAppearance {
   }
 
   updateAssets(selection) {
-    const relevant=Object.fromEntries(Object.entries(selection).filter(([k])=>['hair','clothes','expression'].includes(k)||k.startsWith('texture:')));
+    const relevant=Object.fromEntries(Object.entries(selection).filter(([k])=>['hair','clothes','expression','performance'].includes(k)||k.startsWith('texture:')));
     const key=JSON.stringify(relevant);
     if(key===this.assetSelectionKey)return;
     this.assetSelectionKey=key;
@@ -170,7 +226,7 @@ export class Avatar3DAppearance {
       }).catch(error=>{if(generation===this.generation)this.status=error.message;});
     }
     const chosen=this.items.filter(x=>x.kind==='texture'&&selection['texture:'+(x.slot||'color')]===x.id);
-    void this.loadTextures(chosen,generation);
+    void this.loadTextures(chosen,generation,selection.performance);
   }
 
   applyWardrobe(selection) {
@@ -185,17 +241,32 @@ export class Avatar3DAppearance {
     }
   }
 
-  async loadTextures(items,generation) {
+  async loadTextures(items,generation,profile='balanced') {
     const pending=[];
     try {
-      for(const item of items) {
+      const bindings=items.flatMap(item=>{
+        if(!item.bindings)return [item];
+        if(!Array.isArray(item.bindings)||!item.bindings.length||item.bindings.length>32||
+          !item.bindings.every(b=>typeof b.material==='string'&&typeof b.file==='string'&&item.pack.files[b.file]))throw Error('Invalid color bindings.');
+        return item.bindings.map((binding,i)=>({...item,...binding,id:item.bindings.length===1?item.id:item.id+'::'+i}));
+      });
+      for(const item of bindings) {
+        const file=profile==='quality'&&item.originalFile?item.originalFile:item.file;
+        const limit=Math.min(profile==='quality'?4096:profile==='eco'?1024:2048,this.avatar.renderer.capabilities.maxTextureSize);
+        const key=file+':'+limit;
         const prior=this.textureSelections.get(item.id);
-        if(prior){pending.push(prior);continue;}
-        const bytes=await this.bytes(item.pack,item.file);
-        const bitmap=await createImageBitmap(new Blob([bytes]),{imageOrientation:'none',premultiplyAlpha:'none',colorSpaceConversion:'none'});
-        if(bitmap.width>2048||bitmap.height>2048){bitmap.close();throw Error('Texture exceeds the 2048 pixel pack limit.');}
+        if(prior?.key===key){pending.push(prior);continue;}
+        const bytes=await this.bytes(item.pack,file);
+        let bitmap=await createImageBitmap(new Blob([bytes]),{imageOrientation:'none',premultiplyAlpha:'none',colorSpaceConversion:'none'});
+        if(bitmap.width>4096||bitmap.height>4096){bitmap.close();throw Error('Texture exceeds the 4096 pixel pack limit.');}
+        if(Math.max(bitmap.width,bitmap.height)>limit){
+          const ratio=limit/Math.max(bitmap.width,bitmap.height),source=bitmap;
+          try{bitmap=await createImageBitmap(source,{resizeWidth:Math.max(1,Math.round(source.width*ratio)),resizeHeight:Math.max(1,Math.round(source.height*ratio)),resizeQuality:'high',premultiplyAlpha:'none',colorSpaceConversion:'none'});}
+          finally{source.close();}
+        }
         const texture=new THREE.Texture(bitmap);texture.flipY=false;texture.colorSpace=THREE.SRGBColorSpace;texture.needsUpdate=true;
-        pending.push({id:item.id,item,texture,bitmap});
+        texture.anisotropy=Math.min(8,this.avatar.renderer.capabilities.getMaxAnisotropy());
+        pending.push({id:item.id,key,item,texture,bitmap});
       }
       if(generation!==this.generation||this.avatar.disposed)throw Error('cancelled');
       if(!this.baseMaps)this.baseMaps=new Map();
@@ -207,20 +278,27 @@ export class Avatar3DAppearance {
           for(const material of (Array.isArray(node.material)?node.material:[node.material])) {
             if(material?.name!==item.material)continue;
             if(!this.baseMaps.has(material))this.baseMaps.set(material,material.map);
+            const original=this.baseMaps.get(material);
+            if(original){
+              resource.texture.channel=original.channel;
+              resource.texture.offset.copy(original.offset);resource.texture.repeat.copy(original.repeat);
+              resource.texture.center.copy(original.center);resource.texture.rotation=original.rotation;
+              resource.texture.updateMatrix();
+            }
             material.map=resource.texture;material.needsUpdate=true;
           }
         });
       }
       const next=new Map(pending.map(r=>[r.id,r]));
-      for(const [id,r] of this.textureSelections)if(!next.has(id)){r.texture.dispose();r.bitmap.close();}
+      for(const [id,r] of this.textureSelections)if(next.get(id)!==r){r.texture.dispose();r.bitmap.close();}
       this.textureSelections=next;
     } catch(error) {
-      for(const r of pending)if(!this.textureSelections.has(r.id)){r.texture.dispose();r.bitmap.close();}
+      for(const r of pending)if(this.textureSelections.get(r.id)!==r){r.texture.dispose();r.bitmap.close();}
       if(error.message!=='cancelled'&&generation===this.generation)this.status=error.message;
     }
   }
 
-  decodeFace(bytes) {
+  decodeFace(bytes,remember=true) {
     const data=JSON.parse(new TextDecoder().decode(bytes));
     if(data.version!==1||!Array.isArray(data.meshes)||data.meshes.length>32)throw Error('Invalid expression data.');
     const decode=(s,Type)=>{
@@ -234,10 +312,12 @@ export class Avatar3DAppearance {
       this.avatar.model.traverse(n=>{if(n.isMesh&&n.userData.sourceName===entry.node&&(n.userData.sourcePrimitive||0)===entry.primitive)mesh=n;});
       if(!mesh||mesh.geometry.attributes.position.count!==entry.count)throw Error('Expression does not match this model.');
       const indices=decode(entry.indices,Uint32Array),deltas=decode(entry.deltas,Float32Array);
+      const normals=entry.normals?decode(entry.normals,Float32Array):null;
+      if(normals&&(normals.length!==deltas.length||normals.some(v=>!Number.isFinite(v)||Math.abs(v)>2)))throw Error('Invalid facial normals.');
       if(deltas.length!==indices.length*3||indices.length>entry.count||indices.some((v,i)=>v>=entry.count||(i>0&&v<=indices[i-1]))||deltas.some(v=>!Number.isFinite(v)||Math.abs(v)>.25))throw Error('Invalid facial deformation.');
-      result.push({mesh,indices,deltas});
+      result.push({mesh,indices,deltas,normals});
     }
-    for(const {mesh} of result)if(!this.faceMeshes.has(mesh)) {
+    for(const {mesh} of result)if(remember&&!this.faceMeshes.has(mesh)) {
       const position=mesh.geometry.attributes.position;
       this.faceMeshes.set(mesh,new Float32Array(position.array));
     }
@@ -259,19 +339,21 @@ export class Avatar3DAppearance {
 
   expression(weights,selection,speaking) {
     this.applyFace(selection,speaking,Math.max(weights.get('eyeBlinkLeft')||0,weights.get('eyeBlinkRight')||0,weights.get('blink')||0));
-    const preset=expressionChoices.find(x=>x.id===selection.expression);
+    const preset=this.choices().find(x=>x.id===selection.expression);
     if(!preset&&!this.activeFace?.length)return;
     const strength=Math.max(0,Math.min(1,Number(selection.expressionStrength??.7)));
     // Manual expressions own mood channels. Blinks and gaze retain their
     // independent channels; speech attenuates manual mouth deformation.
     for(const key of ['mouthSmileLeft','mouthSmileRight','mouthFrownLeft','mouthFrownRight','cheekSquintLeft','cheekSquintRight','browInnerUp','browOuterUpLeft','browOuterUpRight','browDownLeft','browDownRight','noseSneerLeft','noseSneerRight','smile','sorrow','angry','eyeWideLeft','eyeWideRight'])weights.delete(key);
     for(const [key,amount] of Object.entries(preset?.weights||{})) {
-      const value=amount*strength*(speaking&&/^(mouth|jaw)/.test(key)?.25:1);
+      const blink=Math.max(weights.get('eyeBlinkLeft')||0,weights.get('eyeBlinkRight')||0,weights.get('blink')||0);
+      const value=amount*strength*(speaking&&(preset.region==='mouth'||/^(mouth|jaw)/.test(key))?.25:1)*(preset.region==='eyes'?1-blink:1);
       weights.set(key,Math.max(weights.get(key)||0,value));
     }
   }
 
   dispose() {
+    this.portrait?.dispose();
     ++this.generation;
     for(const resource of this.resources)resource.dispose?.();
     this.resources=[];
@@ -335,17 +417,30 @@ export class Avatar3DOptions {
         : /standing|heart/i.test(pose.label || pose.id)));
     this.outfits = data.outfits || [];
     this.props = data.props || [];
+    // An accessory's authoring origin can be displaced from the hand it is
+    // bound to. Correct its bind-space attachment without changing the
+    // mesh, skeleton, or the inverse transform used after skinning.
+    const adjusted=new Set();
+    for(const [name,offset] of Object.entries(data.propRestOffsets||{})){
+      if(!Array.isArray(offset)||offset.length!==3||!offset.every(v=>Number.isFinite(v)&&Math.abs(v)<2))throw Error('Invalid prop attachment');
+      const translation=new THREE.Matrix4().makeTranslation(...offset);
+      for(const root of this.nodes.get(name)||[])root.traverse(node=>{
+        if(node.isSkinnedMesh&&!adjusted.has(node)){node.bindMatrix.premultiply(translation);adjusted.add(node);}
+      });
+    }
+    this.heldProps = new Map();
+    this.accessories = data.accessories || [];
     this.applyVisibility({});
   }
 
-  enabled(key) { return this.selection[key] !== 'false'; }
+  enabled(key) { return key==='followCursor' ? this.selection[key]==='true' : this.selection[key] !== 'false'; }
   defaultWalkingClip() { return this.avatar.motion?.clips.has('walking-woman')?'walking-woman':'walk'; }
   walkingClip() { return this.avatar.motion?.clips.has(this.selection.walkStyle)?this.selection.walkStyle:this.defaultWalkingClip(); }
   isTravelClip(id) { return ['walking-woman','walk','casual-walk','stage-walk','hello-run'].includes(id); }
 
   catalogue() {
     const choices = list => list.map(({id,label,group,pose})=>({id,label:String(label||id).slice(0,80),...(group?{group}:{}),...(pose?{pose}:{})}));
-    return {poses:choices([...this.poses.values()]),outfits:choices(this.outfits),props:choices(this.props),
+    return {poses:choices([...this.poses.values()]),outfits:choices(this.outfits),props:choices(this.props),accessories:choices(this.accessories),
       walkingStyles:[{id:'walking-woman',label:'Walking Woman'},{id:'walk',label:'Natural walk'},{id:'casual-walk',label:'Casual stroll'},{id:'stage-walk',label:'Runway walk'}].filter(x=>this.avatar.motion?.clips.has(x.id)),
       expressions:choices(this.avatar.appearance?.choices()||[]),
       lighting:[{id:'studio',label:'Studio portrait'},{id:'soft',label:'Soft studio'},{id:'classic',label:'Classic'}],
@@ -358,7 +453,129 @@ export class Avatar3DOptions {
     this.current = this.idle.map(copy);
   }
 
+  heldProp() { return this.props.find(p=>p.id===this.selection.prop && p.pose); }
+
+  // Keep the authored two-handed grip relative to the moving chest. These
+  // exports flatten the arm bones, so preserving fingers alone lets an idle
+  // pose or a dance swing a rifle through the face and torso.
+  prepareHeldProp() {
+    const prop=this.heldProp();
+    const scope=this.outfits.find(o=>o.id===(this.selection.outfit||this.data.defaultOutfit))?.propRig||'';
+    if(!prop || this.heldProps.get(prop.id)?.scope===scope)return;
+    const saved=this.current;
+    const rig=scope?this.avatar.secondaryBoneRigs.find(r=>r.namespace===scope):{bones:this.avatar.bones,boneGroups:this.avatar.boneGroups};
+    if(!rig)return;
+    const anchor=this.bones.find(b=>b.name===scope+'spine_05.x')?.node || rig.bones.chest;
+    if(!anchor)return;
+    try {
+      const pose=this.poses.get(prop.pose);
+      const target=this.targetFor(pose).map(copy);
+      const hands=this.poses.get(prop.hands || (prop.id==='rifle'?'Hndgrp.rifle':'Hndgrp_pistol'));
+      if(hands)this.applyHandLayer(target,hands);
+      this.write(target);
+      const inverse=anchor.matrixWorld.clone().invert();
+      const members=new Set(['upperArm','lowerArm','hand','finger'].flatMap(k=>Object.values(rig.boneGroups[k]||{}).flat()));
+      const offsets=this.bones.filter(b=>members.has(b.node)||b.name===scope+'shoulder.l'||b.name===scope+'shoulder.r')
+        .map(b=>({node:b.node,offset:inverse.clone().multiply(b.node.matrixWorld)}));
+      const hand=rig.bones.hand?.r;
+      this.heldProps.set(prop.id,{anchor,offsets,hand,scope,corners:[]});
+    } finally {this.write(saved);}
+  }
+
+  applyHeldProp() {
+    const held=this.heldProps.get(this.selection.prop);if(!held)return;
+    const anchor=held.anchor.matrixWorld.clone();
+    for(const {node,offset} of held.offsets){
+      node.parent.updateWorldMatrix(true,false);
+      node.matrix.copy(node.parent.matrixWorld).invert().multiply(anchor).multiply(offset);
+      node.matrix.decompose(node.position,node.quaternion,node.scale);
+      node.matrixAutoUpdate=false;node.matrixWorldNeedsUpdate=true;node.updateWorldMatrix(false,false);
+    }
+    // Refresh descendants as well as the arm bones before measuring props.
+    this.avatar.root.updateMatrixWorld(true);
+  }
+
+  // A render crop must include the visible wardrobe and hair as well as
+  // held props. Cache bind-space influence boxes; animate only their corners.
+  propPoints() {
+    const prop=this.props.find(p=>p.id===this.selection.prop),meshes=new Set();
+    if(!prop)return [];
+    for(const name of prop.nodes||[])for(const root of this.nodes.get(name)||[])
+      root.traverseVisible(n=>{if(n.isMesh)meshes.add(n);});
+    return this.meshPoints(meshes);
+  }
+
+  visiblePoints() {
+    const meshes=new Set();
+    this.avatar.model.traverseVisible(n=>{if(n.isMesh&&n.layers.test(this.avatar.camera.layers))meshes.add(n);});
+    return this.meshPoints(meshes);
+  }
+
+  meshPoints(meshes) {
+    if(this.avatar.resources&&!this.avatar.resources.ready)return [];
+    this.geometryBoundsCache ||= new WeakMap();
+    const box=new THREE.Box3(),point=new THREE.Vector3(),local=new THREE.Vector3();
+    const corners=b=>{const out=[];if(!b.isEmpty())for(const x of [b.min.x,b.max.x])for(const y of [b.min.y,b.max.y])for(const z of [b.min.z,b.max.z])out.push(new THREE.Vector3(x,y,z));return out;};
+    this.avatar.root.updateMatrixWorld(true);
+    for(const mesh of meshes){
+      const geometry=mesh.geometry,position=geometry?.attributes.position;
+      if(!position?.count)continue;
+      let cached=this.geometryBoundsCache.get(mesh);
+      if(!cached||cached.position!==position||cached.version!==position.version||cached.geometry!==geometry){
+        const weights=geometry.attributes.skinWeight,indices=geometry.attributes.skinIndex;
+        const skin=mesh.isSkinnedMesh&&weights&&indices,groups=new Map();
+        const groupFor=bone=>{
+          if(!groups.has(bone)){
+            const bind=skin?new THREE.Matrix4().multiplyMatrices(mesh.skeleton.boneInverses[bone],mesh.bindMatrix):new THREE.Matrix4();
+            const e=bind.elements,scale=Math.sqrt([0,1,2,4,5,6,8,9,10].reduce((s,i)=>s+e[i]*e[i],0));
+            groups.set(bone,{bone,bind,scale,box:new THREE.Box3()});
+          }
+          return groups.get(bone);
+        };
+        for(let i=0;i<position.count;i++){
+          local.fromBufferAttribute(position,i);
+          if(skin){for(let k=0;k<4;k++)if(weights.getComponent(i,k)>0){const group=groupFor(indices.getComponent(i,k));group.box.expandByPoint(point.copy(local).applyMatrix4(group.bind));}}
+          else groupFor(-1).box.expandByPoint(local);
+        }
+        // A sum of weighted displacement radii contains simultaneous facial
+        // shapes too, without re-skinning the dense face on every frame.
+        const morphRadii=(geometry.morphAttributes.position||[]).map(morph=>{
+          let squared=0;
+          for(let i=0;i<morph.count;i++){
+            point.fromBufferAttribute(morph,i);
+            if(!geometry.morphTargetsRelative)point.sub(local.fromBufferAttribute(position,i));
+            squared=Math.max(squared,point.lengthSq());
+          }
+          return Math.sqrt(squared);
+        });
+        cached={geometry,position,version:position.version,groups:[...groups.values()],morphRadii};this.geometryBoundsCache.set(mesh,cached);
+      }
+      const radius=cached.morphRadii.reduce((sum,r,i)=>sum+r*Math.abs(mesh.morphTargetInfluences?.[i]||0),0);
+      for(const group of cached.groups){
+        const transform=mesh.matrixWorld.clone();
+        if(group.bone>=0)transform.multiply(mesh.bindMatrixInverse).multiply(mesh.skeleton.bones[group.bone].matrixWorld);
+        const extent=group.box.clone();if(radius)extent.expandByScalar(radius*group.scale);
+        for(const p of corners(extent))box.expandByPoint(point.copy(p).applyMatrix4(transform));
+      }
+    }
+    return corners(box).map(p=>this.avatar.project(p));
+  }
+
   applyVisibility(selection) {
+    // Full-body attachments can carry props on their own hands. Keep the
+    // pilot and mechanical skeletons independent, with a reversible binding.
+    const scope=this.outfits.find(o=>o.id===(selection.outfit||this.data.defaultOutfit))?.propRig||'';
+    const rig=this.avatar.secondaryBoneRigs.find(r=>r.namespace===scope);
+    this.propSkeletons ||= new WeakMap();this.propRigSkeletons ||= new WeakMap();
+    for(const name of new Set(this.props.flatMap(p=>p.nodes||[])))for(const root of this.nodes.get(name)||[])root.traverse(node=>{
+      if(!node.isSkinnedMesh)return;
+      if(!this.propSkeletons.has(node))this.propSkeletons.set(node,node.skeleton);
+      const original=this.propSkeletons.get(node);
+      if(!rig){node.skeleton=original;return;}
+      let variants=this.propRigSkeletons.get(original);if(!variants){variants=new Map();this.propRigSkeletons.set(original,variants);}
+      if(!variants.has(scope)){const skeleton=original.clone();skeleton.bones=skeleton.bones.map(b=>{const n=nameOf(b);return n==='hand.l'?rig.bones.hand.l:n==='hand.r'?rig.bones.hand.r:b;});variants.set(scope,skeleton);}
+      node.skeleton=variants.get(scope);
+    });
     const apply = (choices, id) => {
       for (const name of new Set(choices.flatMap(choice=>choice.nodes||[]))) {
         for (const node of this.nodes.get(name)||[]) node.visible = false;
@@ -369,6 +586,8 @@ export class Avatar3DOptions {
     };
     apply(this.outfits, selection.outfit || this.data.defaultOutfit);
     apply(this.props, selection.prop || '');
+    apply(this.accessories, selection.accessory || this.data.defaultAccessory);
+    this.avatar.appearance?.updateBodyMasks(selection);
     this.avatar.appearance?.applyWardrobe(selection);
   }
 
@@ -413,11 +632,12 @@ export class Avatar3DOptions {
       const pose = this.poses.get(value[group]);
       if (pose?.group === group) next[group]=pose.id;
     }
-    for (const [key,choices] of [['outfit',this.outfits],['prop',this.props]]) {
+    for (const [key,choices] of [['outfit',this.outfits],['prop',this.props],['accessory',this.accessories]]) {
       if (choices.some(choice=>choice.id===value[key])) next[key]=value[key];
     }
     for (const key of ['playTransitions','followCursor']) {
       if (value[key] === false || value[key] === 'false') next[key] = 'false';
+      else if(key==='followCursor'&&(value[key]===true||value[key]==='true'))next[key]='true';
     }
     if(['walking-woman','walk','casual-walk','stage-walk'].includes(value.walkStyle)&&this.avatar.motion?.clips.has(value.walkStyle))next.walkStyle=value.walkStyle;
     if(['balanced','eco','quality'].includes(value.performance))next.performance=value.performance;
@@ -432,6 +652,7 @@ export class Avatar3DOptions {
     if (JSON.stringify(next) === JSON.stringify(this.selection)) return this.selection;
     const previous = this.selection;
     this.selection = next;
+    this.prepareHeldProp();
     this.avatar.appearance?.select(next);
     if (this.avatar.motion?.active && ['body','hands','leftHand','rightHand'].every(key=>previous[key]===next[key])) {
       this.applyVisibility(next);
@@ -439,12 +660,22 @@ export class Avatar3DOptions {
     }
     // Changing gaze alone must not restart a pose or the playback interval.
     const withoutGaze = value => JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key])=>
-      !['performance','followCursor','lighting','expression','expressionStrength','hair','clothes','walkStyle'].includes(key)&&!key.startsWith('texture:'))));
+      !['performance','followCursor','lighting','expression','expressionStrength','hair','clothes','walkStyle','accessory'].includes(key)&&!key.startsWith('texture:'))));
     if (withoutGaze(previous) !== withoutGaze(next)) {
       this.nextPlaybackAt = now + 4000;
       this.applyPose(next, now);
     } else this.applyVisibility(next);
     return this.selection;
+  }
+
+  applyHandLayer(target,pose) {
+    const layer=this.targetFor(pose);
+    // Blender hand libraries also contain arm transforms from the pose used
+    // to author the grip. Those must never replace the body's shoulder/wrist.
+    const fingers=new Set([this.avatar,...this.avatar.secondaryBoneRigs].flatMap(r=>Object.values(r.boneGroups?.finger||{}).flat()));
+    this.bones.forEach((bone,i)=>{
+      if(fingers.has(bone.node)&&Object.hasOwn(pose.deltas,bone.name))target[i]=copy(layer[i]);
+    });
   }
 
   applyPose(next, now) {
@@ -454,8 +685,7 @@ export class Avatar3DOptions {
     if(next.body) target=this.targetFor(this.poses.get(next.body)).map(copy);
     for(const group of ['hands','leftHand','rightHand']) {
       if(!next[group])continue;
-      const pose=this.poses.get(next[group]), layer=this.targetFor(pose);
-      this.bones.forEach((bone,i)=>{if(Object.hasOwn(pose.deltas,bone.name))target[i]=copy(layer[i]);});
+      this.applyHandLayer(target,this.poses.get(next[group]));
     }
     // Framing already uses the standing bounds. Re-skinning every vertex and
     // evaluating every morph to measure a pose stalls the render thread (Tia
@@ -468,7 +698,7 @@ export class Avatar3DOptions {
 
   update(now, reduce=false) {
     if (this.avatar.motion?.update(now, reduce)) return;
-    if (reduce || !this.enabled('playTransitions') || this.avatar.motion?.pending) {
+    if (reduce || this.heldProp() || !this.enabled('playTransitions') || this.avatar.motion?.pending) {
       this.nextPlaybackAt = now + 4000;
     } else if (this.nextPlaybackAt === null) {
       this.nextPlaybackAt = now + 4000;

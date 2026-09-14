@@ -7,12 +7,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
-for (const f of ['electron/main.cjs', 'electron/preload.cjs']) new vm.Script(read(f), { filename: f });
+for (const f of ['electron/main.cjs', 'electron/preload.cjs', 'electron/group.cjs']) new vm.Script(read(f), { filename: f });
 const page = read('web/avatar.html');
 const script = page.match(/<script type="module">([\s\S]*?)<\/script>\s*<\/body>/)[1];
 assert.doesNotThrow(() => new vm.Script(script.replace(/^\s*import .*$/gm, '').replace(/await gla\.getSettings\(\)/, 'null'), { filename: 'avatar.html' }));
 // The avatar page and main process agree on the settings keys and IPC names.
-const preload = read('electron/preload.cjs'); const main = read('electron/main.cjs');
+const preload = read('electron/preload.cjs'); const main = read('electron/main.cjs') + read('electron/group.cjs');
 for (const channel of preload.match(/'gla:[a-z:-]+'/g)) assert(main.includes(channel), `main handles ${channel}`);
 for (const key of ['backendModel', 'voice', 'quality', 'avatarDir', 'personaName', 'persona', 'opacity', 'bubble']) assert(main.includes(`'${key}'`), `settings key ${key}`);
 // The renderer contract: absolute module paths must be served from the web root.

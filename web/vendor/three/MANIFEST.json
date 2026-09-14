@@ -14,6 +14,8 @@
     "BufferGeometryUtils.js",
     "SkeletonUtils.js",
     "RoomEnvironment.js",
+    "RectAreaLightUniformsLib.js",
+    "RectAreaLightTexturesLib.js",
     "basis_transcoder.js",
     "basis_transcoder.wasm"
   ]

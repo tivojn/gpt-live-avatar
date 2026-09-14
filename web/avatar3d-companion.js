@@ -39,6 +39,8 @@ export function avatarIntent(text) {
   if(follow.test(value))return 'follow';
   const destination=destinationIntent(value);if(destination)return destination;
   const commands=[
+    ['smile',/^(?:smile(?: (?:widely|big|for me))?|(?:give|show)(?: me| you)? (?:(?:your|my|a) )?(?:big |wide |beautiful |open )?smile|show (?:me|you) (?:your|my) teeth|笑一个|微笑)$/],
+    ['laugh',/^(?:laugh(?: (?:for me|out loud))?|(?:give|do)(?: me)? (?:a )?(?:big |little )?laugh|大笑)$/],
     ['closer',/^(?:(?:(?:come|walk|move|step) )?(?:even |a (?:bit|little) )?closer(?: to (?:me|the camera))?(?: again)?|靠近(?:一点|点)?|走近一点)$/],
     ['back',/^(?:(?:step|walk|move|go) (?:back|(?:further|farther) away)(?: a (?:bit|little))?(?: again)?|back up|(?:further|farther)(?: away)?|退后(?:一点|点)?)$/],
     ['walk-around',/^(?:walk|start walking|(?:walk|move|wander|stroll|roam) around(?: (?:the |my |this )?(?:whole |entire )?(?:screen|chat(?: window)?|window|desktop))?|walk across (?:the |my )?(?:screen|window)|到处走走|在屏幕上走动)$/],
@@ -54,7 +56,7 @@ export function avatarIntent(text) {
     ['stand',/^(?:stand|stand up|standing pose|站起来)$/],
     ['random-dance',/^(?:do|play|show|perform|try)(?: me)? (?:a |some )?random dance$/],
     ['random-motion',/^(?:do|play|show|perform|try)(?: me)? (?:a |some )?random (?:motion|motions|move|moves)$/],
-    ['dance',/^(?:dance|dance for me|do a dance|let'?s dance|跳舞)$/],
+    ['dance',/^(?:dance(?: for me)?|(?:do|perform|show|try)(?: me)? (?:(?:a |some )?(?:little |quick |short |happy )?)dance|let'?s dance|跳(?:个|一段|支)?舞)$/],
   ];
   return commands.find(([,pattern])=>pattern.test(value))?.[0]||null;
 }
@@ -134,7 +136,7 @@ const contextualClipTags = {
 // Prefer a validated cue from the LLM's completed reply. Voice/connected agents
 // without cue metadata can act only on an affirmative performance statement
 // in the assistant's reply, using the user turn to resolve “I'll do that”.
-const conversationalActions = new Set([...Object.keys(stageDestinations),'follow','come','closer','back','walk-around','run-around','wave','heart','sit','stand','dance','stay','random-dance','random-motion','reactions-on','reactions-off']);
+const conversationalActions = new Set([...Object.keys(stageDestinations),'follow','come','closer','back','walk-around','run-around','wave','heart','sit','stand','dance','stay','smile','laugh','random-dance','random-motion','reactions-on','reactions-off']);
 export function replyAvatarAction(user, reply, suggestion, clips) {
   const text=String(reply||'').normalize('NFKC').replace(/[’‘]/g,"'").trim();
   if(!text)return null;
@@ -150,7 +152,7 @@ export function replyAvatarAction(user, reply, suggestion, clips) {
   // Normalize that affirmative continuation without acting on user input alone.
   const performanceText=text.replace(/\b(i(?:'ll| will)|let me)\s+(?:keep|continue)\s+(walking|running|moving|following)\b/gi,
     (_,speaker,verb)=>speaker+' '+({walking:'walk',running:'run',moving:'move',following:'follow'}[verb.toLowerCase()]));
-  const performance = performanceText.match(/\b(?:i(?:'ll| will| am going to|'m going to)|let me|let's)\s+(?:(?:just|now|also|quickly)\s+)?((?:show|demonstrate|perform|try|do|give|dance|wave|follow|go|head|walk|run|jog|wander|stroll|roam|step|move|come|sit|stand|stop|stay|make|turn|enable|disable)\b[^.!?]*)(?:[.!]|$)/i);
+  const performance = performanceText.match(/\b(?:i(?:'ll| will| am going to|'m going to)|let me|let's)\s+(?:(?:just|now|also|quickly)\s+)?((?:show|demonstrate|perform|try|do|give|smile|laugh|dance|wave|follow|go|head|walk|run|jog|wander|stroll|roam|step|move|come|sit|stand|stop|stay|make|turn|enable|disable)\b[^.!?]*)(?:[.!]|$)/i);
   const presentation = text.match(/\bhere(?:'s| is) ((?:a |my |the )?(?:quick |little )?(?:dance|wave|heart|kung fu|punch|demonstration)\b[^.!?]*)(?:[.!]|$)/i);
   const present = text.match(/(?:^|[.!]\s*)(?:(?:sure|okay|ok|of course|absolutely)[,!]?\s+)?(?:i(?:'m| am)\s+)?(standing up|sitting down|waving|dancing|running|walking|coming|moving|stepping|going|heading|following|performing|showing)\b([^.!?]*)(?:[.!]|$)/i);
   const chinese = text.match(/(?:我来|我会|给你表演)([^。！？?]+)/);
@@ -163,7 +165,8 @@ export function replyAvatarAction(user, reply, suggestion, clips) {
   const prefix=text.slice(0,match.index).split(/[.!]/).at(-1);
   if(/\b(?:if|would|could|might|imagine|pretend|in my head|explain|describe|history|meaning|write|teach|learn|tutorial|movie|video|example|how to|about|code|script|tests|terminal|program|server)\b|假如|想象|解释|历史|教程/i.test(plain)
     || /\b(?:if|would|could|might|imagine|pretend|said|says|wrote|quoted)\b/i.test(prefix))return null;
-  const simple=plain.replace(/\b(?:for you|right now|now|a little|a bit|around a little)\b/gi,'')
+  const simple=plain.replace(/\b(?:a little|a quick|a short) (?=dance\b)/gi,'a ')
+    .replace(/\b(?:for you|right now|now|a little|a bit|around a little)\b/gi,'')
     .replace(/\b(?:your|the user's) (cursor|mouse|pointer)\b/gi,'my $1')
     .replace(/\bcloser to you\b/gi,'closer').replace(/\s+/g,' ').trim();
   const direct=avatarIntent(simple)||motionIntent(simple,clips);
@@ -245,10 +248,9 @@ export class CompanionController {
     return pending.clipID?'action:clip:'+clip.id:clip.id;
   }
   gesture(now,speaking,reduce=false){
-    if(speaking&&!this.wasSpeaking)this.gestureAt=now;
-    this.wasSpeaking=speaking;
-    const t=(now-this.gestureAt)/1200;
-    return {pitch:this.gestures&&!reduce&&t>=0&&t<1?Math.sin(t*Math.PI*2)*Math.sin(t*Math.PI)*.065:0};
+    // Speech amplitude drives lips and the overhead indicator, never a
+    // repeated nod at every syllable or short pause. Authored motions remain.
+    return {pitch:0};
   }
   command(action){
     this.pendingReaction=null;

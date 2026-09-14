@@ -41,7 +41,7 @@
   <p class="sub">Tia talks with OpenAI GPT-Live-1 directly from this Mac. Your key stays encrypted on this Mac.</p>
 
   <section>
-    <h2>OpenAI</h2>
+    <h2>Voice connection · OpenAI</h2>
     <label for="key">API key</label>
     <div class="row">
       <input id="key" type="password" placeholder="sk-… (stored encrypted, never shown again)" autocomplete="off">
@@ -49,11 +49,45 @@
       <button id="clearKey" type="button">Remove</button>
     </div>
     <p class="state" id="keyState">Checking…</p>
+    <div id="managedBackend">
     <label for="backend">Backend model for delegated reasoning</label>
     <div class="row"><select id="backend"></select><button id="refreshModels" type="button">Refresh list</button></div>
-    <p class="note">GPT-Live-1 handles the conversation itself and hands harder questions to this Responses model. OpenAI's guide starts with GPT-5.6 Terra and suggests GPT-5.6 Luna for lower cost.</p>
+    <p class="note">GPT-Live-1 handles the conversation itself and hands harder questions to this Responses model. GPT-5.6 Luna is the default.</p>
+    </div>
     <label for="voice">Voice</label>
-    <select id="voice"></select>
+    <div class="row"><select id="voice"></select><button id="previewVoice" type="button">Preview</button><button id="useVoice" type="button" class="pri">Use voice</button></div>
+    <p class="note">Listen before choosing. Changing voice briefly reconnects a live conversation and keeps the recent transcript. Previews use GPT-Live without the microphone.</p>
+    <p class="state" id="voiceState" aria-live="polite"></p>
+  </section>
+
+  <section>
+    <h2>Reasoning</h2>
+    <label for="reasoningMode">Mode</label>
+    <select id="reasoningMode"><option value="managed">Built-in reasoning</option><option value="delegate">Delegate mode</option></select>
+    <p class="note">Delegate mode sends harder questions to your selected provider. Changing modes during a conversation briefly reconnects and keeps recent context.</p>
+    <div id="delegateOptions" hidden>
+      <label for="delegateProvider">Provider</label>
+      <select id="delegateProvider"><option value="openai">OpenAI</option><option value="xai">xAI</option></select>
+      <label for="delegateAuth">Authentication</label>
+      <select id="delegateAuth"><option value="api_key">API key</option><option value="oauth2">Account sign-in · OAuth2</option></select>
+      <p class="note" id="openaiDelegateKey">Uses the OpenAI API key saved above.</p>
+      <div id="xaiDelegateKey" hidden>
+        <label for="xaiKey">xAI API key</label>
+        <div class="row"><input id="xaiKey" type="password" autocomplete="off" placeholder="xai-…"><button id="saveXaiKey" type="button">Validate &amp; save</button><button id="clearXaiKey" type="button">Remove</button></div>
+      </div>
+      <div id="delegateLogin" hidden>
+        <div class="row"><button id="signIn" class="pri" type="button">Sign in</button><button id="cancelSignIn" type="button" hidden>Cancel sign-in</button><button id="signOut" type="button">Sign out</button></div>
+        <p class="note" id="signInNote"></p>
+        <p id="deviceCode" class="state" aria-live="polite"></p>
+      </div>
+      <p id="delegateAccountState" class="state" aria-live="polite"></p>
+      <label for="delegateModel">Model</label>
+      <div class="row"><input id="delegateModel" type="text" list="delegateModelChoices" autocomplete="off"><datalist id="delegateModelChoices"></datalist><button id="saveDelegateModel" type="button">Use model</button><button id="refreshDelegateModels" type="button">Refresh list</button></div>
+      <p class="note">OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.</p>
+      <button id="testDelegate" type="button">Test connection</button>
+      <p class="state" id="delegateTestState" aria-live="polite"></p>
+      <p class="note">Account sign-in covers delegated reasoning. GPT-Live voice and voice previews still use the OpenAI API key above.</p>
+    </div>
   </section>
 
   <section>
@@ -82,7 +116,7 @@
     <label for="opacity">Opacity</label>
     <div class="range"><input id="opacity" type="range" min="15" max="100" step="5"><output id="opacityOut"></output></div>
     <label for="bubbleMode">Speech bubble</label>
-    <select id="bubbleMode"><option value="auto">Only when a message arrives (hidden during motions)</option><option value="always">Always on during a conversation</option><option value="off">Off</option></select>
+    <select id="bubbleMode"><option value="auto">Only on incoming messages</option><option value="always">Always on</option><option value="off">Off</option></select>
   </section>
 
   <section>
@@ -92,12 +126,16 @@
 </main>
 <script>
   const $ = s => document.querySelector(s);
-  let SETTINGS = null;
+  let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' };
+  const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
   const setState = (el, text, cls = '') => { el.textContent = text; el.className = 'state ' + cls; };
 
   function render(settings) {
-    SETTINGS = settings;
-    $('#voice').innerHTML = settings.voices.map(v => `<option value="${v}" ${v === settings.voice ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}${v === 'marin' ? ' · default' : ''}</option>`).join('');
+    const previousVoice = SETTINGS?.voice; SETTINGS = settings;
+    voicePreview = settings.voicePreview || voicePreview;
+    if (!voiceDraft || previousVoice !== settings.voice) voiceDraft = settings.voice;
+    $('#voice').innerHTML = settings.voices.map(v => `<option value="${v}" ${v === voiceDraft ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}${v === 'marin' ? ' · default' : ''}</option>`).join('');
+    updateVoiceState();
     $('#personaName').value = settings.personaName || '';
     $('#persona').value = settings.persona || '';
     $('#avatarDir').value = settings.avatarDir || '';
@@ -109,7 +147,21 @@
     setState($('#avatarState'), a.fallbackFor ? `${a.fallbackFor} is not downloaded yet; showing Tia. Download the avatar package below.` : a.ok ? `${a.name}: ${a.clips} motions${a.modelBytes ? `, model ${(a.modelBytes / 1048576).toFixed(0)} MB` : ''}.` : (a.problem || 'No avatar.'), a.ok && !a.fallbackFor ? 'ok' : 'bad');
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
+    renderDelegate(settings);
   }
+  function renderDelegate(s) {
+    const d=s.delegate,a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',waiting=['starting','waiting'].includes(a.state);
+    $('#reasoningMode').value=s.reasoningMode;$('#delegateOptions').hidden=s.reasoningMode!=='delegate';$('#managedBackend').hidden=s.reasoningMode==='delegate';
+    $('#delegateProvider').value=d.provider;$('#delegateAuth').value=d.auth;
+    $('#openaiDelegateKey').hidden=oauth||d.provider!=='openai';$('#xaiDelegateKey').hidden=oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
+    $('#signIn').textContent=d.provider==='openai'?'Sign in with OpenAI':'Sign in with xAI';$('#signIn').disabled=waiting;$('#cancelSignIn').hidden=!waiting;$('#signOut').disabled=!a.signedIn;
+    $('#signInNote').textContent=d.provider==='openai'?'Opens the OpenAI browser sign-in flow used by OpenClaw.':'Uses the xAI device-code flow used by OpenClam, compatible with Grok Build.';
+    $('#deviceCode').textContent=a.userCode?'Your sign-in code: '+a.userCode:'';
+    setState($('#delegateAccountState'),oauth?(a.error||a.message||(a.signedIn?'Signed in on this Mac.':'Not signed in.')):(a.hasKey?'API key saved on this Mac.':'Add an API key to use this provider.'),a.error?'bad':(oauth?a.signedIn:a.hasKey)?'ok':'');
+    if(document.activeElement!==$('#delegateModel'))$('#delegateModel').value=d.model;
+    renderDelegateModels(d.choices[d.provider]||[]);
+  }
+  function renderDelegateModels(models){$('#delegateModelChoices').replaceChildren(...models.map(id=>{const o=document.createElement('option');o.value=id;return o;}));}
   // ---- avatars and texture tiers (bundled + cloud downloads with progress)
   const MB = bytes => `${Math.max(1, Math.round((bytes || 0) / 1048576))} MB`;
   let progress = null;
@@ -165,8 +217,32 @@
   };
   $('#clearKey').onclick = async () => { await gla.clearApiKey(); render(await gla.getSettings()); };
   $('#refreshModels').onclick = loadModels;
+  $('#reasoningMode').onchange=()=>save({reasoningMode:$('#reasoningMode').value});
+  $('#delegateProvider').onchange=()=>save({delegateProvider:$('#delegateProvider').value});
+  $('#delegateAuth').onchange=()=>save({delegateAuth:$('#delegateAuth').value});
+  $('#saveDelegateModel').onclick=async()=>{const model=$('#delegateModel').value.trim();if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#delegateTestState'),'Enter a valid model ID.','bad');return;}await save({delegateModel:model});setState($('#delegateTestState'),'Model selected. Use Test connection to check account access.');};
+  $('#refreshDelegateModels').onclick=async()=>{setState($('#delegateTestState'),'Loading model choices…');const r=await gla.delegate.models();if(r.ok)renderDelegateModels(r.models);setState($('#delegateTestState'),r.ok?'Model choices refreshed. Test a model to confirm account access.':r.error,r.ok?'':'bad');};
+  $('#signIn').onclick=async()=>{const r=await gla.delegate.login(SETTINGS.delegate.provider);if(!r.ok)setState($('#delegateAccountState'),r.error,'bad');};
+  $('#cancelSignIn').onclick=()=>gla.delegate.cancelLogin(SETTINGS.delegate.provider);
+  $('#signOut').onclick=()=>gla.delegate.logout(SETTINGS.delegate.provider);
+  $('#saveXaiKey').onclick=async()=>{setState($('#delegateAccountState'),'Validating xAI key…');const r=await gla.delegate.saveXAIKey($('#xaiKey').value);if(r.ok)$('#xaiKey').value='';else setState($('#delegateAccountState'),r.error,'bad');};
+  $('#clearXaiKey').onclick=()=>gla.delegate.clearXAIKey();
+  $('#testDelegate').onclick=async()=>{const route=JSON.stringify(SETTINGS.delegate);$('#testDelegate').disabled=true;setState($('#delegateTestState'),'Asking the selected model for a short reply…');try{const r=await gla.delegate.test();if(route!==JSON.stringify(SETTINGS.delegate)){setState($('#delegateTestState'),'Selection changed. Test the new selection.');return;}setState($('#delegateTestState'),r.ok?`${r.model}: ${r.text}`:r.error,r.ok?'ok':'bad');}finally{$('#testDelegate').disabled=false;}};
   $('#backend').onchange = () => save({ backendModel: $('#backend').value });
-  $('#voice').onchange = () => save({ voice: $('#voice').value });
+  function updateVoiceState() {
+    $('#useVoice').disabled = voiceDraft === SETTINGS?.voice;
+    $('#previewVoice').textContent = voicePreview.state !== 'idle' ? 'Stop preview' : 'Preview';
+    $('#previewVoice').disabled = !SETTINGS?.hasKey;
+    const status = voicePreview.error || (voicePreview.state !== 'idle' ? `${voicePreview.state === 'connecting' ? 'Loading' : 'Playing'} ${voiceName(voicePreview.voice)}…` : `Current voice: ${voiceName(SETTINGS?.voice || 'marin')}.`);
+    setState($('#voiceState'), status, voicePreview.error ? 'bad' : '');
+  }
+  gla.onVoicePreview(state => { voicePreview = state; updateVoiceState(); });
+  $('#voice').onchange = () => { voiceDraft = $('#voice').value; updateVoiceState(); };
+  $('#useVoice').onclick = async () => { await gla.stopVoicePreview(); await save({ voice: voiceDraft }); };
+  $('#previewVoice').onclick = async () => {
+    const result = voicePreview.state !== 'idle' ? await gla.stopVoicePreview() : await gla.previewVoice(voiceDraft);
+    if (!result.ok) setState($('#voiceState'), result.error, 'bad');
+  };
   $('#personaName').onchange = () => save({ personaName: $('#personaName').value.trim() || 'Tia' });
   $('#persona').onchange = () => save({ persona: $('#persona').value.trim() });
   $('#chooseAvatar').onclick = async () => { await gla.chooseAvatarFolder(); render(await gla.getSettings()); };

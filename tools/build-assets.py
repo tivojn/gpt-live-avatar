@@ -24,6 +24,8 @@ BUNDLED_SLUGS = {"tia"}
 BUNDLE = OUT / ("bundle" if SLUG in BUNDLED_SLUGS else "packages") / SLUG
 TIERS = OUT / "tiers"; IOS = OUT / "ios"
 for d in (BUNDLE, TIERS, IOS): d.mkdir(parents=True, exist_ok=True)
+# Generated output must not retain obsolete mesh/image files on a rebuild.
+shutil.rmtree(BUNDLE); BUNDLE.mkdir(parents=True)
 
 def sha256(path):
     h = hashlib.sha256()
@@ -37,10 +39,12 @@ def size_of(name):  # image-<index>-<size>.<ext> -> size
 
 # ---- manifest (only what the apps read)
 manifest = json.loads((SRC / "manifest.json").read_text())
-keep = {k: manifest[k] for k in ("slug", "name", "renderer", "model", "pose", "yaw", "visemes", "layout", "joint_count", "target_count") if k in manifest}
+keep = {k: manifest[k] for k in ("slug", "name", "renderer", "model", "pose", "yaw", "visemes", "layout", "joint_count", "target_count", "appearance", "assetRevision") if k in manifest}
 keep["slug"] = SLUG; keep["tiers"] = {"bundled": [512, 1024], "balanced": [2048], "best": [4096]}
 (BUNDLE / "manifest.json").write_text(json.dumps(keep, indent=1))
 if (SRC / "keyframe.png").exists(): shutil.copy2(SRC / "keyframe.png", BUNDLE / "keyframe.png")
+if (SRC / "appearance").is_dir(): shutil.copytree(SRC / "appearance", BUNDLE / "appearance")
+if (SRC / "source-audit.json").is_file(): shutil.copy2(SRC / "source-audit.json", BUNDLE / "source-audit.json")
 
 # ---- resident model: meshes, rig, gltf, small textures
 resident = SRC / "runtime" / "resident"; dst = BUNDLE / "runtime" / "resident"; dst.mkdir(parents=True, exist_ok=True)
@@ -111,10 +115,10 @@ source_glb = SRC / manifest["model"]
 ios_paths = {}
 for tier, limit in (("1k", 1024), ("2k", 2048)):
     p = IOS / f"{SLUG}-{tier}.glb"
-    if not p.exists(): shrink_glb(source_glb, p, limit)
+    shrink_glb(source_glb, p, limit)
     ios_paths[tier] = p
 p4 = IOS / f"{SLUG}-4k.glb"
-if not p4.exists(): shutil.copy2(source_glb, p4)
+shrink_glb(source_glb, p4, 4096)
 ios_paths["4k"] = p4
 
 # ---- catalogue
@@ -123,6 +127,7 @@ index = json.loads(index_path.read_text()) if index_path.exists() else {"version
 entry = {"name": keep.get("name", SLUG), "bundledMac": SLUG in BUNDLED_SLUGS, "bundledIOS": SLUG in BUNDLED_SLUGS,
          "mac": {t: {"file": p.name, "bytes": p.stat().st_size, "sha256": sha256(p)} for t, p in tier_paths.items()},
          "ios": {t: {"file": p.name, "bytes": p.stat().st_size, "sha256": sha256(p)} for t, p in ios_paths.items()}}
+if keep.get("assetRevision"): entry["assetRevision"] = keep["assetRevision"]
 index["avatars"][SLUG] = entry
 index_path.write_text(json.dumps(index, indent=1))
 def du(p): return sum(f.stat().st_size for f in Path(p).rglob("*") if f.is_file()) / 1e6

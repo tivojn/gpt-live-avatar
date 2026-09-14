@@ -19,9 +19,10 @@ const TIER_SIZES = { balanced: 2048, best: 4096 };
 const TIER_LABELS = { base: 'Avatar package (1K textures, meshes, motions)', balanced: 'Balanced: 2K textures', best: 'Best quality: 4K textures' };
 
 class AvatarAssets {
-  constructor({ bundledRoot, downloadsRoot, bundledIndexPath, broadcast }) {
+  constructor({ bundledRoot, downloadsRoot, bundledIndexPath, developmentRoot, broadcast }) {
     this.bundledRoot = bundledRoot; this.downloadsRoot = downloadsRoot; this.bundledIndexPath = bundledIndexPath;
     this.broadcast = broadcast || (() => {});
+    this.developmentRoot = developmentRoot;
     this.active = null; // { slug, tier, request, cancelled }
     this.progress = null;
     this.index = null;
@@ -51,9 +52,25 @@ class AvatarAssets {
 
   // ---- locations
   roots(slug) {
+    // A locally rebuilt package is a complete revision. Do not mix texture
+    // indices from the previous downloaded model into its resident document.
+    if (this.developmentRoot) {
+      const local = path.join(this.developmentRoot, slug);
+      if (fs.existsSync(path.join(local, 'manifest.json'))) return [local];
+    }
     return [path.join(this.bundledRoot, slug), path.join(this.downloadsRoot, slug)].filter(dir => fs.existsSync(path.join(dir, 'manifest.json')) || fs.existsSync(path.join(dir, 'runtime')));
   }
   installed(slug) { return this.roots(slug).some(dir => fs.existsSync(path.join(dir, 'manifest.json'))); }
+  manifest(slug) {
+    try { return JSON.parse(fs.readFileSync(this.resolve(this.roots(slug), 'manifest.json'), 'utf8')); }
+    catch { return {}; }
+  }
+  matchingRevision(slug) {
+    const file = this.resolve(this.roots(slug), 'manifest.json');
+    let revision;
+    try { revision = JSON.parse(fs.readFileSync(file, 'utf8')).assetRevision; } catch {}
+    return !revision || revision === this.loadIndexSync().avatars?.[slug]?.assetRevision;
+  }
   bundled(slug) { return fs.existsSync(path.join(this.bundledRoot, slug, 'manifest.json')); }
   resolve(roots, rel) {
     for (const root of roots) {
@@ -78,16 +95,16 @@ class AvatarAssets {
     for (const tier of ['base', 'balanced', 'best']) {
       if (tier === 'base' && this.bundled(slug)) continue;
       const remote = mac[tier];
-      if (!remote && tier !== 'base') continue;
-      tiers[tier] = { label: TIER_LABELS[tier], present: this.hasTier(slug, tier), bytes: remote ? remote.bytes : 0, available: Boolean(remote) };
+      if (!remote && tier !== 'base' && !this.hasTier(slug, tier)) continue;
+      tiers[tier] = { label: TIER_LABELS[tier], present: this.hasTier(slug, tier), bytes: remote ? remote.bytes : 0, available: Boolean(remote) && (tier === 'base' || this.matchingRevision(slug)) };
     }
-    return { slug, name: entry.name || slug, bundled: this.bundled(slug), installed: this.installed(slug), tiers,
+    return { slug, name: entry.name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug), tiers,
       downloading: this.active && this.active.slug === slug ? this.progress : null };
   }
   avatars() {
     const index = this.loadIndexSync(); const slugs = new Set(Object.keys(index.avatars || {}));
-    for (const root of [this.bundledRoot, this.downloadsRoot]) { try { for (const d of fs.readdirSync(root)) if (fs.existsSync(path.join(root, d, 'manifest.json'))) slugs.add(d); } catch {} }
-    return [...slugs].map(slug => ({ slug, name: ((index.avatars || {})[slug] || {}).name || slug, bundled: this.bundled(slug), installed: this.installed(slug) }));
+    for (const root of [this.developmentRoot, this.bundledRoot, this.downloadsRoot].filter(Boolean)) { try { for (const d of fs.readdirSync(root)) if (fs.existsSync(path.join(root, d, 'manifest.json'))) slugs.add(d); } catch {} }
+    return [...slugs].map(slug => ({ slug, name: ((index.avatars || {})[slug] || {}).name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug) }));
   }
 
   // ---- model.gltf with only the texture variants that exist locally
@@ -129,6 +146,7 @@ class AvatarAssets {
     if (this.active) throw new Error('Another download is running.');
     const index = this.loadIndexSync(); const remote = (((index.avatars || {})[slug] || {}).mac || {})[tier];
     if (!remote) throw new Error(`No ${tier} package is published for ${slug}.`);
+    if (tier !== 'base' && !this.matchingRevision(slug)) throw new Error('These textures belong to a different avatar revision. Install the matching avatar package first.');
     const dest = path.join(this.downloadsRoot, slug); const tmpDir = path.join(this.downloadsRoot, 'tmp');
     await fsp.mkdir(dest, { recursive: true }); await fsp.mkdir(tmpDir, { recursive: true });
     const zipPath = path.join(tmpDir, remote.file);

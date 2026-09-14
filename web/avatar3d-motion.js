@@ -100,7 +100,7 @@ export class Avatar3DMotion {
     this.options.transition=null;
     const selection=this.options.selection;
     const hands=this.options.bones.map(({name},i)=>
-      /index|middle|ring|pinky|thumb/.test(name) && (selection.prop||selection.hands
+      !/toe/i.test(name) && /index|middle|ring|pinky|thumb/.test(name) && (selection.prop||selection.hands
         ||(name.endsWith('.l')&&selection.leftHand)||(name.endsWith('.r')&&selection.rightHand))
         ? this.options.current[i] : null);
     // Meshy's preset rig carries body motion but no finger animation. Use
@@ -112,7 +112,7 @@ export class Avatar3DMotion {
       if(!pose||pose.group!==group)continue;
       const target=this.options.targetFor(pose);
       this.options.bones.forEach(({name},i)=>{
-        if(/index|middle|ring|pinky|thumb/.test(name)&&Object.hasOwn(pose.deltas,name))authoredHands[i]=target[i];
+        if(!/toe/i.test(name)&&/index|middle|ring|pinky|thumb/.test(name)&&Object.hasOwn(pose.deltas,name))authoredHands[i]=target[i];
       });
     }
     this.options.write(this.options.current);

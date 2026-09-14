@@ -37,12 +37,16 @@
   #bubble input::placeholder { color: var(--bubble-dim); }
   #bubble input:focus { border-color: rgba(127,181,255,.8); }
   /* Listening pill: shown whenever a conversation is on and the bubble is hidden. */
-  #listen { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 14px; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); font-size: 11px; pointer-events: none; transition: opacity .18s; }
-  #listen.hidden { opacity: 0; } #listen svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+  #listen { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 14px; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); font-size: 11px; pointer-events: auto; transition: opacity .18s; }
+  #listen.hidden { opacity: 0; pointer-events: none; } #listen svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
   #listen .meter { width: 20px; height: 12px; } #listen .meter i { width: 3px; }
-  #listen.muted { opacity: .6; }
+  #listen.muted:not(.hidden) { opacity: .6; }
   #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--bubble-bg); color: var(--bubble-text); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
+  #steerDialog { width: min(310px, 85vw); box-sizing: border-box; border: 1px solid var(--bubble-line); border-radius: 14px; padding: 14px; background: var(--bubble-bg); color: var(--bubble-text); }
+  #steerDialog::backdrop { background: transparent; }
+  #steerDialog input { width: 100%; box-sizing: border-box; margin: 10px 0; padding: 8px; font: inherit; }
+  #steerDialog button { padding: 6px 12px; font: inherit; }
 </style>
 </head>
 <body>
@@ -62,9 +66,13 @@
 </div>
 <div id="listen" class="hidden"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><span class="meter" id="listenMeter"><i></i><i></i><i></i><i></i><i></i></span><span id="listenText">Listening</span></div>
 <div id="toast"></div>
+<dialog id="steerDialog"><form method="dialog"><label for="steerMessage">Send a message</label><input id="steerMessage" autocomplete="off"><button value="cancel">Cancel</button> <button value="send">Send</button></form></dialog>
 <script type="module" src="/avatar3d.js"></script>
 <script type="module">
+import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
+import { BubblePolicy } from '/bubble-policy.js';
+import { VoicePreview } from '/voice-preview.js';
 import { CompanionController, AvatarStudioStage, isSpatialAction } from '/avatar3d-companion.js';
 
 const $ = s => document.querySelector(s);
@@ -77,29 +85,20 @@ matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => {
 const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 24, idleFps: 8, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 24, maxTexture: Infinity } };
 const quality = () => QUALITY[settings.quality] || QUALITY.balanced;
 const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
-const setStatus = (text, dot = '', ms = 3500) => { $('#status').textContent = text; $('#dot').className = 'dot ' + dot; showBubble(ms); };
-// Bubble visibility: on while connecting, while she speaks or lines are fresh,
-// while the steer box is open, and briefly after a status change.
-let bubbleUntil = 0;
-const showBubble = (ms = 4000) => { bubbleUntil = Math.max(bubbleUntil, performance.now() + ms); syncBubble(); };
-// Visibility policy (right-click menu): "auto" shows the bubble only when a
-// message arrives (her reply, your voice or typed text) and hides it during a
-// motion and after a quiet spell; "always" keeps it up for the whole
-// conversation; "off" never shows it.
+const setStatus = (text, dot = '') => { $('#status').textContent = text; $('#dot').className = 'dot ' + dot; if (dot === 'error') toast(text, 6000); };
+const bubblePolicy = new BubblePolicy();
 const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
+const showBubble = (ms = 9000) => { bubblePolicy.incoming(performance.now(), ms); syncBubble(); };
 const syncBubble = () => {
-  const now = performance.now(), mode = bubbleMode();
-  const inMotion = Boolean(avatar && avatar.motion && avatar.motion.active && !avatar.motion.active.gesture) || Boolean(stage && stage.studio);
-  const typing = document.activeElement === $('#steer');
-  let show;
-  if (mode === 'off') show = false;
-  else if (mode === 'always') show = live.state !== 'idle' || now < bubbleUntil;
-  else { if (inMotion && !typing) bubbleUntil = 0; show = typing || now < bubbleUntil; }
-  bubble.classList.toggle('hidden', !show);
+  bubblePolicy.setMode(bubbleMode());
+  if (bubbleMode() === 'off' && document.activeElement === $('#steer')) $('#steer').blur();
+  bubblePolicy.editor = live.state === 'connected' && document.activeElement === $('#steer');
+  bubble.classList.toggle('hidden', !bubblePolicy.visible(performance.now()));
   $('#steerRow').hidden = live.state !== 'connected';
 };
-$('#steer').addEventListener('focus', () => showBubble(60000));
-setInterval(syncBubble, 300);
+$('#steer').addEventListener('focus', syncBubble);
+$('#steer').addEventListener('blur', syncBubble);
+setInterval(syncBubble, 100);
 const BUBBLE_RESERVE = 190; // fixed headroom: the bubble has a constant size and never scales with her
 const BUBBLE_GAP = 26; // clear air between her crown and the bubble, even mid-motion
 
@@ -193,19 +192,31 @@ const downscaleTextures = (instance, maxSize) => {
     }
   });
 };
+let loadGeneration = 0, loadingAvatar = false, avatarSwitchGeneration = 0;
 async function loadAvatar() {
+  const generation = ++loadGeneration; loadingAvatar = true;
   const info = settings.avatar;
-  if (!info || !info.ok) { setStatus(info && info.problem ? info.problem : 'Choose an avatar in Settings.', 'error'); return; }
-  setStatus('Loading Tia…');
+  if (!info || !info.ok) { loadingAvatar = false; setStatus(info && info.problem ? info.problem : 'Choose an avatar in Settings.', 'error'); return; }
+  setStatus(`Loading ${info.name || 'avatar'}…`);
   const api = await avatarApi();
-  if (!api.supported()) { setStatus('WebGL is unavailable.', 'error'); return; }
+  if (generation !== loadGeneration) return;
+  if (!api.supported()) { loadingAvatar = false; setStatus('WebGL is unavailable.', 'error'); return; }
   visemeNames = info.visemes || visemeNames;
   const instance = api.create({ width: 1024, height: 1536 });
   try {
-    await instance.load(info.modelURL, { resources: Boolean(info.residentAvailable), pose: info.pose, yaw: info.yaw, performance: quality().performance, motionLibrary: info.motionsURL });
-  } catch (error) { instance.dispose(); setStatus('Avatar failed to load: ' + error.message, 'error'); return; }
+    await instance.load(info.modelURL, { resources: Boolean(info.residentAvailable), pose: info.pose, yaw: info.yaw, performance: quality().performance, motionLibrary: info.motionsURL, appearanceLibrary: info.appearanceURL });
+  } catch (error) { instance.dispose(); if (generation === loadGeneration) { loadingAvatar = false; setStatus('Avatar failed to load: ' + error.message, 'error'); } return; }
+  if (generation !== loadGeneration) { instance.dispose(); return; }
+  loadingAvatar = false;
   if (!info.residentAvailable) downscaleTextures(instance, quality().maxTexture);
   avatar = instance; ready = true;
+  try {
+    const slug=info.slug || info.dir;
+    const legacy=JSON.parse(localStorage.getItem(avatarOptionsKey()) || 'null');
+    const look=settings.avatarLooks?.[slug] ?? legacy ?? settings.appearanceDefaults?.[slug] ?? {};
+    avatar.options?.select({ ...look, performance: quality().performance });
+    if(info.slug)void gla.saveAppearance(info.slug,avatar.options.selection);
+  } catch {}
   userOrbit = { yaw: Number(settings.orbitYaw) || 0, pitch: Number(settings.orbitPitch) || 0 }; avatar.setOrbit(userOrbit);
   if (avatar.options) { companion = new CompanionController(); companion.reactions = true; avatar.companion = companion; }
   $('#name').textContent = settings.personaName || info.name || 'Tia';
@@ -220,12 +231,6 @@ function applyQuality() {
 }
 
 // ---------------------------------------------------------------- render loop
-let blinkNext = performance.now() + 2500, blinkAt = 0;
-const blinkAmounts = now => {
-  if (now >= blinkNext) { blinkAt = now; blinkNext = now + 2500 + Math.random() * 3500; }
-  const t = (now - blinkAt) / 170; const v = t >= 0 && t < 1 ? Math.sin(t * Math.PI) : 0;
-  return { l: v, r: v };
-};
 const pointer = { x: 0, y: 0, seen: false };
 let gaze = { x: 0, y: 0 };
 let frameGeometry = null; // {view, fit} of the last painted frame for hit tests and bubble placement
@@ -254,7 +259,8 @@ function paint(now) {
       avatar.prepareMotionFrame(now, reduce);
       fit = { scale, x: stage.anchor.x - stage.workArea.x - (bx + bw / 2) * scale, y: stage.anchor.y - stage.workArea.y - (by + bh) * scale };
     }
-    if (avatar.keepMotionInViewport) fit = avatar.keepMotionInViewport(fit, surface) || fit;
+    if (avatar.keepMotionInViewport) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
+    if(stage.manual)fit=keepManualVisible(fit,surface,layout);
   } else {
     if (userOrbitDirty) { avatar.setOrbit(userOrbit); userOrbitDirty = false; }
     avatar.prepareMotionFrame(now, reduce);
@@ -264,27 +270,46 @@ function paint(now) {
     fit = { scale: scale0, x: surface.x + surface.width / 2 - (bx + bw / 2) * scale0, y: surface.y + surface.height - (by + bh + pad) * scale0 };
     if (avatar.keepMotionInViewport) fit = avatar.keepMotionInViewport(fit, surface) || fit;
   }
+  if(stage && !stage.studio)stage.anchor={x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale,y:stage.workArea.y+fit.y+(by+bh)*fit.scale};
   const scale = fit.scale;
-  const view = { x: -fit.x / scale, y: -fit.y / scale, w: cssW / scale, h: cssH / scale };
-  const cap = q.cap / Math.max(cssW * dpr, cssH * dpr, 1); const density = scale * dpr * Math.min(1, cap);
-  view.projectedHeight = 1536 * scale; view.pixelWidth = Math.max(8, Math.round(view.w * density)); view.pixelHeight = Math.max(8, Math.round(view.h * density));
+  // A wide transparent window must not spend the render budget on empty
+  // desktop pixels. Render the body and prop rectangle at the same density
+  // as compact mode, then place that image into the transparent compositor.
+  const joints=avatar.jointBounds(),visible=avatar.options?.visiblePoints()||[];
+  const points=[{x:bx,y:by},{x:bx+bw,y:by+bh},...visible];
+  if(joints)points.push({x:joints.x,y:joints.y},{x:joints.x+joints.width,y:joints.y+joints.height});
+  const air=Math.max(20,bh*scale*.06);
+  const left=Math.floor(Math.min(...points.map(p=>p.x*scale+fit.x))-air),top=Math.floor(Math.min(...points.map(p=>p.y*scale+fit.y))-air);
+  const right=Math.ceil(Math.max(...points.map(p=>p.x*scale+fit.x))+air),bottom=Math.ceil(Math.max(...points.map(p=>p.y*scale+fit.y))+air);
+  const rect={x:Math.max(0,left),y:Math.max(0,top),w:Math.max(8,Math.min(cssW,right)-Math.max(0,left)),h:Math.max(8,Math.min(cssH,bottom)-Math.max(0,top))};
+  const view = { x: (rect.x-fit.x) / scale, y: (rect.y-fit.y) / scale, w: rect.w / scale, h: rect.h / scale };
+  const cap = q.cap / Math.max(rect.w * dpr, rect.h * dpr, 1); const density = scale * dpr * Math.min(1, cap);
+  view.projectedHeight = 1536 * scale;
+  // Small pose/breathing changes should not reallocate a WebGL drawing
+  // buffer for every one-pixel change in the visible rectangle.
+  view.pixelWidth = Math.max(32, Math.ceil(view.w * density / 32) * 32);
+  view.pixelHeight = Math.max(32, Math.ceil(view.h * density / 32) * 32);
   sampleAudio(now);
   const target = pointer.seen ? { x: Math.max(-1, Math.min(1, (pointer.x / cssW - .5) * 2)) * .6, y: Math.max(-1, Math.min(1, (pointer.y / cssH - .5) * -2)) * .35 } : { x: 0, y: 0 };
   gaze = { x: gaze.x + (target.x - gaze.x) * .08, y: gaze.y + (target.y - gaze.y) * .08 };
   const expression = { smile: .35, ...(avatar.motion ? avatar.motion.expression(now, reduce) : {}) };
-  const state = { reduce, viseme: currentViseme, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, blink: blinkAmounts(now), gaze, speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
+  const state = { reduce, viseme: currentViseme, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, gaze, audienceContact: !avatar.options?.enabled('followCursor'), speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
   const image = avatar.render(now, state, view);
   // Geometry, reactions and bubble placement never wait on drawing: a texture
   // swap right after the window grows must not leave stale small-window
   // coordinates behind, or a walk would start from the wrong place.
   frameGeometry = { view, scale, layout, fit, pad };
+  const overflow=left<0||right>cssW||top<0||bottom>cssH;
+  if((avatar.options?.selection.prop||overflow)&&!stage&&!stageBusy)void enterStage();
   consumeReaction(now);
   placeBubble();
   // While a texture-residency swap is in flight the renderer returns without
   // drawing; keep the previous frame instead of flashing an empty window.
   if (avatar.resources && !avatar.resources.ready) return;
   context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, stageEl.width, stageEl.height);
-  context.drawImage(image, 0, 0, image.width, image.height, 0, 0, stageEl.width, stageEl.height);
+  context.drawImage(image, 0, 0, image.width, image.height, rect.x*dpr, rect.y*dpr, rect.w*dpr, rect.h*dpr);
+  stageEl.style.visibility='visible';
+  updateHitMask();
 }
 // The window may hang past the screen edge (a close-up makes it larger than
 // the display; you can drag her half off screen). Overlays are clamped to the
@@ -342,10 +367,11 @@ function placeBubble() {
   bubble.style.left = Math.max(minX, Math.min(maxX, placeBubble.x)) + 'px';
   bubble.style.top = Math.max(minY, Math.min(placeBubble.y, floor)) + 'px';
   const pill = $('#listen'), pw = pill.offsetWidth || 90, ph = pill.offsetHeight || 24;
-  const pillAbove = headTop - ph - 10 >= clip.top + margin;
+  const pillGap = 16; // six extra pixels of breathing room
+  const pillAbove = headTop - ph - pillGap >= clip.top + margin;
   const sideRight = clip.right - centerX >= centerX - clip.left;
   pill.style.left = Math.max(clip.left + pw / 2 + margin, Math.min(clip.right - pw / 2 - margin, pillAbove ? centerX : centerX + (sideRight ? 1 : -1) * (Math.max(40, layout.bounds[2] * fit.scale * .28) + pw / 2 + 10))) + 'px';
-  pill.style.top = Math.max(clip.top + margin, Math.min(clip.bottom - ph - margin, pillAbove ? headTop - ph - 10 : headTop + 4)) + 'px';
+  pill.style.top = Math.max(clip.top + margin, Math.min(clip.bottom - ph - margin, pillAbove ? headTop - ph - pillGap : headTop + 4)) + 'px';
 }
 
 // ---------------------------------------------------------------- stage mode (screen-wide motion)
@@ -365,8 +391,8 @@ async function enterStage() {
     // Her on-screen scale in that baseline window, so a stage exit can map back to it.
     const baseScale = fit.scale * (compact.height / Math.max(1, bounds.height));
     stage = { workArea, anchor, scale: fit.scale, baseScale, compact, studio: null, travelClip: false, turning: false, idleSince: 0 };
-    gla.window.setIgnoreMouse(true); ignoring = true;
-    await gla.window.setBounds({ x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height });
+    ignoring=!(dragging||pinching||gesture);gla.window.setIgnoreMouse(ignoring);
+    await gla.window.setBounds({ x: workArea.x, y: workArea.y, width: workArea.width, height: workArea.height, expanded: true });
     lastFrame = 0; wake();
     return stage;
   })();
@@ -384,7 +410,11 @@ async function exitStage() {
   const factor = Math.max(.7, Math.min(2.5, scale / (current.baseScale || scale)));
   const area = current.workArea;
   let width = Math.max(MIN_WINDOW_WIDTH, Math.round(current.compact.width * factor)), height = Math.round(current.compact.height * factor);
-  if (height > area.height) { width = Math.round(width * area.height / height); height = area.height; }
+  if(current.manual){
+    width=Math.max(MIN_WINDOW_WIDTH,Math.ceil((bw+pad*2)*scale));
+    const content=(bh+pad*2)*scale;
+    height=Math.ceil(content/.7<BUBBLE_RESERVE/.3?content/.7:content+BUBBLE_RESERVE);
+  }else if (height > area.height) { width = Math.round(width * area.height / height); height = area.height; }
   const feet = { x: area.x + fit.x + (bx + bw / 2) * scale, y: area.y + fit.y + (by + bh) * scale };
   if (companion) { companion.command('pose'); companion.reactions = true; }
   if (avatar.studioStage) { avatar.studioStage = null; avatar.studioDistance = null; avatar.resetCameraApproach(); }
@@ -418,6 +448,9 @@ function stepStudio(now, surface) {
 }
 function maintainStage(now) {
   if (!stage || stageBusy) return;
+  if(stage.manual || avatar.options?.selection.prop)return;
+  const visible=avatar.options?.visiblePoints()||[],[bx,by,bw,bh]=avatar.layout().bounds;
+  if(visible.some(p=>p.x<bx-bw*.08||p.x>bx+bw*1.08||p.y<by-bh*.08||p.y>by+bh*1.08))return;
   const moving = Boolean(avatar.motion?.active) || Boolean(companion && (companion.walking || companion.roam || companion.follow || companion.come || companion.destination)) || dragging;
   if (moving) { stage.idleSince = 0; return; }
   if (!stage.idleSince) stage.idleSince = now;
@@ -452,6 +485,7 @@ window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID
   pending: companion && companion.pendingReaction && { kind: companion.pendingReaction.kind, clipID: companion.pendingReaction.clipID, action: companion.pendingReaction.action },
   motionActive: avatar && avatar.motion && avatar.motion.active && avatar.motion.active.id, clips: avatar && avatar.motion ? avatar.motion.clips.size : 0, status: document.querySelector('#status').textContent, played: window.gla_played,
   stage: stage && { anchor: stage.anchor, scale: Number(stage.scale.toFixed(3)), walking: Boolean(stage.studio), travelClip: stage.travelClip }, window: [innerWidth, innerHeight],
+  interaction: { dragging, pinching, held:gesture?.held||false, ignoring },
   companionState: companion && { walking: companion.walking, destination: companion.destination, pauseUntil: companion.pauseUntil, roam: companion.roam, come: companion.come, follow: companion.follow, reactions: companion.reactions },
   live: live.state, events: eventLog.slice(-40), lines: [$('#lineUser').textContent, $('#lineAssistant').textContent], bubbleHidden: bubble.classList.contains('hidden') });
 window.gla_played = [];
@@ -467,27 +501,38 @@ window.gla_visibleBox = () => { // painted pixel bounds in CSS px, for continuit
   return maxX < 0 ? null : { x: minX / dpr, y: minY / dpr, w: (maxX - minX) / dpr, h: (maxY - minY) / dpr, win: [innerWidth, innerHeight] };
 };
 window.gla_geometry = () => frameGeometry && { fit: frameGeometry.fit, joints: avatar && avatar.jointBounds && avatar.jointBounds(), stage: stage && { scale: stage.scale, studio: Boolean(stage.studio), entry: stage.studio && stage.studio.entryWeight } };
-window.gla_play = id => performAction(id.startsWith('clip:') || isSpatialAction(id) || id.startsWith('go-') || ['sit', 'stand', 'wave', 'dance', 'heart', 'stay'].includes(id) ? id : 'clip:' + id);
+window.gla_play = id => performAction(id.startsWith('clip:') || isSpatialAction(id) || id.startsWith('go-') || ['sit', 'stand', 'wave', 'dance', 'heart', 'stay','smile','laugh'].includes(id) ? id : 'clip:' + id);
 function loop(now) {
   renderRequest = 0;
   const q = quality();
   const active = speaking || live.state !== 'idle' || (avatar && avatar.motion && avatar.motion.active) || now < manualUntil || dragging || Boolean(stage);
-  const interval = 1000 / (active ? q.activeFps : q.idleFps);
+  const interval = 1000 / (dragging || pinching ? 60 : active ? q.activeFps : q.idleFps);
   if (now - lastFrame >= interval) { lastFrame = now; try { paint(now); maintainStage(now); } catch (error) { console.error(error); } }
   renderRequest = requestAnimationFrame(loop);
 }
 const wake = () => { if (!renderRequest) renderRequest = requestAnimationFrame(loop); };
 
 // ---------------------------------------------------------------- motions from replies
+let actionGeneration = 0;
 const performAction = async action => {
+  const generation = ++actionGeneration, target = avatar;
   if (!avatar || !companion) return;
+  if(action==='smile'||action==='laugh'){
+    if(avatar.appearance?.face.react(action)){manualUntil=performance.now()+4800;wake();}
+    return;
+  }
   if (action === 'stay') { companion.command('stay'); companion.reactions = true; avatar.motion && avatar.motion.stop(); return; }
   if (action !== 'stay' && isSpatialAction(action)) { if (reduce) { toast('Turn off Reduce Motion to walk across the screen.'); return; } await beginWalk(action); return; }
+  if (action === 'reactions-on' || action === 'reactions-off') { companion.reactions = action === 'reactions-on'; return; }
   let clipID = action.startsWith('clip:') ? action.slice(5) : action === 'dance' && avatar.motion.clips.has('joyful-sway') ? 'joyful-sway' : ['wave', 'dance'].includes(action) ? action : null;
+  if (action === 'random-dance' || action === 'random-motion') { const pool = [...avatar.motion.clips.values()].filter(c => action === 'random-motion' || /dance|dancing|sway|groove/i.test(c.id + ' ' + c.category)); clipID = pool[Math.floor(Math.random() * pool.length)]?.id; }
   if (clipID) {
     if (!avatar.motion.clips.has(clipID)) { toast('That motion is not installed.'); return; }
+    companion.command('stay'); if (stage) stage.travelClip = false;
     if (!avatar.motion.isPortraitGesture(clipID)) await enterStage();
-    avatar.motion.stop(); window.gla_played.push(clipID); await avatar.motion.play(clipID, { loop: false }); wake(); return;
+    if (generation !== actionGeneration || target !== avatar) return;
+    avatar.motion.stop(); const played = await avatar.motion.play(clipID, { loop: false });
+    if (played !== false && generation === actionGeneration && target === avatar) window.gla_played.push(clipID); wake(); return;
   }
   const id = { heart: 'Ps001.heart', sit: 'Ps004.sit', stand: '' }[action];
   if (id !== undefined && avatar.options) { avatar.motion && avatar.motion.stop(); avatar.options.select({ ...avatar.options.selection, body: id, hands: undefined, leftHand: undefined, rightHand: undefined, playTransitions: 'false' }); wake(); }
@@ -505,8 +550,13 @@ let latestUser = '', turnID = '';
 const considerReply = reply => { if (!companion) return; companion.consider(latestUser, reply, undefined, performance.now(), { clips: avatar && avatar.motion ? avatar.motion.clips : null, turnID }); };
 
 // ---------------------------------------------------------------- live session
-const live = new LiveClient({ createSession: sdp => gla.createLiveSession(sdp) });
+const live = new LiveClient({ createSession: (sdp, options) => gla.createLiveSession(sdp, options) });
+const delegate = new DelegateClient(live,gla.delegate,message=>{if(message)toast(message,message==='Thinking…'?2000:7000);});
+const preview = new VoicePreview({ createSession: (sdp, options) => gla.createLiveSession(sdp, options), live, audio,
+  notify: state => { gla.reportVoicePreview(state); if (state.error) toast(state.error, 6000); else if (state.state !== 'idle') toast(`${state.state === 'connecting' ? 'Loading' : 'Playing'} ${state.voice} voice preview…`, 3000); } });
+addEventListener('pagehide', () => preview.stop());
 window.gla_live = live; // debug handle
+window.gla_preview = preview; // QA: inspect preview transport without exposing credentials
 Object.defineProperty(window, 'gla_avatar', { get: () => avatar }); // debug handle
 live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
 live.addEventListener('error', ({ detail }) => eventLog.push([performance.now() | 0, 'error:' + detail.message]));
@@ -515,8 +565,8 @@ const ENDED_REASONS = { user: 'Conversation ended.', close_requested: 'Conversat
 live.addEventListener('state', ({ detail }) => {
   const s = detail.state;
   if (s === 'idle') { setStatus(ENDED_REASONS[detail.reason] || `Ended (${detail.reason}).`, '', 4000); analyser = null; audio.srcObject = null; currentViseme = 'sil'; speaking = false; $('#muteBtn').classList.remove('active'); }
-  if (s === 'connecting') { setStatus('Connecting to GPT-Live…', 'connecting'); $('#lineUser').textContent = ''; $('#lineAssistant').textContent = ''; }
-  if (s === 'connected') { setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; lastUserActivity = performance.now(); live.appendCommentary('Greet the user warmly in one short sentence right now, then pause and listen.'); }
+  if (s === 'connecting') { setStatus(live.resumed ? 'Switching voice…' : 'Connecting to GPT-Live…', 'connecting'); if (!live.resumed) { $('#lineUser').textContent = ''; $('#lineAssistant').textContent = ''; } }
+  if (s === 'connected') { setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; lastUserActivity = performance.now(); if (detail.resumed) live.appendInstructions('The connection settings changed. Continue the previous conversation and wait for their next message. Do not repeat the greeting or previous answer.'); else live.appendCommentary('Greet the user warmly in one short sentence right now, then pause and listen.'); }
   gla.live.heartbeat(s !== 'idle');
   wake();
 });
@@ -528,7 +578,7 @@ live.addEventListener('transcript', ({ detail }) => {
   const { role, text, final } = detail; if (!text) return;
   const line = role === 'user' ? $('#lineUser') : $('#lineAssistant');
   line.textContent = text; line.classList.toggle('pending', !final);
-  showBubble(9000); // a real message: your words or her reply
+  if (role === 'assistant') showBubble(9000); // incoming replies alone wake auto mode
   if (role === 'user') {
     lastUserActivity = performance.now();
     if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } }
@@ -576,6 +626,7 @@ setInterval(() => {
 live.addEventListener('state', ({ detail }) => { if (detail.state === 'connected' && live.microphone) attachMicrophone(live.microphone); if (detail.state === 'idle') micAnalyser = null; });
 
 const toggleCall = async () => {
+  preview.stop();
   if (!settings.hasKey) { gla.openSettings(); return; }
   if (live.state !== 'idle') { live.stop('user'); return; }
   const allowed = await gla.mic.ask();
@@ -585,22 +636,26 @@ const toggleCall = async () => {
     gla.mic.openPrivacy(); return;
   }
   if (audioContext && audioContext.state === 'suspended') audioContext.resume();
-  audio.play().catch(() => {}); live.start();
+  audio.play().catch(() => {}); live.start({ voice: settings.voice });
 };
 // Steering / follow-up: commentary makes her act on it right away; a plain
 // instruction append is absorbed silently and may never produce a reply.
 const steer = () => {
   const text = $('#steer').value.trim(); if (!text || live.state !== 'connected') return;
-  live.appendCommentary(text); lastUserActivity = performance.now(); $('#steer').value = '';
+  delegate.cancel(); live.remember('user', text); live.appendCommentary(text); lastUserActivity = performance.now(); $('#steer').value = '';
   // Echo what you typed as your side of the conversation and start a new turn.
   turnID = 'typed-' + Date.now().toString(36); assistantTurn = ''; latestUser = text;
   $('#lineUser').textContent = text; $('#lineUser').classList.remove('pending'); $('#lineAssistant').textContent = '';
-  showBubble(9000); $('#steer').blur();
+  $('#steer').blur(); syncBubble();
 };
+$('#steerDialog').addEventListener('close', () => {
+  if ($('#steerDialog').returnValue === 'send') { $('#steer').value = $('#steerMessage').value; steer(); }
+  $('#steerMessage').value = '';
+});
 const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.toggle('active', live.muted); $('#muteBtn').title = live.muted ? 'Unmute microphone' : 'Mute microphone'; };
 $('#steerBtn').onclick = steer;
 $('#muteBtn').onclick = toggleMute;
-$('#hushBtn').onclick = () => { live.stopSpeaking(); toast('Asked her to stop.'); };
+$('#hushBtn').onclick = () => { delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); };
 $('#endBtn').onclick = () => { if (live.state !== 'idle') live.stop('user'); };
 $('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); if (e.key === 'Escape') $('#steer').blur(); });
 // Right-click anywhere on her body or the bubble: the native menu holds every control.
@@ -609,59 +664,167 @@ const catalogue = () => {
   const o = avatar.options, sel = o.selection || {};
   const clips = avatar.motion ? [...avatar.motion.clips.values()].map(c => ({ id: c.id, label: c.label || c.id, category: c.category || 'Motions' })) : [];
   const poses = [...(o.poses ? o.poses.values() : [])].filter(p => p.group === 'body').map(p => ({ id: p.id, label: p.label || p.id }));
-  return { clips, poses, outfits: (o.outfits || []).map(x => ({ id: x.id, label: x.label || x.id })), props: (o.props || []).map(x => ({ id: x.id, label: x.label || x.id })),
-    current: { pose: sel.body || '', outfit: sel.outfit || (o.data && o.data.defaultOutfit) || '', prop: sel.prop || '' } };
+  return { ...o.catalogue(), clips, poses,
+    current: { ...sel, pose: sel.body || '', outfit: sel.outfit || o.data.defaultOutfit || '', prop: sel.prop || '',
+      accessory: sel.accessory || o.data.defaultAccessory || '', lighting: sel.lighting || avatar.appearance.defaultLighting } };
 };
+const avatarOptionsKey = () => `gla-options:${settings.avatar?.slug || settings.avatar?.dir || 'avatar'}:${settings.avatar?.manifest?.assetRevision || 'v1'}`;
+function persistAppearance() {
+  const selection=avatar.options.selection;
+  localStorage.setItem(avatarOptionsKey(),JSON.stringify(selection));
+  const slug=settings.avatar?.slug;
+  if(slug){settings.avatarLooks={...settings.avatarLooks,[slug]:{...selection}};void gla.saveAppearance(slug,selection);}
+}
+function chooseAvatarOption(key, value) {
+  if (!avatar?.options) return;
+  const o=avatar.options, next={...o.selection,[key]:value};
+  if(key==='prop'&&value) {
+    const prop=o.props.find(x=>x.id===value);
+    if(prop?.pose) {next.body=prop.pose;next.hands=prop.hands;delete next.leftHand;delete next.rightHand;}
+  }
+  o.select(next);
+  persistAppearance();
+  wake();
+}
 const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode(), catalogue: catalogue() });
 addEventListener('contextmenu', event => {
   event.preventDefault();
-  if (bubble.contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
+  if (bubble.contains(event.target) || $('#listen').contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
 });
 gla.onMenuAction(id => {
   if (id === 'call') toggleCall();
   else if (id === 'mute') toggleMute();
-  else if (id === 'hush') { live.stopSpeaking(); toast('Asked her to stop.'); }
-  else if (id === 'steer') { if (live.state === 'connected') { showBubble(60000); syncBubble(); $('#steer').focus(); } else toast('Start a conversation first.'); }
+  else if (id === 'hush') { delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); }
+  else if (id === 'steer') { if (live.state === 'connected') { if (bubbleMode() === 'off') $('#steerDialog').showModal(); else { bubble.classList.remove('hidden'); $('#steer').focus(); syncBubble(); } } else toast('Start a conversation first.'); }
+  else if (id.startsWith('avatar:')) void gla.selectAvatar(id.slice(7));
+  else if (id.startsWith('voice-preview:')) { const voice = id.slice(14); if (voice) void preview.start(voice); else preview.stop(); }
+  else if (id.startsWith('voice:')) void gla.setSettings({ voice: id.slice(6) });
   else if (id.startsWith('bubble:')) gla.setSettings({ bubbleMode: id.slice(7), bubble: id.slice(7) !== 'off' });
   else if (id.startsWith('motion:')) void performAction('clip:' + id.slice(7)).catch(e => toast(e.message));
   else if (id.startsWith('pose:') && avatar && avatar.options) { avatar.motion && avatar.motion.stop(); avatar.options.select({ ...avatar.options.selection, body: id.slice(5), hands: undefined, leftHand: undefined, rightHand: undefined }); wake(); }
-  else if (id.startsWith('outfit:') && avatar && avatar.options) { avatar.options.select({ ...avatar.options.selection, outfit: id.slice(7) }); wake(); }
-  else if (id.startsWith('prop:') && avatar && avatar.options) { avatar.options.select({ ...avatar.options.selection, prop: id.slice(5) }); wake(); }
+  else if(id==='appearance-reset' && avatar?.options) {
+    avatar.options.select({...settings.appearanceDefaults?.[settings.avatar?.slug],performance:quality().performance});persistAppearance();wake();
+  }
+  else if (id.startsWith('outfit:')) chooseAvatarOption('outfit', id.slice(7));
+  else if (id.startsWith('prop:')) chooseAvatarOption('prop', id.slice(5));
+  else if (id.startsWith('appearance:')) {
+    const tail=id.slice(11), split=tail.lastIndexOf(':');
+    if(split>=0) chooseAvatarOption(tail.slice(0,split),tail.slice(split+1));
+  }
   else if (id === 'stay') void performAction('stay');
+  else if (id === 'recover') void recoverPlacement();
   else if (id === 'settings') gla.openSettings();
   else if (id === 'quit') { live.stop('quit'); gla.quit(); }
   else if (id.startsWith('end:')) live.stop(id.slice(4));
 });
 
 // ---------------------------------------------------------------- interaction: drag, rotate, pinch, hit testing
-const paintedAt = (x, y) => { if (!frameGeometry) return false; const dpr = stageEl.width / innerWidth; try { return context.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data[3] > 18; } catch { return true; } };
-// Hold to drag: press and keep still for a moment, then move her. A quick
-// swipe does nothing, so two-finger scrolling (rotate) never drags her.
-const HOLD_MS = 220;
-let gesture = null;
-stageEl.addEventListener('pointerdown', event => {
-  if (event.button !== 0 || !paintedAt(event.clientX, event.clientY)) return;
-  gesture = { x: event.screenX, y: event.screenY, startX: event.screenX, startY: event.screenY, held: false, timer: 0 };
-  gesture.timer = setTimeout(() => { if (!gesture) return; gesture.held = true; dragging = true; stageEl.classList.add('dragging'); }, HOLD_MS);
-  stageEl.setPointerCapture(event.pointerId);
-});
-stageEl.addEventListener('pointermove', event => {
-  pointer.x = event.clientX; pointer.y = event.clientY; pointer.seen = true; wake();
-  if (!gesture) return;
-  if (!gesture.held) { if (Math.hypot(event.screenX - gesture.startX, event.screenY - gesture.startY) > 8) { clearTimeout(gesture.timer); gesture = null; } return; }
-  const dx = event.screenX - gesture.x, dy = event.screenY - gesture.y;
-  if (stage) {
-    stage.anchor.x += dx; stage.anchor.y += dy;
-    if (stage.studio) { const { fit } = frameGeometry; stage.studio.manual({ ...fit, x: fit.x + dx, y: fit.y + dy }, { x: 0, y: 0, width: innerWidth, height: innerHeight }); companion.pause(performance.now()); }
-    wake();
-  } else gla.window.moveBy(dx, dy);
-  gesture.x = event.screenX; gesture.y = event.screenY;
-});
-const endGesture = () => {
-  if (gesture) clearTimeout(gesture.timer);
-  gesture = null; dragging = false; stageEl.classList.remove('dragging');
+// Read a small alpha mask once per painted frame. A GPU readback on every
+// pointer event serialized rendering and made high-rate trackpads feel sticky.
+const hitCanvas=document.createElement('canvas'),hitContext=hitCanvas.getContext('2d',{willReadFrequently:true});
+let hitMask=null;
+function updateHitMask(){
+  const factor=192/Math.max(innerWidth,innerHeight);
+  const w=Math.max(1,Math.round(innerWidth*factor)),h=Math.max(1,Math.round(innerHeight*factor));
+  if(hitCanvas.width!==w||hitCanvas.height!==h){hitCanvas.width=w;hitCanvas.height=h;}
+  hitContext.clearRect(0,0,w,h);hitContext.drawImage(stageEl,0,0,w,h);
+  hitMask=hitContext.getImageData(0,0,w,h);
+}
+const paintedAt=(x,y)=>{
+  if(!hitMask||x<0||y<0||x>=innerWidth||y>=innerHeight)return false;
+  const px=Math.min(hitMask.width-1,Math.floor(x/innerWidth*hitMask.width)),py=Math.min(hitMask.height-1,Math.floor(y/innerHeight*hitMask.height));
+  return hitMask.data[(py*hitMask.width+px)*4+3]>18;
 };
-stageEl.addEventListener('pointerup', endGesture); stageEl.addEventListener('pointercancel', endGesture);
+const HOLD_MS=220;
+let gesture=null,dragFrame=0,dragDX=0,dragDY=0;
+// Manual placement owns one screen-space transform. A studio walk used to
+// keep a second scale and a stale delta baseline, fighting pinch and drag.
+function takeManualPlacement(){
+  if(!stage||!frameGeometry)return;
+  if(stage.studio){
+    const {fit,layout}=frameGeometry,[bx,by,bw,bh]=layout.bounds;
+    stage.scale=fit.scale;
+    stage.anchor={x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale,y:stage.workArea.y+fit.y+(by+bh)*fit.scale};
+    stage.studio=null;avatar.studioStage=null;
+    if(stage.travelClip)avatar.motion?.stop();
+    stage.travelClip=false;stage.turning=false;
+  }
+  companion?.command('stay');
+  stage.manual=true;
+}
+function keepManualVisible(fit,surface,layout){
+  const [fx,fy,fw,fh]=layout.faceBounds||layout.bounds;
+  const crown=avatar.crownProjection?.();
+  const headX=Number.isFinite(crown?.x)?crown.x:fx+fw/2;
+  const headY=Number.isFinite(crown?.y)?crown.y:fy;
+  const margin=Math.min(80,Math.max(24,fw*fit.scale*.35));
+  return {...fit,
+    x:Math.max(surface.x+margin-headX*fit.scale,Math.min(surface.x+surface.width-margin-headX*fit.scale,fit.x)),
+    y:Math.max(surface.y+12-headY*fit.scale,Math.min(surface.y+surface.height-Math.min(120,fh*fit.scale)-headY*fit.scale,fit.y))};
+}
+async function recoverPlacement(){
+  endGesture();clearTimeout(resizeTimer);if(pinchFrame)cancelAnimationFrame(pinchFrame);pinchFrame=0;pendingScale=1;pinching=false;
+  if(stageBusy)await stageBusy;
+  companion?.command('stay');avatar?.motion?.stop();
+  stage=null;
+  if(avatar){avatar.studioStage=null;avatar.studioDistance=null;avatar.resetCameraApproach();}
+  userOrbitDirty=true;
+  const restored=await gla.window.recover();
+  if(restored&&avatar){
+    avatar.setOrbit(userOrbit);userOrbitDirty=false;
+    const {area,placement:p}=restored,[bx,by,bw,bh]=avatar.layout().bounds;
+    const scale=Math.min(p.bodyHeight,area.height*.7)/bh;
+    stage={workArea:area,anchor:{x:area.x+area.width-p.right,y:area.y+p.bodyTop+bh*scale},scale,baseScale:scale,
+      compact:{width:p.windowWidth,height:p.windowHeight},manual:true,studio:null,travelClip:false,turning:false,idleSince:0};
+  }
+  await refreshClip();lastFrame=0;paint(performance.now());rememberPlacement();wake();
+}
+function flushDrag(){
+  dragFrame=0;const dx=dragDX,dy=dragDY;dragDX=dragDY=0;if(!dx&&!dy)return;
+  if(stage){
+    stage.anchor.x+=dx;stage.anchor.y+=dy;
+    lastFrame=0;wake();
+  }else gla.window.moveBy(dx,dy);
+}
+function rememberPlacement(){
+  if(!stage||!frameGeometry)return;
+  const {fit,layout,pad}=frameGeometry,[bx,by,bw,bh]=layout.bounds;
+  const width=Math.max(MIN_WINDOW_WIDTH,Math.ceil((bw+pad*2)*fit.scale));
+  const content=(bh+pad*2)*fit.scale;
+  // Below the full bubble reserve, compact framing reserves 30% instead.
+  const actualHeight=Math.ceil(content/ .7 < BUBBLE_RESERVE/.3 ? content/.7 : content+BUBBLE_RESERVE);
+  gla.window.remember({x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale-width/2,
+    y:stage.workArea.y+fit.y+(by+bh+pad)*fit.scale-actualHeight,width,height:actualHeight});
+}
+function startDrag(){if(!gesture)return;clearTimeout(gesture.timer);takeManualPlacement();gesture.held=true;dragging=true;stageEl.classList.add('dragging');gla.window.setIgnoreMouse(false);ignoring=false;lastFrame=0;wake();}
+stageEl.addEventListener('pointerdown',event=>{
+  if(event.button!==0||!paintedAt(event.clientX,event.clientY))return;
+  endGesture();
+  gesture={x:event.screenX,y:event.screenY,startX:event.screenX,startY:event.screenY,id:event.pointerId,held:false,timer:0};
+  gesture.timer=setTimeout(startDrag,HOLD_MS);stageEl.setPointerCapture(event.pointerId);
+});
+stageEl.addEventListener('pointermove',event=>{
+  pointer.x=event.clientX;pointer.y=event.clientY;pointer.seen=true;wake();
+  if(!gesture||event.pointerId!==gesture.id)return;
+  if(!gesture.held){
+    // A deliberate move starts dragging instead of cancelling the whole hold.
+    if(Math.hypot(event.screenX-gesture.startX,event.screenY-gesture.startY)>8)startDrag();
+    else return;
+  }
+  dragDX+=event.screenX-gesture.x;dragDY+=event.screenY-gesture.y;
+  gesture.x=event.screenX;gesture.y=event.screenY;
+  if(!dragFrame)dragFrame=requestAnimationFrame(flushDrag);
+});
+const endGesture=event=>{
+  if(gesture&&event?.pointerId!==undefined&&event.pointerId!==gesture.id)return;
+  if(dragFrame)cancelAnimationFrame(dragFrame);flushDrag();
+  const old=gesture;if(old)clearTimeout(old.timer);
+  gesture=null;dragging=false;stageEl.classList.remove('dragging');
+  if(old&&stageEl.hasPointerCapture(old.id))stageEl.releasePointerCapture(old.id);
+  if(old?.held){lastFrame=0;requestAnimationFrame(()=>{rememberPlacement();});}
+};
+stageEl.addEventListener('pointerup',endGesture);stageEl.addEventListener('pointercancel',endGesture);
+stageEl.addEventListener('lostpointercapture',endGesture);addEventListener('blur',endGesture);
 // Double-click her head to start or end a conversation.
 const onHead = (x, y) => {
   if (!frameGeometry) return false;
@@ -675,18 +838,26 @@ stageEl.addEventListener('dblclick', event => {
   if (!onHead(event.clientX, event.clientY)) { toast(live.state === 'idle' ? 'Double-click my head to start talking.' : 'Double-click my head to end the conversation.'); return; }
   toggleCall();
 });
-let resizeTimer = 0, pendingScale = 1;
-const MIN_WINDOW_WIDTH = 360; // the bubble is 340 px wide and never shrinks with her
-if (innerWidth < MIN_WINDOW_WIDTH) void gla.window.resizeTo(MIN_WINDOW_WIDTH, Math.round(innerHeight * MIN_WINDOW_WIDTH / innerWidth));
-addEventListener('wheel', event => {
-  if (!avatar) return;
+let resizeTimer=0,pendingScale=1,pinchFrame=0,pinching=false;
+const MIN_WINDOW_WIDTH=360;
+async function flushPinch(){
+  if(!stage)await enterStage();
+  pinchFrame=0;
+  if(!stage){pendingScale=1;return;}
+  takeManualPlacement();
+  stage.scale=Math.min(1.25,Math.max(.12,stage.scale*pendingScale));pendingScale=1;
+  lastFrame=0;wake();
+}
+addEventListener('wheel',event=>{
+  if(!avatar)return;
   event.preventDefault();
-  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
-  if (event.ctrlKey) { // trackpad pinch arrives as ctrl+wheel
-    const delta = Math.max(-90, Math.min(90, event.deltaY * unit));
-    pendingScale *= Math.exp(-delta * .0075);
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(async () => { let s = pendingScale; pendingScale = 1; if (stage) { stage.scale = Math.min(6, Math.max(.15, stage.scale * s)); lastFrame = 0; wake(); return; } s = Math.max(s, MIN_WINDOW_WIDTH / innerWidth); await gla.window.resizeTo(innerWidth * s, innerHeight * s); lastFrame = 0; wake(); }, 40);
+  const unit=event.deltaMode===1?16:event.deltaMode===2?innerHeight:1;
+  if(event.ctrlKey){
+    endGesture();
+    const delta=Math.max(-90,Math.min(90,event.deltaY*unit));
+    pendingScale*=Math.exp(-delta*.0075);pinching=true;
+    if(!pinchFrame)pinchFrame=requestAnimationFrame(()=>void flushPinch());
+    clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{pinching=false;requestAnimationFrame(rememberPlacement);},160);
     return;
   }
   const dx = Math.max(-120, Math.min(120, event.deltaX * unit || 0)), dy = Math.max(-120, Math.min(120, event.deltaY * unit || 0));
@@ -700,7 +871,8 @@ let wheelSave = 0;
 let ignoring = false;
 addEventListener('mousemove', event => {
   const overBubble = !bubble.classList.contains('hidden') && bubble.contains(event.target);
-  const hit = overBubble || dragging || Boolean(gesture) || paintedAt(event.clientX, event.clientY);
+  const overPill = !$('#listen').classList.contains('hidden') && $('#listen').contains(event.target);
+  const hit = overBubble || overPill || $('#steerDialog').open || dragging || pinching || Boolean(gesture) || paintedAt(event.clientX, event.clientY);
   if (hit === ignoring) { ignoring = !hit; gla.window.setIgnoreMouse(ignoring); }
 });
 addEventListener('resize', () => { lastFrame = 0; wake(); });
@@ -712,9 +884,30 @@ const applySettings = next => {
   syncBubble();
   $('#name').textContent = settings.personaName || 'Tia';
   if (avatar && previous.quality !== settings.quality) applyQuality();
-  // Switching avatar (picker) or package folder swaps the whole model.
-  if (avatar && (previous.avatarDir !== settings.avatarDir || (previous.avatar && previous.avatar.dir) !== (settings.avatar && settings.avatar.dir) || (previous.avatar && previous.avatar.slug) !== (settings.avatar && settings.avatar.slug))) { if (stage) void exitStage(); avatar.dispose(); avatar = null; companion = null; ready = false; void loadAvatar(); }
-  if (!avatar && settings.avatar && settings.avatar.ok && !ready) void loadAvatar();
+  const changedAvatar = previous.avatarDir !== settings.avatarDir || previous.avatar?.dir !== settings.avatar?.dir || previous.avatar?.slug !== settings.avatar?.slug;
+  if (changedAvatar) {
+    // Stage exit changes the native window's aspect ratio. Hide the old
+    // bitmap until the replacement's first complete frame is drawn.
+    stageEl.style.visibility='hidden';
+    ready=false;
+    const switchGeneration = ++avatarSwitchGeneration;
+    ++loadGeneration; loadingAvatar = false; ++actionGeneration;
+    void (async () => {
+      if (stageBusy) await stageBusy;
+      if (switchGeneration !== avatarSwitchGeneration) return;
+      if (stage) await exitStage();
+      if (switchGeneration !== avatarSwitchGeneration) return;
+      avatar?.dispose(); avatar = null; companion = null; ready = false; frameGeometry = null;
+      if (!loadingAvatar) void loadAvatar();
+    })();
+    if (live.state === 'connected') live.appendInstructions(`The on-screen avatar is now ${settings.personaName}. Use this name from now on. Available motions: ${(settings.avatar?.clipLabels || []).join(', ')}.`);
+  } else if (!avatar && settings.avatar?.ok && !ready && !loadingAvatar) void loadAvatar();
+  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel;
+  if (previous.voice !== settings.voice || changedReasoning) {
+    delegate.cancel();
+    preview.stop(); clearTimeout(applySettings.voiceTimer);
+    if (live.state !== 'idle') applySettings.voiceTimer = setTimeout(() => { if (live.state !== 'idle') { toast(changedReasoning?'Applying reasoning settings and reconnecting…':'Switching voice and reconnecting…'); void live.restart(settings.voice); } }, 200);
+  }
   const fallback = settings.avatar && settings.avatar.fallbackFor;
   if (fallback && fallback !== (previous.avatar && previous.avatar.fallbackFor)) toast(`${fallback} is not downloaded yet, so Tia is shown. Download it under Settings › Avatar.`, 8000);
 };

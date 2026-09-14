@@ -9,3 +9,6 @@ build/*
 ios/Resources/model.glb
 .DS_Store
 ios/build/DerivedData/
+
+__pycache__/
+*.pyc

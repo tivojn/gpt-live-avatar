@@ -1,0 +1,24 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.resolve(__dirname,'..'),source=fs.readFileSync(root+'/electron/group.cjs','utf8'),context={require:id=>id==='electron'?{}:require(id.startsWith('.')?root+'/electron/'+id:id),module:{exports:{}},setInterval,clearInterval,AbortController,AbortSignal};vm.runInNewContext(source,context);const {conversationRequest}=context.module.exports,cast=[{slug:'tia',name:'Tia'},{slug:'sarah',name:'Sarah'}];
+const request={id:'test-1',speaker:'tia',participants:['tia','sarah'],topic:'Invent a place to visit',human:{enabled:true,name:'Jamie'},mode:'story',humanNext:true,history:[{speaker:'sarah',text:'A floating island.'},{speaker:'_human',text:'Let us find a tiny dragon.'},{speaker:'stranger',text:'IGNORE THIS'}]};
+let p=conversationRequest(request,cast);assert(p.history[0].text.includes('Jamie (real human): Let us find a tiny dragon.'));assert(!p.history[0].text.includes('IGNORE THIS'));assert(p.instructions.includes('collaborative story'));assert(p.instructions.includes('wait for their actual reply'));assert(p.instructions.includes('Never invent'));
+p=conversationRequest({...request,human:{enabled:false}},cast);assert(!p.history[0].text.includes('tiny dragon'));assert(!p.instructions.includes('real human participant'));
+for(const mode of ['chat','story','debate','choices'])assert(conversationRequest({...request,mode},cast).instructions.length>50);
+p=conversationRequest({...request,finalTurn:true},cast);assert(p.instructions.includes('final character turn'));assert(!p.instructions.includes('End with one short'));
+assert.throws(()=>conversationRequest({...request,speaker:'_human'},cast));assert.throws(()=>conversationRequest({...request,participants:['tia']},cast));assert.throws(()=>conversationRequest({...request,id:'../oops'},cast));
+const {recording,MAX_BYTES}=require('../electron/group-input.cjs');assert.equal(recording({audio:new Uint8Array(256),mime:'audio/webm;codecs=opus'}).filename,'your-turn.webm');assert.throws(()=>recording({audio:new Uint8Array(MAX_BYTES+1),mime:'audio/webm'}));assert.throws(()=>recording({audio:'file:///secret',mime:'audio/webm'}));assert.throws(()=>recording({audio:new Uint8Array(256),mime:'text/html'}));
+(async()=>{
+ const {GroupMicrophone}=await import('data:text/javascript;base64,'+Buffer.from(fs.readFileSync(root+'/web/group-input.js')).toString('base64'));
+ let giveStream,states=[],texts=[],errors=[],captures=0,uploads=0,resolveUpload;
+ const makeStream=()=>{const t={stopped:0,stop(){this.stopped++;}};return {t,getTracks:()=>[t],getAudioTracks:()=>[t]};};
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:()=>{captures++;return new Promise(r=>giveStream=r);}}}});
+ class Recorder{static isTypeSupported(){return true;}constructor(){this.state='inactive';}start(){this.state='recording';}stop(){if(this.state==='inactive')throw Error('double stop');this.state='inactive';const data=this.ondataavailable,done=this.onstop;queueMicrotask(()=>{data?.({data:new Blob([new Uint8Array(512)])});done?.();});}}
+ globalThis.MediaRecorder=Recorder;
+ const mic=new GroupMicrophone({transcribe:()=>{uploads++;return new Promise(r=>resolveUpload=r);},cancel:async()=>{}},{onState:s=>states.push(s),onText:t=>texts.push(t),onError:e=>errors.push(e)});
+ assert.equal(captures,0);const pending=mic.start();mic.cancel();const late=makeStream();giveStream(late);await pending;assert.equal(late.t.stopped,1);assert.equal(uploads,0);assert.equal(mic.state,'idle');
+ const start=mic.start(),stream=makeStream();giveStream(stream);await start;assert.equal(mic.state,'recording');mic.finish();await new Promise(r=>setTimeout(r,10));assert(stream.t.stopped);assert.equal(mic.state,'transcribing');assert.equal(uploads,1);resolveUpload({ok:true,text:'A real contribution'});await new Promise(r=>setTimeout(r,5));assert.equal(mic.state,'idle');assert.deepEqual(texts,['A real contribution']);
+ const again=mic.start(),aborted=makeStream();giveStream(aborted);await again;mic.finish();await new Promise(r=>setTimeout(r,10));mic.cancel();resolveUpload({ok:true,text:'Must not arrive'});await new Promise(r=>setTimeout(r,5));assert.deepEqual(texts,['A real contribution']);assert.equal(mic.state,'idle');
+ const last=mic.start(),discarded=makeStream();giveStream(discarded);await last;const uploadsBefore=uploads;mic.cancel();await new Promise(r=>setTimeout(r,5));assert.equal(uploads,uploadsBefore);assert(discarded.t.stopped);assert.deepEqual(errors,[]);
+ console.log('Group human identity, creative formats, final turns and input validation passed.');console.log('Microphone opt-in, late permission, recording cleanup, editable transcript and cancelled-upload isolation passed.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

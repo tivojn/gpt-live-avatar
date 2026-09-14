@@ -1,0 +1,12 @@
+{
+  "size": 65,
+  "log2Domain": [
+    -12.473931188,
+    4.026068812
+  ],
+  "input": "Linear Rec.709",
+  "display": "sRGB",
+  "view": "Filmic",
+  "look": "None",
+  "ocioVersion": "2.5.2"
+}

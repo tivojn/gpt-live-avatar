@@ -12,6 +12,9 @@
 // that when a runtime manifest declares `renderer: "3d"`.
 import * as THREE from '/vendor/three/three.module.js';
 import { GLTFLoader } from '/vendor/three/GLTFLoader.js';
+import { AvatarVolumeSkin } from '/avatar3d-volume.js';
+import { NaturalAttention } from '/avatar3d-attention.js';
+import { AvatarClearance } from '/avatar3d-clearance.js';
 import { RoomEnvironment } from '/vendor/three/RoomEnvironment.js';
 import { Avatar3DOptions, Avatar3DAppearance, mountAvatar3DOptions } from '/avatar3d-options.js';
 
@@ -145,6 +148,7 @@ class Avatar3D {
     this.visemeTargets = {};
     this.coverage = { direct: {}, recipe: [], missing: [] };
     this.baseQuaternions = new Map();
+    this.attention = new NaturalAttention();
     this.headOffset = new THREE.Quaternion();
     this.eyeForward = new Map();
     this.lastFrameAt = 0;
@@ -232,7 +236,13 @@ class Avatar3D {
       this.model.rotation.y = THREE.MathUtils.degToRad(Number(options.yaw));
     }
     this.collectBones();
+    const library = gltf.parser?.json?.extras?.openclamAvatar;
+    this.characterId=library?.characterId||null;
+    if(library?.preserveVolumeNodes?.length)this.volumeSkin=new AvatarVolumeSkin(this,library.preserveVolumeNodes);
+    this.authoredExpressions = (library?.expressions || []).slice(0,128);
+    this.authoredChannels = library?.channelAliases || {};
     this.resolveChannels();
+    if(library?.clothClearance)this.clearance=new AvatarClearance(this,library.clothClearance);
     this.appearance = new Avatar3DAppearance(this);
     for (const targets of this.channels.values()) {
       for (const { mesh, index } of targets) {
@@ -241,7 +251,6 @@ class Avatar3D {
       }
     }
     this.model.updateMatrixWorld(true);
-    const library = gltf.parser?.json?.extras?.openclamAvatar;
     if (library) {
       try { this.options = new Avatar3DOptions(this, library); }
       catch (error) { console.warn('3D options:', error.message); }
@@ -306,29 +315,44 @@ class Avatar3D {
     };
     const candidates = {};
     for (const key of Object.keys(BONE_PATTERNS)) candidates[key] = [];
+    const namespace = node => {const n=boneName(node),at=n.lastIndexOf(':');return at<0?'':n.slice(0,at+1);};
+    const localName = node => boneName(node).slice(namespace(node).length);
     this.model.traverse(node => {
       if (!node.isBone && !(node.parent && node.parent.isBone)) return;
-      const name = lower(boneName(node));
+      const name=lower(localName(node));
       for (const key of Object.keys(BONE_PATTERNS)) {
+        if (key==='finger'&&/toe/.test(name)) continue;
         if (BONE_PATTERNS[key].test(name)) candidates[key].push(node);
       }
     });
-    const best = list => list.slice()
-      .sort((a, b) => penalty(boneName(a)) - penalty(boneName(b)))[0] || null;
-    this.boneGroups = {};
-    for (const key of ['upperArm', 'lowerArm', 'hand', 'finger']) {
-      this.boneGroups[key] = {};
-      for (const side of ['l', 'r']) {
-        this.boneGroups[key][side] = candidates[key].filter(node => sideOf(boneName(node)) === side);
+    // A second humanoid rig (armor, a mech, an attached character) may reuse
+    // every bone name. Never assemble a human arm with the mech's elbow, or
+    // aim the mech's eyes in place of the face. Resolve each rig separately.
+    const primaryHead=candidates.head.slice().sort((a,b)=>(namespace(a)?100:0)+penalty(localName(a))-(namespace(b)?100:0)-penalty(localName(b)))[0];
+    const primaryScope=primaryHead?namespace(primaryHead):'';
+    const buildRig=scope=>{
+      const available=Object.fromEntries(Object.entries(candidates).map(([k,list])=>[k,list.filter(n=>namespace(n)===scope)]));
+      const best=(key,list)=>list.slice().sort((a,b)=>{
+        const score=n=>{
+          const name=lower(localName(n));
+          if(key==='lowerArm'&&/^c_forearm_stretch[.][lr]$/.test(name))return -20;
+          if(key==='upperArm'&&/^c_arm_twist[.][lr]$/.test(name))return -20;
+          return penalty(name);
+        };return score(a)-score(b);
+      })[0]||null;
+      const bones={},groups={};
+      for(const key of ['upperArm','lowerArm','hand','finger']){
+        groups[key]={};for(const side of ['l','r'])groups[key][side]=available[key].filter(n=>sideOf(localName(n))===side);
       }
-    }
-    for (const key of ['head', 'neck', 'chest', 'hips']) this.bones[key] = best(candidates[key]);
-    for (const key of ['upperArm', 'lowerArm', 'hand', 'eye']) {
-      this.bones[key] = {};
-      for (const side of ['l', 'r']) {
-        this.bones[key][side] = best(candidates[key].filter(node => sideOf(boneName(node)) === side));
+      for(const key of ['head','neck','chest','hips'])bones[key]=best(key,available[key]);
+      for(const key of ['upperArm','lowerArm','hand','eye']){
+        bones[key]={};for(const side of ['l','r'])bones[key][side]=best(key,available[key].filter(n=>sideOf(localName(n))===side));
       }
-    }
+      return {bones,boneGroups:groups,namespace:scope};
+    };
+    const primary=buildRig(primaryScope);this.bones=primary.bones;this.boneGroups=primary.boneGroups;
+    this.secondaryBoneRigs=[...new Set(candidates.hips.map(namespace))].filter(scope=>scope!==primaryScope).map(buildRig)
+      .filter(rig=>rig.bones.hips&&rig.bones.upperArm.l&&rig.bones.upperArm.r);
     for (const key of ['head', 'neck', 'chest']) {
       const bone = this.bones[key];
       if (bone) this.baseQuaternions.set(bone, bone.quaternion.clone());
@@ -358,9 +382,17 @@ class Avatar3D {
       }
       return false;
     };
-    for (const [channel, aliases] of Object.entries(CHANNEL_ALIASES)) bind(channel, aliases);
+    const aliasesFor = (channel, fallback) => {
+      const aliases = this.authoredChannels[channel];
+      return Array.isArray(aliases) && aliases.length <= 16 && aliases.every(a => typeof a === 'string' && a.length <= 160)
+        ? [...aliases, ...fallback] : fallback;
+    };
+    for (const [channel, aliases] of Object.entries(CHANNEL_ALIASES)) bind(channel, aliasesFor(channel, aliases));
+    for (const preset of this.authoredExpressions || []) {
+      for (const channel of Object.keys(preset.weights || {})) bind(channel, [channel]);
+    }
     for (const viseme of VISEMES) {
-      const found = bind(`viseme:${viseme}`, VISEME_ALIASES[viseme]);
+      const found = bind(`viseme:${viseme}`, aliasesFor(`viseme:${viseme}`, VISEME_ALIASES[viseme]));
       if (found) {
         this.coverage.direct[viseme] = true;
         continue;
@@ -383,13 +415,13 @@ class Avatar3D {
   // twist/stretch helpers into siblings (Auto-Rig Pro, some FBX converters).
   relaxArms() {
     const down = new THREE.Vector3(0, -1, 0);
-    for (const side of ['l', 'r']) {
-      const upper = this.bones.upperArm[side];
-      const forearm = this.bones.lowerArm[side];
-      const hand = this.bones.hand[side];
+    for (const rig of [{bones:this.bones,boneGroups:this.boneGroups},...(this.secondaryBoneRigs||[])]) for (const side of ['l', 'r']) {
+      const upper = rig.bones.upperArm[side];
+      const forearm = rig.bones.lowerArm[side];
+      const hand = rig.bones.hand[side];
       if (!upper || !forearm) continue;
       const outward = side === 'l' ? 1 : -1;
-      const segment = key => this.boneGroups[key][side] || [];
+      const segment = key => rig.boneGroups[key][side] || [];
       const upperGroup = [...segment('upperArm'), ...segment('lowerArm'), ...segment('hand'), ...segment('finger')];
       const upperTarget = new THREE.Vector3(.16 * outward, -1, .04).normalize();
       if (!this.rotateGroupAbout(upperGroup, upper, forearm, upperTarget, down, 22)) continue;
@@ -796,6 +828,7 @@ class Avatar3D {
 
   prepareMotionFrame(now, reduce = false) {
     this.options?.update(now, reduce);
+    this.options?.applyHeldProp();
     this.preparedMotionFrame={now,reduce};
   }
 
@@ -810,38 +843,56 @@ class Avatar3D {
     const x = Math.min(...xs), y = Math.min(...ys);
     return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
   }
-  keepMotionInViewport(fit, surface) {
+  keepMotionInViewport(fit, surface, {manual=false}={}) {
     // Portrait gestures preserve an intentional close-up, including the lower
     // body being below the frame. A raised hand must not relocate the actor.
-    if(this.motion?.active?.gesture)return fit;
-    if (!this.options || !(this.motion?.active || this.options.transition)) return fit;
+    const propPoints=this.options?.propPoints()||[],visiblePoints=this.options?.visiblePoints()||[];
+    if(manual&&!propPoints.length)return fit;
+    if(this.motion?.active?.gesture&&!propPoints.length)return fit;
+    if (!this.options || !(this.motion?.active || this.options.transition || visiblePoints.length)) return fit;
     // Joint bounds are cheap and include the animated root translation. Keep
     // hands, head and feet inside the host surface without changing actor size.
     // Exact deformed-vertex bounds would stall the mobile render thread.
     const points=this.options.bones.map(({node})=>this.project(node.getWorldPosition(new THREE.Vector3())));
+    points.push(...visiblePoints);
     if(!points.length||!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))return fit;
-    const pad=Math.max(8,this.height*fit.scale*.025);
+    let pad=Math.max(8,this.height*fit.scale*.025);
+    // An enlarged prop can itself exceed the display. Cap its visible scale
+    // only at that physical limit, and prioritize the full prop when an
+    // intentional close-up leaves part of the lower body below the screen.
+    if(propPoints.length){
+      const width=Math.max(...propPoints.map(p=>p.x))-Math.min(...propPoints.map(p=>p.x));
+      const height=Math.max(...propPoints.map(p=>p.y))-Math.min(...propPoints.map(p=>p.y));
+      const scale=Math.min(fit.scale,Math.max(1,surface.width-2*pad)/Math.max(1,width),Math.max(1,surface.height-2*pad)/Math.max(1,height));
+      if(scale<fit.scale){const ratio=scale/fit.scale;fit={...fit,scale,x:surface.x+surface.width/2+(fit.x-surface.x-surface.width/2)*ratio,y:surface.y+surface.height+(fit.y-surface.y-surface.height)*ratio};pad=Math.max(8,this.height*scale*.025);}
+    }
     const crown=this.crownProjection();if(crown)points.push(crown);
     const xs=points.map(p=>p.x*fit.scale),ys=points.map(p=>p.y*fit.scale);
     const torso=[this.bones.head,this.bones.chest,this.bones.hips].filter(Boolean)
       .map(node=>this.project(node.getWorldPosition(new THREE.Vector3())));
-    const focusX=(torso.length?torso:points).map(p=>p.x*fit.scale);
+    const focusX=(propPoints.length?propPoints:torso.length?torso:points).map(p=>p.x*fit.scale);
+    const propY=propPoints.map(p=>p.y*fit.scale);
     const head=crown||(torso.length?torso[0]:points[0]);
-    const place=(origin,min,max,start,length,focusMin,focusMax=focusMin)=>max-min+pad*2<=length
-      ? clamp(origin,start+pad-min,start+length-pad-max)
-      : clamp(origin,start+pad-focusMin,start+length-pad-focusMax);
+    const place=(origin,min,max,start,length,focusMin,focusMax=focusMin)=>{
+      const next=max-min+pad*2<=length
+        ? clamp(origin,start+pad-min,start+length-pad-max)
+        : clamp(origin,start+pad-focusMin,start+length-pad-focusMax);
+      // Breathing and blinking must not ratchet a manually placed avatar
+      // across the desktop. The crop already carries ample subpixel padding.
+      return Math.abs(next-origin)<1?origin:next;
+    };
     // A deliberately enlarged figure can exceed a phone's width. Keep its
     // torso/head on screen without a surprise zoom or letting the root lunge
     // carry the entire performer outside the view.
     return {...fit,x:place(fit.x,Math.min(...xs),Math.max(...xs),surface.x,surface.width,Math.min(...focusX),Math.max(...focusX)),
-      y:place(fit.y,Math.min(...ys),Math.max(...ys),surface.y,surface.height,head.y*fit.scale)};
+      y:place(fit.y,Math.min(...ys),Math.max(...ys),surface.y,surface.height,propY.length?Math.min(...propY):head.y*fit.scale,propY.length?Math.max(...propY):head.y*fit.scale)};
   }
 
   render(now, state = {}, view = null) {
     if (this.disposed || !this.model) return this.canvas;
     if(this.resources){
       void this.resources.update(this.performerRenderBudget?.textures||this.options?.selection.performance||'balanced',
-        this.performerRenderBudget?.texturePixels||view?.projectedHeight||1200).catch(()=>{});
+        this.performerRenderBudget?.texturePixels||view?.projectedHeight||state.projectedHeight||1200).catch(()=>{});
       if(!this.resources.ready)return this.canvas;
     }
     // Performer owns the rig and facial coefficients exclusively. No AI pose
@@ -851,17 +902,32 @@ class Avatar3D {
       this.renderer.render(this.scene,this.camera);
       return this.canvas;
     }
-    if(this.preparedMotionFrame?.now!==now||this.preparedMotionFrame.reduce!==Boolean(state.reduce))
+    if(this.preparedMotionFrame?.now!==now||this.preparedMotionFrame.reduce!==Boolean(state.reduce)) {
       this.options?.update(now, Boolean(state.reduce));
+      this.options?.applyHeldProp();
+    }
     this.preparedMotionFrame=null;
-    if (this.options && !this.options.enabled('followCursor')) {
+    this.clearance?.hands();
+    const propActive=Boolean(this.options?.heldProp());
+    if(propActive)state={...state,audienceContact:false,cameraFocus:false,lookTarget:null,gaze:{x:0,y:0},head:{}};
+    if (this.options && !this.options.enabled('followCursor')&&!state.cameraFocus&&!state.audienceContact) {
       state = {...state,gaze:{x:0,y:0},lookTarget:null,cameraFocus:false};
     }
     if (this.cameraApproach) this.camera.copy(this.cameraApproach.camera);
+    if(!view&&state.fitContent&&this.options){
+      const points=this.options.visiblePoints();
+      if(points.length&&points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))){
+        const pad=Math.max(12,this.height*.04),xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+        const left=Math.min(0,Math.min(...xs)-pad),right=Math.max(this.width,Math.max(...xs)+pad);
+        const top=Math.min(0,Math.min(...ys)-pad),bottom=Math.max(this.height,Math.max(...ys)+pad);
+        const scale=Math.max((right-left)/this.width,(bottom-top)/this.height);
+        view={x:(left+right-this.width*scale)/2,y:(top+bottom-this.height*scale)/2,w:this.width*scale,h:this.height*scale,pixelWidth:this.width,pixelHeight:this.height};
+      }
+    }
     this.applyView(view);
     // An explicit approach attends to the viewer, independently of the last
     // pointer position. Manual controls/new actions release this attention.
-    if(state.cameraFocus)state={...state,gaze:{x:0,y:0},lookTarget:this.camera.position.clone()};
+    if(state.audienceContact||(state.cameraFocus&&!state.lookTarget))state={...state,cameraFocus:true,gaze:{x:0,y:0},lookTarget:this.camera.position.clone()};
     const elapsed = this.lastFrameAt > 0 ? clamp(now - this.lastFrameAt, 1, 120) : 16;
     this.lastFrameAt = now;
     const reduce = Boolean(state.reduce);
@@ -873,6 +939,8 @@ class Avatar3D {
     const intensity = clamp(Number(state.intensity) || 0, 0, 1);
     this.smooth.intensity = approach(this.smooth.intensity, intensity, elapsed, 60);
     const articulation = .58 + .42 * this.smooth.intensity;
+    const desktopBoost=clamp((850-(view?.projectedHeight||state.projectedHeight||1600))/550,0,1);
+    const vowelJaw={aa:1,E:.5,ih:.35,oh:.75,ou:.4};let openVowels=0;
     for (const viseme of VISEMES) {
       const target = state.visemeWeights && typeof state.visemeWeights === 'object'
         ? clamp(Number(state.visemeWeights[viseme]) || 0, 0, 1)
@@ -881,18 +949,22 @@ class Avatar3D {
       this.visemeWeights[viseme] = approach(this.visemeWeights[viseme], target, elapsed, tau);
       const weight = this.visemeWeights[viseme];
       if (weight < .002 || viseme === 'sil') continue;
-      const scaled = weight * articulation;
+      const vowel=vowelJaw[viseme]||0;
+      const scaled = weight * (vowel?Math.min(1,articulation*(1.18+.22*desktopBoost)):articulation);
       if (this.channels.has(`viseme:${viseme}`)) {
         this.setChannel(weights, `viseme:${viseme}`, scaled);
+        openVowels+=vowel*scaled;
       } else {
         for (const [channel, amount] of Object.entries(VISEME_RECIPES[viseme])) {
           this.setChannel(weights, channel, amount * scaled);
         }
       }
     }
+    if(state.speaking)this.setChannel(weights,'jawOpen',openVowels*(.065+.17*desktopBoost)*(1-(this.visemeWeights.PP||0)));
 
     // Eyes.
-    const blink = state.blink || { l: 0, r: 0 };
+    const attention=this.attention.sample(now,{reduce});
+    const blink = state.blink || attention.blink;
     if (this.channels.has('eyeBlinkLeft') || this.channels.has('eyeBlinkRight')) {
       this.setChannel(weights, 'eyeBlinkLeft', blink.l);
       this.setChannel(weights, 'eyeBlinkRight', blink.r);
@@ -904,7 +976,7 @@ class Avatar3D {
     const attentionY = clamp(Number(gaze.y) || 0, -1, 1);
     const { x: gx, y: gy } = this.pose(now, elapsed, {
       gx: attentionX, gy: attentionY, reduce, speaking: Boolean(state.speaking),
-      breathe: Number(state.breathe) || 1, head: state.head || {}, target: state.lookTarget,cameraFocus:state.cameraFocus,
+      breathe: Number(state.breathe) || 1, head: state.head || {}, target: state.lookTarget,cameraFocus:state.cameraFocus, eyeOffset:state.eyeOffset||attention.eyeOffset, propActive,
     });
     // +x is the viewer's right, which is the character's own left.
     if (!(state.lookTarget && this.bones.eye.l && this.bones.eye.r)) {
@@ -962,6 +1034,7 @@ class Avatar3D {
     }
 
     this.appearance?.expression(weights,this.options?.selection||{},Boolean(state.speaking));
+    this.appearance?.face.expression(weights,this.options?.selection||{},Boolean(state.speaking),now);
     // Write morph influences: zero everything the renderer owns, then apply.
     for (const [mesh, indices] of this.drivenMorphs) {
       for (const index of indices) mesh.morphTargetInfluences[index] = 0;
@@ -974,7 +1047,12 @@ class Avatar3D {
       }
     }
 
-    this.renderer.render(this.scene, this.camera);
+    this.clearance?.update();
+    this.appearance?.portrait?.beforeRender();
+    this.volumeSkin?.beforeRender();
+    const portrait=this.appearance?.portrait;
+    if(portrait?.active&&portrait.diffusion?.filmic)portrait.diffusion.render(portrait.profile==='quality');
+    else this.renderer.render(this.scene, this.camera);
     return this.canvas;
   }
 
@@ -988,9 +1066,9 @@ class Avatar3D {
     bone.quaternion.copy(base).premultiply(localDelta);
   }
 
-  pose(now, elapsed, { gx, gy, reduce, speaking, breathe, head, target, cameraFocus=false }) {
+  pose(now, elapsed, { gx, gy, reduce, speaking, breathe, head, target, cameraFocus=false, eyeOffset={x:0,y:0}, propActive=false }) {
     const t = now / 1000;
-    const idle = reduce ? 0 : 1;
+    const idle = reduce || propActive ? 0 : 1;
     // The eyes acquire the cursor first; the head catches up over ~180 ms.
     // As it turns, the eyes settle back toward the middle of their sockets.
     let wantedYaw = gx * .46, wantedPitch = gy * .28;
@@ -1017,7 +1095,7 @@ class Avatar3D {
     const yawTarget = this.smooth.gazeYaw + idle * (Math.sin(t * .37) * .012 + Math.sin(t * .11) * .01)
       + (Number(head.yaw) || 0);
     const pitchTarget = this.smooth.gazePitch + idle * Math.sin(t * .29 + 1.3) * .008
-      + (speaking ? Math.sin(t * 2.1) * .006 : 0) + (Number(head.pitch) || 0);
+      + (Number(head.pitch) || 0);
     const rollTarget = idle * Math.sin(t * .19 + .7) * .006 + (Number(head.roll) || 0);
     this.smooth.headYaw = yawTarget;
     this.smooth.headPitch = pitchTarget;
@@ -1056,7 +1134,13 @@ class Avatar3D {
       }
     }
     this.root.updateMatrixWorld(true);
-    if (target) this.aimEyes(target);
+    if (target) {
+      const eyeTarget=new THREE.Vector3(target.x,target.y,target.z);
+      const distance=eyeTarget.distanceTo(this.headCenter);
+      eyeTarget.addScaledVector(new THREE.Vector3(1,0,0).applyQuaternion(this.camera.quaternion),distance*eyeOffset.x);
+      eyeTarget.addScaledVector(new THREE.Vector3(0,1,0).applyQuaternion(this.camera.quaternion),distance*eyeOffset.y);
+      this.aimEyes(eyeTarget);
+    }
     return eyeGaze;
   }
 
@@ -1109,6 +1193,8 @@ class Avatar3D {
     this.resources?.dispose();
     this.motion?.dispose();
     this.appearance?.dispose();
+    this.volumeSkin?.dispose();
+    this.clearance?.dispose();
     if (this.model) {
       this.model.traverse(node => {
         if (node.geometry) node.geometry.dispose();

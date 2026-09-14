@@ -1,0 +1,43 @@
+{
+  "sarah": {
+    "body": "Ps071.rifle",
+    "hands": "Hndgrp.rifle",
+    "outfit": "casual",
+    "prop": "rifle",
+    "lighting": "soft",
+    "expression": "thoughtful",
+    "texture:hair": "sarah-original/hair-018",
+    "texture:dress": "sarah-original/dress-022",
+    "texture:pants": "sarah-original/pants-034",
+    "texture:top": "sarah-original/top-041",
+    "texture:strap-heels": "sarah-original/strap-heels-063",
+    "accessory": "earrings"
+  },
+  "tia": {
+    "body": "Ps071.rifle",
+    "outfit": "original",
+    "prop": "rifle",
+    "texture:eyes": "tia-original/eyes-013",
+    "texture:hair": "tia-original/hair-020",
+    "texture:coat": "tia-original/coat-042",
+    "texture:skirt": "tia-original/skirt-044",
+    "texture:dress": "tia-original/dress-060",
+    "texture:top": "tia-original/top-067"
+  },
+  "ming-mei": {
+    "outfit": "dress",
+    "lighting": "studio",
+    "expression": "neutral"
+  },
+  "iselda": {
+    "outfit": "dress",
+    "lighting": "studio",
+    "expression": "neutral",
+    "accessory": "jewelry"
+  },
+  "seraphim": {
+    "outfit": "pilot",
+    "lighting": "studio",
+    "expression": "neutral"
+  }
+}
