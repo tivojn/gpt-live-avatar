@@ -16,6 +16,7 @@ const { DelegateAuth } = require('./delegate-auth.cjs');
 const { DelegateBackend, normalizeDelegate, selected, MODEL_CHOICES } = require('./delegate.cjs');
 let delegateAuth, delegateBackend, groupManager, agentManager;
 const appearanceDefaults = require('./default-appearance.json');
+const voiceDefaults = require('./default-voices.json');
 const placementDefault = require('./default-placement.json');
 
 const WEB = path.join(__dirname, '..', 'web');
@@ -34,6 +35,7 @@ const QUALITIES = ['friendly', 'balanced', 'best'];
 const DEFAULTS = {
   backendModel: DEFAULT_BACKEND_MODEL,
   voice: 'marin',
+  groupVoices: voiceDefaults,
   quality: 'balanced',
   agentEnabled: true,
   agentFolder: path.join(os.homedir(), 'Desktop'),
@@ -329,6 +331,7 @@ ipcMain.handle('gla:appearance:set', (_event, { slug, selection }={}) => {
 ipcMain.handle('gla:settings:get', () => publicSettings());
 ipcMain.handle('gla:settings:set', (_event, patch) => {
   if (!patch || typeof patch !== 'object') return publicSettings();
+  const previousAvatar=config.avatar;
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentBrowser]);
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(['chrome','safari','edge','brave'].includes(patch.agentBrowser))config.agentBrowser=patch.agentBrowser;
@@ -337,7 +340,9 @@ ipcMain.handle('gla:settings:set', (_event, patch) => {
   if(patch.groupVoices&&typeof patch.groupVoices==='object')config.groupVoices=Object.fromEntries(Object.entries(patch.groupVoices).filter(([slug,v])=>/^[a-z0-9_-]{1,40}$/.test(slug)&&VOICES.includes(v)));
   const allowed = ['backendModel', 'voice', 'quality', 'avatar', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble', 'bubbleMode'];
   for (const key of allowed) if (key in patch) config[key] = patch[key];
+  if(!('voice' in patch)&&(config.avatar!==previousAvatar||patch.groupVoices))config.voice=config.groupVoices?.[config.avatar]||voiceDefaults[config.avatar]||DEFAULTS.voice;
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
+  if(VOICES.includes(patch.voice))config.groupVoices={...voiceDefaults,...config.groupVoices,[config.avatar]:config.voice};
   if (!['auto', 'always', 'off'].includes(config.bubbleMode)) config.bubbleMode = 'auto';
   if (!QUALITIES.includes(config.quality)) config.quality = DEFAULTS.quality;
   config.opacity = Math.min(1, Math.max(0.15, Number(config.opacity) || 1));

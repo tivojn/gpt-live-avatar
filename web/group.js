@@ -71,7 +71,7 @@ async function loadCast(){
   await avatar.load(info.modelURL,{resources:info.residentAvailable,pose:info.pose,yaw:info.yaw,performance,motionLibrary:info.motionsURL,appearanceLibrary:info.appearanceURL,textureLimit:textureBudget(slugs.length,catalogue.hardware?.memoryGB)});
   if(generation!==loadGeneration){avatar.dispose();return;}
   const look=catalogue.looks[slug]??catalogue.defaults[slug]??{};
-  avatar.options.select({...look,performance,body:'Ps007.stand',prop:'',hands:'',leftHand:'',rightHand:'',playTransitions:'false',followCursor:'false'});
+  avatar.options.select({...look,performance,body:look.body||'Ps007.stand',prop:'',hands:'',leftHand:'',rightHand:'',playTransitions:'false',followCursor:'false'});
   await avatar.resources?.update(performance,900,true);avatar.root.updateMatrixWorld(true);
   // Wardrobes and props contribute to the frame from the outset, including
   // wide armor. Leave generous space around all sides for natural gestures.

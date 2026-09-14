@@ -1,43 +1,63 @@
 {
   "sarah": {
-    "body": "Ps071.rifle",
-    "hands": "Hndgrp.rifle",
-    "outfit": "casual",
-    "prop": "rifle",
+    "body": "Ps007.stand",
+    "outfit": "tactical",
+    "accessory": "earrings",
+    "playTransitions": "false",
+    "followCursor": "false",
     "lighting": "soft",
     "expression": "thoughtful",
-    "texture:hair": "sarah-original/hair-018",
+    "texture:skin": "sarah-original/skin-002",
+    "texture:hair": "sarah-original/hair-019",
     "texture:dress": "sarah-original/dress-022",
     "texture:pants": "sarah-original/pants-034",
     "texture:top": "sarah-original/top-041",
     "texture:strap-heels": "sarah-original/strap-heels-063",
-    "accessory": "earrings"
+    "prop": ""
   },
   "tia": {
-    "body": "Ps071.rifle",
-    "outfit": "original",
-    "prop": "rifle",
-    "texture:eyes": "tia-original/eyes-013",
-    "texture:hair": "tia-original/hair-020",
+    "body": "Ps012.stand",
+    "outfit": "dress",
+    "playTransitions": "false",
+    "lighting": "soft",
+    "expression": "smile",
+    "texture:eyes": "tia-original/eyes-011",
+    "texture:hair": "tia-original/hair-023",
     "texture:coat": "tia-original/coat-042",
     "texture:skirt": "tia-original/skirt-044",
+    "texture:scarf": "tia-original/scarf-054",
     "texture:dress": "tia-original/dress-060",
-    "texture:top": "tia-original/top-067"
+    "texture:top": "tia-original/top-066",
+    "texture:sneakers": "tia-original/sneakers-083",
+    "prop": "",
+    "hands": "",
+    "leftHand": "",
+    "rightHand": ""
   },
   "ming-mei": {
+    "body": "Ps007.stand",
     "outfit": "dress",
-    "lighting": "studio",
-    "expression": "neutral"
+    "playTransitions": "false",
+    "followCursor": "false",
+    "lighting": "soft",
+    "expression": "neutral",
+    "texture:eyebrows": "original/eyebrows-017",
+    "prop": ""
   },
   "iselda": {
-    "outfit": "dress",
+    "outfit": "cloth-top",
+    "accessory": "jewelry",
     "lighting": "studio",
     "expression": "neutral",
-    "accessory": "jewelry"
+    "texture:hair": "original/hair-020",
+    "texture:short-skirt": "original/short-skirt-036",
+    "prop": ""
   },
   "seraphim": {
+    "body": "Ps001.heart",
     "outfit": "pilot",
     "lighting": "studio",
-    "expression": "neutral"
+    "expression": "neutral",
+    "prop": ""
   }
 }
