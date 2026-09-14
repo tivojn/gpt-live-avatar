@@ -925,7 +925,7 @@ const applySettings = next => {
     })();
     if (live.state === 'connected') live.appendInstructions(`The on-screen avatar is now ${settings.personaName}. Use this name from now on. Available motions: ${(settings.avatar?.clipLabels || []).join(', ')}.`);
   } else if (!avatar && settings.avatar?.ok && !ready && !loadingAvatar) void loadAvatar();
-  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel||previous.agentEnabled!==settings.agentEnabled;
+  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel||previous.agentEnabled!==settings.agentEnabled||previous.agentEngine!==settings.agentEngine||previous.agentAccess!==settings.agentAccess||previous.agentCodexModel!==settings.agentCodexModel;
   if (previous.voice !== settings.voice || changedReasoning) {
     delegate.cancel();
     preview.stop(); clearTimeout(applySettings.voiceTimer);
