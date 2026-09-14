@@ -14,7 +14,7 @@ for(const [slug,entry] of live?[]:Object.entries(inventory.index.avatars)){
 fs.writeFileSync(path.join(profile,'config.json'),JSON.stringify({avatar:'tia',quality:'balanced',bubbleMode:'off',windowWidth:450,windowHeight:750}));
 // Isolate the fixture from the owner's development assets, as in the installer.
 const moduleAssets=require('../electron/assets.cjs'),Original=moduleAssets.AvatarAssets;
-moduleAssets.AvatarAssets=class extends Original{constructor(opts){super({...opts,developmentRoot:undefined,bundledRoot:path.join(protectedDir,'starter'),runtimeConfigPath:path.join(protectedDir,live?'assets-runtime.json':'private-build.json'),...(offline?{baseURL:'http://127.0.0.1:1/',allowLocal:true}: {})});}};
+moduleAssets.AvatarAssets=class extends Original{constructor(opts){super({...opts,developmentRoot:undefined,bundledRoot:path.join(protectedDir,'starter'),runtimeConfigPath:path.join(protectedDir,live?'assets-runtime.json':'private-build.json'),...(live&&process.env.GLA_QA_ASSET_BASE_URL?{baseURL:process.env.GLA_QA_ASSET_BASE_URL}:{}),...(offline?{baseURL:'http://127.0.0.1:1/',allowLocal:true}: {})});}};
 const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));
 require('../electron/main.cjs');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
