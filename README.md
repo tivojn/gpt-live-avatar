@@ -118,6 +118,8 @@ See [docs/ENCONVO-HANDOFF.md](docs/ENCONVO-HANDOFF.md) for how to reuse only the
 
 
 Desktop Delegate mode supports OpenAI and xAI reasoning with API keys or account
-sign-in. Use the right-click **Reasoning** menu and **Settings → Reasoning**.
+sign-in. OpenAI also offers **Codex App Server** under Authentication: it reuses
+your local Codex sign-in and selected model for both reasoning and enabled
+actions in solo and Together. Use **Settings → Reasoning → Delegate mode**.
 GPT-Live voice still needs an OpenAI API key. Defaults, authentication behavior,
 and test commands are documented in [Desktop controls](docs/DESKTOP-CONTROLS.md#delegate-mode).

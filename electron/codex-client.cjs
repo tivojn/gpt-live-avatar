@@ -28,7 +28,7 @@ class CodexClient{
    child.stderr.on('data',()=>{});
    child.on('error',e=>this.failed(Error('Could not start Codex: '+e.message)));
    child.on('exit',()=>{if(this.child===child){this.child=null;this.failed(Error('Codex disconnected. Try the request again.'));}});
-   await this.request('initialize',{clientInfo:{name:'gpt_live_avatar',title:'GPT-Live Avatar',version:'0.2.6'},capabilities:{experimentalApi:true}});
+   await this.request('initialize',{clientInfo:{name:'gpt_live_avatar',title:'GPT-Live Avatar',version:require('../package.json').version},capabilities:{experimentalApi:true}});
    this.send({method:'initialized',params:{}});
   })();
   try{await this.ready;}catch(e){this.close();throw e;}

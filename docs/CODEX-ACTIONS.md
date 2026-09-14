@@ -1,9 +1,21 @@
 # Codex actions
 
-Choose **Settings → Actions and page context → Action engine → Codex**, then
-**Check Codex**. Codex must be installed and signed in on this Mac. This is the
-actual Codex app-server engine, not a prompt that imitates it. Voice still uses
-the app's voice API key; Codex uses its own existing account and configuration.
+Choose **Settings → Reasoning → Delegate mode → OpenAI → Authentication →
+Codex App Server**, then **Check Codex connection**. This reuses the Codex sign-in
+on this Mac for delegated reasoning and enabled actions, with one model picker
+for solo and Together. No separate OAuth login is needed in the avatar app.
+Keep **Let avatars carry out my requests** enabled for tools. With actions off,
+questions use a restricted reasoning-only Codex thread. The connection test
+also uses reasoning only. Voice still needs the app's OpenAI API key.
+
+The separate **Actions and page context → Action engine → Codex** option remains
+available when using another reasoning connection. Its independent model choice
+is preserved when switching to and from Codex App Server. Existing authentication,
+model, permission and appearance preferences are not changed by this update.
+
+ChatGPT sign-in consumes the Codex subscription allowance; API-key sign-in in
+Codex uses separately billed API usage. The app-server connection itself has no
+separate fee. Live voice and group transcription still use the OpenAI API.
 
 Codex can run shell commands and code, inspect and edit files, use images, and
 call its configured MCP tools. The application contributes tools for moving
@@ -61,6 +73,13 @@ Validation includes real Python/file execution, a Tia-to-Sarah file handoff,
 browser clicks plus a screenshot read, native Calculator use, cancellation,
 denied approvals, and stale tool-call rejection. The Codex process starts on
 demand and shuts down after a minute without work.
+
+`npx electron qa/codex-server-app.cjs --live` verifies the unified connection with
+a fresh avatar profile and the machine's signed-in Codex account: Settings,
+model discovery, real solo/group reasoning and file tasks, actions-off behavior,
+separate model persistence, and bypassing the absent direct OAuth credentials.
+Voice session creation is simulated in this test; it opens no microphone and
+makes no voice API request. Codex requests consume the account's allowance.
 
 References: [Codex App Server](https://learn.chatgpt.com/docs/app-server),
 [Computer Use](https://learn.chatgpt.com/docs/computer-use),

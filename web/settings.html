@@ -69,7 +69,12 @@
       <label for="delegateProvider">Provider</label>
       <select id="delegateProvider"><option value="openai">OpenAI</option><option value="xai">xAI</option></select>
       <label for="delegateAuth">Authentication</label>
-      <select id="delegateAuth"><option value="api_key">API key</option><option value="oauth2">Account sign-in · OAuth2</option></select>
+      <select id="delegateAuth"><option value="api_key">API key</option><option value="oauth2">Account sign-in · OAuth2</option><option value="codex_app_server">Codex App Server</option></select>
+      <div id="delegateCodex" hidden>
+        <p class="note">Uses Codex installed on this Mac for delegated reasoning and, when enabled below, actions. Reuses your Codex sign-in; no separate OAuth login is needed here.</p>
+        <button id="delegateCodexCheck" type="button">Check Codex connection</button>
+        <p class="note">ChatGPT sign-in uses your Codex allowance. Codex API-key sign-in is billed separately. GPT-Live voice still uses the OpenAI API key above.</p>
+      </div>
       <p class="note" id="openaiDelegateKey">Uses the OpenAI API key saved above.</p>
       <div id="xaiDelegateKey" hidden>
         <label for="xaiKey">xAI API key</label>
@@ -83,10 +88,10 @@
       <p id="delegateAccountState" class="state" aria-live="polite"></p>
       <label for="delegateModel">Model</label>
       <div class="row"><select id="delegateModel"></select><input id="delegateModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom reasoning model ID" hidden><button id="saveDelegateModel" type="button">Use model</button><button id="refreshDelegateModels" type="button">Refresh list</button></div>
-      <p class="note">OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.</p>
+      <p class="note" id="delegateModelNote">OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.</p>
       <button id="testDelegate" type="button">Test connection</button>
       <p class="state" id="delegateTestState" aria-live="polite"></p>
-      <p class="note">Account sign-in covers delegated reasoning. GPT-Live voice and voice previews still use the OpenAI API key above.</p>
+      <p class="note">GPT-Live voice and voice previews always use the OpenAI API key above, including when Codex App Server is selected.</p>
     </div>
   </section>
 
@@ -95,10 +100,11 @@
     <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
     <p class="note">Works in solo and Together. The addressed character carries out the task and shares verified results with the group.</p>
     <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="basic">Built-in · simple file and page tasks</option><option value="codex">Codex · code, shell, files and connected tools</option></select>
+    <p id="sharedCodexEngine" class="note" hidden>Uses the Codex App Server connection and model selected under Reasoning above.</p>
     <div id="codexOptions" hidden>
       <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools and their app permissions. Availability depends on your Codex setup. Voice still uses your voice API key.</p>
-      <div class="row"><button id="codexCheck">Check Codex</button><span id="codexStatus" role="status"></span></div>
-      <label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel">Save model</button>
+      <div id="legacyCodexCheck" class="row"><button id="codexCheck">Check Codex</button><span id="codexStatus" role="status"></span></div>
+      <div id="legacyCodexModel"><label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel">Save model</button></div>
       <label for="agentAccess">Codex permissions</label><select id="agentAccess" aria-describedby="agentAccessDescription"></select>
       <p class="note" id="agentAccessDescription" aria-live="polite"></p>
       <p class="note">Applies to every character in solo and Together. Full access is the default for new installs. macOS and connected apps keep their own permission prompts. Changing this setting stops any current task; completed actions remain.</p>
@@ -144,7 +150,7 @@
 </main>
 <script>
   const $ = s => document.querySelector(s);
-  let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' }, codexModelChoices = [];
+  let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' }, codexModelChoices = [], codexConnection = null;
   const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
   const setState = (el, text, cls = '') => { el.textContent = text; el.className = 'state ' + cls; };
 
@@ -166,7 +172,8 @@
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
-    $('#agentEngine').value=settings.agentEngine||'basic';$('#codexOptions').hidden=settings.agentEngine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
+    const sharedCodex=settings.reasoningMode==='delegate'&&settings.delegate.auth==='codex_app_server';
+    $('#agentEngine').value=sharedCodex?'codex':settings.agentEngine||'basic';$('#agentEngine').disabled=sharedCodex;$('#sharedCodexEngine').hidden=!sharedCodex;$('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=!sharedCodex&&settings.agentEngine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';$('#agentBrowser').value=settings.agentBrowser||'chrome';
   }
   function renderPermissions(settings) {
@@ -176,15 +183,28 @@
     $('#agentAccessDescription').textContent=choices.find(choice=>choice.value===picker.value)?.description||'';
   }
   function renderDelegate(s) {
-    const d=s.delegate,a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',waiting=['starting','waiting'].includes(a.state);
+    const d=s.delegate,a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',codex=d.auth==='codex_app_server',waiting=['starting','waiting'].includes(a.state);
     $('#reasoningMode').value=s.reasoningMode;$('#delegateOptions').hidden=s.reasoningMode!=='delegate';$('#managedBackend').hidden=s.reasoningMode==='delegate';
-    $('#delegateProvider').value=d.provider;$('#delegateAuth').value=d.auth;
-    $('#openaiDelegateKey').hidden=oauth||d.provider!=='openai';$('#xaiDelegateKey').hidden=oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
+    $('#delegateProvider').value=d.provider;
+    $('#delegateAuth').replaceChildren(new Option('API key','api_key'),new Option('Account sign-in · OAuth2','oauth2'),...(d.provider==='openai'?[new Option('Codex App Server','codex_app_server')]:[]));$('#delegateAuth').value=d.auth;$('#delegateCodex').hidden=!codex;
+    $('#openaiDelegateKey').hidden=codex||oauth||d.provider!=='openai';$('#xaiDelegateKey').hidden=codex||oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
     $('#signIn').textContent=d.provider==='openai'?'Sign in with OpenAI':'Sign in with xAI';$('#signIn').disabled=waiting;$('#cancelSignIn').hidden=!waiting;$('#signOut').disabled=!a.signedIn;
     $('#signInNote').textContent=d.provider==='openai'?'Opens the OpenAI browser sign-in flow used by OpenClaw.':'Uses the xAI device-code flow used by OpenClam, compatible with Grok Build.';
     $('#deviceCode').textContent=a.userCode?'Your sign-in code: '+a.userCode:'';
     setState($('#delegateAccountState'),oauth?(a.error||a.message||(a.signedIn?'Signed in on this Mac.':'Not signed in.')):(a.hasKey?'API key saved on this Mac.':'Add an API key to use this provider.'),a.error?'bad':(oauth?a.signedIn:a.hasKey)?'ok':'');
-    renderDelegateModels(d.choices[d.provider]||[],d.model);
+    if(codex)renderCodexAccount();
+    $('#delegateModelNote').textContent=codex?'One model for delegated reasoning and enabled actions in solo and Together. Account default uses GPT-5.6 Sol with ChatGPT sign-in or GPT-5.6 Luna with Codex API-key sign-in.':'OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.';
+    renderDelegateModels(codex?codexModelChoices:d.choices[d.provider]||[],d.model);
+  }
+  function renderCodexAccount(){
+    const r=codexConnection;setState($('#delegateAccountState'),!r?'Check Codex to see its sign-in status and available models.':!r.ok?r.error:!r.signedIn?'Sign in using Codex on this Mac, then check again.':r.auth==='apiKey'?'Connected to Codex · API key · API usage is billed separately.':'Connected to Codex · ChatGPT sign-in · uses your Codex allowance.',r?.ok&&r.signedIn?'ok':r?'bad':'');
+  }
+  async function checkCodex(){
+    setState($('#codexStatus'),'Checking Codex…');if(SETTINGS.delegate.auth==='codex_app_server')setState($('#delegateAccountState'),'Checking Codex…');
+    const r=await gla.agent.codexStatus();codexConnection=r;setState($('#codexStatus'),r.ok?(r.signedIn?'Signed in. ':'Sign in to Codex first. ')+(r.computerUse?'Computer Use tools connected.':'Computer Use tools not connected.'):r.error,r.ok&&r.signedIn?'ok':'bad');
+    if(r.ok){codexModelChoices=r.models;renderModelPicker('agentCodexModel',[...(SETTINGS.delegate.choices.openai||[]),...codexModelChoices],SETTINGS.agentCodexModel||'',true);}
+    if(SETTINGS.delegate.auth==='codex_app_server'){renderCodexAccount();renderDelegateModels(codexModelChoices,SETTINGS.delegate.model);}
+    return r;
   }
   function modelValue(id){const el=$('#'+id);return (el.value==='__custom__'?$('#'+id+'Custom').value:el.value).trim();}
   function renderModelPicker(id,models,selected,accountDefault=false){
@@ -199,7 +219,7 @@
     el.replaceChildren(...options);el.value=useCustom?'__custom__':selected;custom.hidden=!useCustom;
   }
   function renderDelegateModels(models,selected=modelValue('delegateModel')||SETTINGS.delegate.model){
-    renderModelPicker('delegateModel',[...(SETTINGS.delegate.choices[SETTINGS.delegate.provider]||[]),...models],selected);
+    const codex=SETTINGS.delegate.auth==='codex_app_server';renderModelPicker('delegateModel',codex?models:[...(SETTINGS.delegate.choices[SETTINGS.delegate.provider]||[]),...models],selected,codex);
   }
   for(const id of ['delegateModel','agentCodexModel'])$('#'+id).onchange=()=>{const custom=$('#'+id+'Custom');custom.hidden=$('#'+id).value!=='__custom__';if(!custom.hidden)custom.focus();};
   // ---- avatars and texture tiers (bundled + cloud downloads with progress)
@@ -264,15 +284,15 @@
   $('#agentEngine').onchange=()=>save({agentEngine:$('#agentEngine').value});
   $('#agentAccess').onchange=()=>save({agentAccess:$('#agentAccess').value});
   $('#codexSaveModel').onclick=()=>{const model=modelValue('agentCodexModel');if(model&&!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#codexStatus'),'Enter a valid model ID.','bad');return;}return save({agentCodexModel:model});};
-  $('#codexCheck').onclick=async()=>{setState($('#codexStatus'),'Checking Codex…');const r=await gla.agent.codexStatus();setState($('#codexStatus'),r.ok?(r.signedIn?'Signed in. ':'Sign in to Codex first. ')+(r.computerUse?'Computer Use tools connected.':'Computer Use tools not connected.'):r.error,r.ok&&r.signedIn?'ok':'bad');if(r.ok){codexModelChoices=r.models;renderModelPicker('agentCodexModel',[...(SETTINGS.delegate.choices.openai||[]),...codexModelChoices],modelValue('agentCodexModel'),true);}};
+  $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#agentEnabled').onchange=()=>save({agentEnabled:$('#agentEnabled').checked});
   $('#agentBrowser').onchange=()=>save({agentBrowser:$('#agentBrowser').value});
   $('#agentChooseFolder').onclick=async()=>{await gla.agent.chooseFolder();render(await gla.getSettings());};
   $('#reasoningMode').onchange=()=>save({reasoningMode:$('#reasoningMode').value});
   $('#delegateProvider').onchange=()=>save({delegateProvider:$('#delegateProvider').value});
-  $('#delegateAuth').onchange=()=>save({delegateAuth:$('#delegateAuth').value});
-  $('#saveDelegateModel').onclick=async()=>{const model=modelValue('delegateModel');if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#delegateTestState'),'Enter a valid model ID.','bad');return;}await save({delegateModel:model});setState($('#delegateTestState'),'Model selected. Use Test connection to check account access.');};
-  $('#refreshDelegateModels').onclick=async()=>{setState($('#delegateTestState'),'Loading model choices…');const r=await gla.delegate.models();if(r.ok)renderDelegateModels(r.models);setState($('#delegateTestState'),r.ok?'Model choices refreshed. Test a model to confirm account access.':r.error,r.ok?'':'bad');};
+  $('#delegateAuth').onchange=async()=>{const auth=$('#delegateAuth').value;await save({delegateAuth:auth});if(auth==='codex_app_server')await checkCodex();};
+  $('#saveDelegateModel').onclick=async()=>{const model=modelValue('delegateModel');if(!(SETTINGS.delegate.auth==='codex_app_server'&&model==='')&&!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#delegateTestState'),'Enter a valid model ID.','bad');return;}await save({delegateModel:model});setState($('#delegateTestState'),'Model selected. Use Test connection to check account access.');};
+  $('#refreshDelegateModels').onclick=async()=>{if(SETTINGS.delegate.auth==='codex_app_server')return checkCodex();setState($('#delegateTestState'),'Loading model choices…');const r=await gla.delegate.models();if(r.ok)renderDelegateModels(r.models);setState($('#delegateTestState'),r.ok?'Model choices refreshed. Test a model to confirm account access.':r.error,r.ok?'':'bad');};
   $('#signIn').onclick=async()=>{const r=await gla.delegate.login(SETTINGS.delegate.provider);if(!r.ok)setState($('#delegateAccountState'),r.error,'bad');};
   $('#cancelSignIn').onclick=()=>gla.delegate.cancelLogin(SETTINGS.delegate.provider);
   $('#signOut').onclick=()=>gla.delegate.logout(SETTINGS.delegate.provider);

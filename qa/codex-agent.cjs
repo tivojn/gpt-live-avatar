@@ -9,6 +9,7 @@ class FakeClient{
  constructor(callbacks){Object.assign(this,callbacks);this.calls=[];this.n=0;}
  async start(){}
  async request(method,p){this.calls.push({method,p});
+  if(method==='config/read')return {config:{mcp_servers:{example:{command:'server'}},plugins:{'example@tools':{enabled:true}},apps:{example:{enabled:true}}}};
   if(method==='account/read')return {account:{type:'chatgpt'}};
   if(method==='thread/start')return {thread:{id:'thread-'+(++this.n)}};
   if(method==='turn/start'){this.turn=p;return {turn:{id:'turn-'+this.n}};}
@@ -48,5 +49,9 @@ class FakeClient{
   for(const [key,value] of Object.entries(expected))assert.equal(started[key],value,mode+': '+key);
   agent.cancel(2);await assert.rejects(work,/cancelled/);
  }
+ const reasoning=agent.answer(3,'reasoning',{...config,agentAccess:'full',agentCodexModel:'gpt-5.6-luna'},history,request,'Sarah',null,()=>{},()=>{},{reasoningOnly:true});reasoning.catch(()=>{});await new Promise(r=>setImmediate(r));
+ const readStart=client.calls.filter(c=>c.method==='thread/start').at(-1).p;assert.equal(readStart.model,'gpt-5.6-luna');assert.equal(readStart.sandbox,'read-only');assert.equal(readStart.approvalPolicy,'never');assert.deepEqual(readStart.dynamicTools,[]);assert.equal(readStart.config.features.shell_tool,false);assert.equal(readStart.config.mcp_servers.example.enabled,false);assert.equal(readStart.config.plugins['example@tools'].enabled,false);assert.equal(readStart.config.apps.example.enabled,false);
+ for(const key of ['image_generation','view_image','goals','tool_suggest','workspace_dependencies'])assert.equal(readStart.config.features[key],false);
+ await assert.rejects(client.onRequest('item/tool/call',{threadId:'thread-'+client.n,tool:'move_avatar',arguments:{}}),/Actions are disabled/);agent.cancel(3);await assert.rejects(reasoning,/cancelled/);
  agent.close();console.log('Codex identity, shell/file receipts, dynamic avatar tools, explicit approval, final-only replies, cancellation and stale-tool rejection passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

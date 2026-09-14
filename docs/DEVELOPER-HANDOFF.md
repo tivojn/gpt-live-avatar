@@ -10,7 +10,7 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Download the official signed installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.6/GPT-Live.Avatar-0.2.6-arm64.dmg
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.7/GPT-Live.Avatar-0.2.7-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Tia appears. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
@@ -52,8 +52,10 @@ ordinary Electron/HTML/JavaScript edits.
   to display or manipulate her. Download other characters in Settings → Avatar.
 - Voice and Together talk need **your own OpenAI API key with GPT-Live access**.
   OpenAI account sign-in for reasoning does not replace the voice key.
-- For shell, code and connected tools, install/sign in to Codex, choose
-  Settings → Actions and page context → Action engine → Codex, and Check Codex.
+- To use Codex for both reasoning and actions, install/sign in to Codex, choose
+  Settings → Reasoning → Delegate mode → OpenAI → Authentication → Codex App
+  Server, and Check Codex connection. Enable actions below. The same model serves
+  solo and Together; a separate OAuth sign-in in the avatar app is unnecessary.
   Browser/computer tools need your own connected setup and macOS permissions.
 - Codex permissions default to Full access. You can choose Ask for approval or
   Approve for me in Settings or the avatar's right-click menu.

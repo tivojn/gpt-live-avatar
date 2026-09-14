@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),vm=require('node:vm');
 const {DelegateAuth,tokenRecord}=require('../electron/delegate-auth.cjs');
-const {DelegateBackend,normalizeDelegate,selected,streamText}=require('../electron/delegate.cjs');
+const {DelegateBackend,normalizeDelegate,selected,usesCodexServer,usesCodexActions,codexConfig,streamText}=require('../electron/delegate.cjs');
 const output=path.resolve(__dirname,'../build/qa-delegate');fs.mkdirSync(output,{recursive:true});
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
@@ -16,6 +16,15 @@ const checks=[];
  config={...config,...normalizeDelegate(config,{delegateProvider:'xai'})};assert.equal(selected(config).model,'grok-4.6');
  config={...config,...normalizeDelegate(config,{delegateProvider:'openai'})};assert.equal(selected(config).model,'gpt-5.6-terra');
  assert.equal(selected(normalizeDelegate({delegateProvider:'bad',delegateAuth:'bad'})).model,'gpt-5.6-luna');checks.push('Defaults, validation and independent model persistence');
+ const server=normalizeDelegate(config,{reasoningMode:'delegate',delegateAuth:'codex_app_server',delegateModel:'gpt-6-astra'});
+ assert(usesCodexServer(server));assert(usesCodexActions({...server,agentEngine:'basic'}));assert.equal(codexConfig({...server,agentCodexModel:'legacy'}).agentCodexModel,'gpt-6-astra');
+ assert.equal(selected(normalizeDelegate(server,{delegateAuth:'oauth2'})).model,'gpt-5.6-terra');
+ assert.equal(selected(normalizeDelegate(server,{delegateProvider:'xai'})).auth,'api_key');
+ assert.equal(selected(normalizeDelegate(server,{delegateModel:''})).model,'');
+ const routed=[],serverBackend=new DelegateBackend({auth:{bearer:()=>{throw Error('Must not use direct credentials');}},fetchImpl:()=>{throw Error('Must not make API calls');},codex:{answer:async(...args)=>{routed.push(args);return {text:'Codex answer',model:args[2].agentCodexModel};},status:async()=>({models:['gpt-6-astra']}),cancel:()=>{},cancelAll:()=>{}}});
+ assert.equal((await serverBackend.answer(1,'codex',server,[{role:'user',text:'A question'}],'Reasoning')).model,'gpt-6-astra');assert.equal(routed.length,1);assert.deepEqual(await serverBackend.models(server),['gpt-6-astra']);
+ await assert.rejects(new DelegateBackend({auth:{}}).answer(1,'missing',server,[{role:'user',text:'Question'}],''),/not connected/);
+ checks.push('Codex App Server routing without direct credentials or API fallback, model persistence and provider isolation');
  const directory=path.join(output,'credentials');fs.rmSync(directory,{recursive:true,force:true});
  // Fake encryption is confined to this test, with a fresh throwaway profile.
  const storage={isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from(Buffer.from(s).toString('base64')),decryptString:b=>Buffer.from(b.toString(),'base64').toString()};

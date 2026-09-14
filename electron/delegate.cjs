@@ -1,17 +1,21 @@
 'use strict';
 const {readJSON}=require('./delegate-auth.cjs');
-const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
+const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
 const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build']};
 const validModel=m=>typeof m==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(m);
 function normalizeDelegate(config,patch={}){
   const mode=['managed','delegate'].includes(patch.reasoningMode)?patch.reasoningMode:(['managed','delegate'].includes(config.reasoningMode)?config.reasoningMode:'managed');
   const provider=['openai','xai'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai'].includes(config.delegateProvider)?config.delegateProvider:'openai');
-  const auth=['api_key','oauth2'].includes(patch.delegateAuth)?patch.delegateAuth:(['api_key','oauth2'].includes(config.delegateAuth)?config.delegateAuth:'api_key');
+  let auth=['api_key','oauth2','codex_app_server'].includes(patch.delegateAuth)?patch.delegateAuth:(['api_key','oauth2','codex_app_server'].includes(config.delegateAuth)?config.delegateAuth:'api_key');
+  if(provider!=='openai'&&auth==='codex_app_server')auth='api_key';
   const models={...DEFAULT_MODELS};for(const key of Object.keys(models))if(validModel(config.delegateModels?.[key]))models[key]=config.delegateModels[key];
-  if(validModel(patch.delegateModel))models[provider+':'+auth]=patch.delegateModel;
+  if(validModel(patch.delegateModel)||auth==='codex_app_server'&&patch.delegateModel==='')models[provider+':'+auth]=patch.delegateModel;
   return {reasoningMode:mode,delegateProvider:provider,delegateAuth:auth,delegateModels:models};
 }
 function selected(config){const c=normalizeDelegate(config);return {provider:c.delegateProvider,auth:c.delegateAuth,model:c.delegateModels[c.delegateProvider+':'+c.delegateAuth]};}
+function usesCodexServer(config){return config.reasoningMode==='delegate'&&selected(config).auth==='codex_app_server';}
+function usesCodexActions(config){return usesCodexServer(config)||config.agentEngine==='codex';}
+function codexConfig(config){return usesCodexServer(config)?{...config,agentCodexModel:selected(config).model}:config;}
 function messages(history,limit=2400){
   if(!Array.isArray(history))return [];
   let bytes=0,result=[];
@@ -45,12 +49,13 @@ async function streamText(response){
   if(!complete||!text.trim())throw Error('The model connection ended before an answer arrived. Please try again.');return text.trim();
 }
 class DelegateBackend {
-  constructor({auth,fetchImpl=fetch}){this.auth=auth;this.fetch=fetchImpl;this.requests=new Map();}
-  cancel(owner,id){for(const [key,r] of this.requests)if(r.owner===owner&&(!id||r.id===id)){r.abort.abort();this.requests.delete(key);}}
-  cancelAll(){for(const r of this.requests.values())r.abort.abort();this.requests.clear();}
+  constructor({auth,fetchImpl=fetch,codex=null}){this.auth=auth;this.fetch=fetchImpl;this.codex=codex;this.requests=new Map();}
+  cancel(owner,id){this.codex?.cancel(owner,id);for(const [key,r] of this.requests)if(r.owner===owner&&(!id||r.id===id)){r.abort.abort();this.requests.delete(key);}}
+  cancelAll(){this.codex?.cancelAll();for(const r of this.requests.values())r.abort.abort();this.requests.clear();}
   async answer(owner,id,config,history,instructions,agent=null){
     if(typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(id))throw Error('Invalid delegation request.');
     const context=messages(history,agent?6000:2400);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
+    if(usesCodexServer(config)){if(!this.codex)throw Error('Codex App Server is not connected.');return this.codex.answer(owner,id,codexConfig(config),history,instructions);}
     this.cancel(owner);const abort=new AbortController(),request={owner,id,abort},key=owner+':'+id;this.requests.set(key,request);
     try{
       const {provider,auth,model}=selected(config),credential=await this.auth.bearer(provider,auth);
@@ -77,11 +82,11 @@ class DelegateBackend {
     }finally{if(this.requests.get(key)===request)this.requests.delete(key);}
   }
   async models(config){
-    const {provider,auth}=selected(config);if(auth==='oauth2')return MODEL_CHOICES[provider];
+    const {provider,auth}=selected(config);if(auth==='codex_app_server'){if(!this.codex)throw Error('Codex App Server is not connected.');return (await this.codex.status()).models;}if(auth==='oauth2')return MODEL_CHOICES[provider];
     const credential=await this.auth.bearer(provider,auth),url=provider==='openai'?'https://api.openai.com/v1/models':'https://api.x.ai/v1/models';
     let response;try{response=await this.fetch(url,{headers:{Authorization:`Bearer ${credential.access}`},redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw Error('Could not load the model list.');}
     if(!response.ok){await response.body?.cancel();throw Error(providerError(response.status));}
     const data=await readJSON(response,1024*1024);return (data.data||[]).map(m=>m.id).filter(m=>validModel(m)&&(provider==='openai'?/^(gpt-[56]|o[34])/.test(m)&&!/(live|audio|image|transcri|tts)/.test(m):/^grok/.test(m))).sort();
   }
 }
-module.exports={DelegateBackend,DEFAULT_MODELS,MODEL_CHOICES,normalizeDelegate,selected,messages,streamText,accountId};
+module.exports={DelegateBackend,DEFAULT_MODELS,MODEL_CHOICES,normalizeDelegate,selected,usesCodexServer,usesCodexActions,codexConfig,messages,streamText,accountId};

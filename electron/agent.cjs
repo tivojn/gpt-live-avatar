@@ -2,7 +2,7 @@
 const {ipcMain,BrowserWindow,dialog}=require('electron');
 const path=require('node:path'),crypto=require('node:crypto');
 const {createAgentTools,latestUserRequest}=require('./agent-tools.cjs');
-const {normalizeDelegate}=require('./delegate.cjs');
+const {normalizeDelegate,usesCodexActions,codexConfig}=require('./delegate.cjs');
 function setupAgent(deps){
  const pending=new Map(),completed=new Map(),fileReferences=new Map(),questions=new Map();let recent=[];
  const allowed=e=>e.senderFrame===e.sender.mainFrame&&[deps.origin+'/avatar.html',deps.origin+'/group.html',deps.origin+'/settings.html'].includes(e.sender.getURL());
@@ -33,10 +33,10 @@ function setupAgent(deps){
   const key=sender.id+':'+speaker+':'+(String(turnId||id).slice(0,160))+':'+crypto.createHash('sha256').update(latest).digest('hex');
   if(completed.has(key))return completed.get(key);
   const choice=config.reasoningMode==='delegate'?config:{...config,...normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:config.backendModel||'gpt-5.6-luna'})};
-  const agent=createAgentTools({config,request:latest,avatarCommand:(action,args,signal)=>command(sender,action,args,signal),referenceFile:fileReferences.get(sender.id),onReceipt:receipt=>{if(receipt.ok&&receipt.path&&['create_text_file','read_text_file','trash_file'].includes(receipt.tool))fileReferences.set(sender.id,receipt.path);if(config.agentEngine!=='codex'&&typeof onReceipt==='function')onReceipt(receipt);},progress:update});
+  const agent=createAgentTools({config,request:latest,avatarCommand:(action,args,signal)=>command(sender,action,args,signal),referenceFile:fileReferences.get(sender.id),onReceipt:receipt=>{if(receipt.ok&&receipt.path&&['create_text_file','read_text_file','trash_file'].includes(receipt.tool))fileReferences.set(sender.id,receipt.path);if(!usesCodexActions(config)&&typeof onReceipt==='function')onReceipt(receipt);},progress:update});
   update({state:'thinking',tool:''});
-  const work=config.agentEngine==='codex'
-   ?codex.answer(sender.id,id,config,history,latest,speaker,agent,receipt=>onReceipt?.(receipt),update)
+  const work=usesCodexActions(config)
+   ?codex.answer(sender.id,id,codexConfig(config),history,latest,speaker,agent,receipt=>onReceipt?.(receipt),update)
    :deps.backend.answer(sender.id,id,choice,history,`You are ${speaker}, a desktop companion completing a real user's request. Give a concise plain-language result without markdown or code blocks, suitable to read aloud. ${agent.instructions}`,agent);
   completed.set(key,work);while(completed.size>64)completed.delete(completed.keys().next().value);
   try{const result=await work;update({state:'complete',tool:'',text:result.text,receipts:result.receipts});return result;}
@@ -50,6 +50,13 @@ function setupAgent(deps){
  handle('gla:agent:folder',async e=>{const r=await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender),{title:'Choose the folder your avatar can use',defaultPath:deps.getConfig().agentFolder,properties:['openDirectory','createDirectory']});if(!r.canceled&&r.filePaths[0])deps.setFolder(path.resolve(r.filePaths[0]));return {folder:deps.getConfig().agentFolder};});
  ipcMain.on('gla:agent:action-result',(e,{id,result}={})=>{const p=pending.get(id);if(!p||p.sender!==e.sender||!allowed(e))return;if(!result||typeof result!=='object')return;p.finish(null,result);});
  ipcMain.on('gla:agent:question-answer',(e,{id,answers}={})=>{const p=questions.get(id);if(!p||p.sender!==e.sender||!allowed(e)||!answers||typeof answers!=='object')return;const clean={};for(const [key,value]of Object.entries(answers).slice(0,8))if(Array.isArray(value?.answers))clean[key]={answers:value.answers.filter(x=>typeof x==='string').slice(0,8).map(x=>x.slice(0,6000))};p.finish(clean);});
- return {answer,cancel:(owner,id)=>codex.cancel(owner,id),cancelAll:()=>codex.cancelAll(),dispose(){codex.close();for(const p of questions.values())p.finish({});for(const p of pending.values())p.finish(Error('App closed.'));pending.clear();completed.clear();fileReferences.clear();}};
+ async function reason(owner,id,config,history,instructions){
+  const character=config.personaName||'Tia';
+  const update=value=>{const sender=require('electron').webContents.fromId(owner);if(sender)progress(sender,{...value,id,character});};
+  update({state:'thinking'});
+  try{const result=await codex.answer(owner,id,config,history,latestUserRequest(history),character,null,()=>{},update,{reasoningOnly:true,instructions});update({state:'complete',text:result.text});return result;}
+  catch(error){update({state:/cancelled|aborted/i.test(error.message)?'cancelled':'error',error:error.message});throw error;}
+ }
+ return {answer,reason,status:()=>codex.status(),cancel:(owner,id)=>codex.cancel(owner,id),cancelAll:()=>codex.cancelAll(),dispose(){codex.close();for(const p of questions.values())p.finish({});for(const p of pending.values())p.finish(Error('App closed.'));pending.clear();completed.clear();fileReferences.clear();}};
 }
 module.exports={setupAgent};
