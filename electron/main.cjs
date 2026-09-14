@@ -401,7 +401,7 @@ ipcMain.handle('gla:avatar:select', (_event, slug) => {
     config.persona = String(config.persona || '').replace(new RegExp(`\\b${escaped}\\b`, 'g'), nextName);
     if (!config.persona.trim()) config.persona = `You are ${nextName}, a warm, playful desk companion who loves to move.`;
   }
-  config.avatar = slug; config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings();
+  config.avatar = slug; config.avatarDir = ''; config.voice=config.groupVoices?.[slug]||voiceDefaults[slug]||DEFAULTS.voice; saveConfig(); broadcastSettings(); return publicSettings();
 });
 ipcMain.handle('gla:avatar:use-bundled', () => { config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings(); });
 // Texture tiers and downloadable avatars.
