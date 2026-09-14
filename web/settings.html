@@ -184,6 +184,10 @@
   }
   function renderTiers(status) {
     const box = $('#tiers'); if (!status || SETTINGS.avatarDir) { box.innerHTML = ''; return; }
+    if(status.locked){
+      box.innerHTML='<div class="tier"><div><div>Character included</div><small>Connect to the internet once to unlock this character. Afterwards it works offline.</small></div><button type="button" id="unlockCharacter">Unlock</button></div>';
+      $('#unlockCharacter').onclick=async()=>{const b=$('#unlockCharacter');b.disabled=true;b.textContent='Unlocking…';render(await gla.assets.refresh());};return;
+    }
     const rows = [];
     for (const [tier, t] of Object.entries(status.tiers || {})) {
       const active = progress && progress.slug === status.slug && progress.tier === tier;

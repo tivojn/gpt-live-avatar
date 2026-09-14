@@ -41,7 +41,7 @@ class AvatarAssets {
   }
   async unlockInstalled(){
     if(this.runtime.keys)return;
-    let encrypted=false;try{encrypted=fs.readdirSync(this.downloadsRoot,{withFileTypes:true}).some(e=>e.isDirectory()&&fs.existsSync(path.join(this.downloadsRoot,e.name,'base.gla')));}catch{}
+    let encrypted=false;for(const root of [this.bundledRoot,this.downloadsRoot])try{encrypted=encrypted||fs.readdirSync(root,{withFileTypes:true}).some(e=>e.isDirectory()&&fs.existsSync(path.join(root,e.name,'base.gla')));}catch{}
     if(encrypted)try{await this.ensureKeys();}catch(e){this.lastKeyError=e.message;}
   }
 
@@ -98,6 +98,7 @@ class AvatarAssets {
     return !revision || revision === this.loadIndexSync().avatars?.[slug]?.assetRevision;
   }
   bundled(slug) { return this.exists(path.join(this.bundledRoot,slug),'manifest.json'); }
+  locked(slug){return !this.runtime.keys&&[this.bundledRoot,this.downloadsRoot].some(root=>fs.existsSync(path.join(root,slug,'base.gla')));}
   archive(file){
     try{const stat=fs.statSync(file),cached=this.packages.get(file);if(cached&&cached.mtime===stat.mtimeMs&&cached.size===stat.size)return cached.pack;
       const pack=new ProtectedPackage(file,this.runtime.keys);this.packages.set(file,{pack,mtime:stat.mtimeMs,size:stat.size});return pack;
@@ -140,7 +141,7 @@ class AvatarAssets {
       if (!remote && tier !== 'base' && !this.hasTier(slug, tier)) continue;
       tiers[tier] = { label: TIER_LABELS[tier], present: this.hasTier(slug, tier) && (tier!=='base'||this.matchingRevision(slug)), bytes: remote ? remote.bytes : 0, available: Boolean(remote) && (tier === 'base' || this.matchingRevision(slug)) };
     }
-    return { slug, name: entry.name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug), tiers,
+    return { slug, name: entry.name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug), locked:this.locked(slug), tiers,
       downloading: this.active && this.active.slug === slug ? this.progress : null };
   }
   avatars() {
@@ -199,6 +200,7 @@ class AvatarAssets {
   }
   cancel(){if(this.active){this.active.cancelled=true;this.active.abort.abort();}}
   async remove(slug, tier) {
+    if(!/^[a-z0-9_-]{1,40}$/.test(slug)||!['base','balanced','best'].includes(tier))throw Error('Invalid avatar selection.');
     if (this.active && this.active.slug === slug) throw new Error('Wait for the download to finish.');
     const dest = path.join(this.downloadsRoot, slug);
     if (tier === 'base') { await fsp.rm(dest, { recursive: true, force: true }); return; }

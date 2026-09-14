@@ -46,6 +46,7 @@ async function main(){
  fs.writeFileSync(path.join(out,'assets-runtime.json'),JSON.stringify({downloadToken:secrets.downloadToken,publicKey:secrets.publicKey}),{mode:0o600});
  const objects=Object.values(index.avatars).flatMap(a=>Object.values(a.mac)).flatMap(p=>p.parts);objects.push({file:'index.json',bytes:fs.statSync(path.join(out,'index.json')).size,sha256:await hash(path.join(out,'index.json'))});
  fs.writeFileSync(path.join(out,'inventory.json'),JSON.stringify({files:objects.length,bytes:bytes+fs.statSync(path.join(out,'index.json')).size,objects,index},null,2));
+ const starter=path.join(out,'starter/tia');fs.mkdirSync(starter,{recursive:true});fs.rmSync(path.join(starter,'base.gla'),{force:true});fs.linkSync(path.join(out,index.avatars.tia.mac.base.file),path.join(starter,'base.gla'));
  console.log('Verified encrypted release:',bytes,'bytes. Private build keys are excluded from git and uploads.');
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});

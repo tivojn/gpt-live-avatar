@@ -22,7 +22,15 @@ async function main(){
  const token=process.env.CLOUDFLARE_API_TOKEN||JSON.parse(cp.execFileSync(process.env.WRANGLER_BIN||'wrangler',['auth','token','--json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']})).token;
  if(!token)throw Error('Sign in to Wrangler first.');
  const prefix=`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets`;
- async function request(suffix,init={}){const response=await fetch(prefix+suffix,{...init,headers:{Authorization:'Bearer '+token,...init.headers},redirect:'error',signal:AbortSignal.timeout(5*60*1000)});if(!response.ok){const status=response.status;await response.body?.cancel();throw Error(`Cloudflare request failed (HTTP ${status}).`);}return response;}
+ const delay=ms=>new Promise(r=>setTimeout(r,ms));
+ async function request(suffix,init={}){
+  for(let attempt=0;attempt<4;attempt++){
+   let response;try{response=await fetch(prefix+suffix,{...init,body:typeof init.body==='function'?init.body():init.body,headers:{Authorization:'Bearer '+token,...init.headers},redirect:'error',signal:AbortSignal.timeout(5*60*1000)});}catch(e){if(attempt===3)throw e;await delay(1000*2**attempt);continue;}
+   if(response.ok)return response;
+   const status=response.status;await response.body?.cancel();if(attempt===3||![408,429,500,502,503,504,520,521,522,523,524].includes(status))throw Error(`Cloudflare request failed (HTTP ${status}).`);
+   await delay(1000*2**attempt);
+  }
+ }
  async function json(suffix,init){const data=await (await request(suffix,init)).json();if(data.success!==true)throw Error('Cloudflare could not complete this storage request.');return data;}
  const list=await json(''),buckets=[];if(!Array.isArray(list.result?.buckets)||list.result_info?.is_truncated)throw Error('Cannot verify the complete account bucket inventory.');
  for(const b of list.result.buckets){if(b.jurisdiction&&b.jurisdiction!=='default')throw Error('Account has other storage jurisdictions; verify their usage before uploading.');let cursor='',objects=[];do{const result=await json('/'+encodeURIComponent(b.name)+'/objects'+(cursor?'?cursor='+encodeURIComponent(cursor):''));if(!Array.isArray(result.result))throw Error('Unexpected R2 object inventory.');objects.push(...result.result);const next=result.result_info?.is_truncated?result.result_info.cursor:'';if(result.result_info?.is_truncated&&(!next||next===cursor))throw Error('Incomplete R2 pagination.');cursor=next;}while(cursor);buckets.push({name:b.name,objects});}
@@ -32,12 +40,16 @@ async function main(){
  if(!process.argv.includes('--apply'))return;
  const remoteHash=async item=>{const r=await request('/'+bucket+'/objects/'+item.file);let bytes=0;const h=crypto.createHash('sha256');for await(const chunk of r.body){bytes+=chunk.length;if(bytes>item.bytes)throw Error('Remote size mismatch: '+item.file);h.update(chunk);}if(bytes!==item.bytes||h.digest('hex')!==item.sha256)throw Error('Remote verification failed: '+item.file);};
  let done=0;
- for(const item of [...inventory.objects].sort((a,b)=>(a.file==='index.json')-(b.file==='index.json'))){
+ const upload=async item=>{
   const previous=p.existing.get(item.file);
   if(previous&&item.file!=='index.json'){if(previous.size!==item.bytes)throw Error('An immutable remote part has a different size. Build a new revision.');await remoteHash(item);}
-  else{const response=await json('/'+bucket+'/objects/'+item.file,{method:'PUT',headers:{'Content-Type':'application/octet-stream','Content-Length':String(item.bytes),'cf-r2-storage-class':'Standard'},body:fs.createReadStream(path.join(directory,item.file)),duplex:'half'});if(Number(response.result?.size)!==item.bytes||response.result?.storage_class!=='Standard')throw Error('Unexpected upload metadata.');await remoteHash(item);}
+  else{const response=await json('/'+bucket+'/objects/'+item.file,{method:'PUT',headers:{'Content-Type':'application/octet-stream','Content-Length':String(item.bytes),'cf-r2-storage-class':'Standard'},body:()=>fs.createReadStream(path.join(directory,item.file)),duplex:'half'});if(Number(response.result?.size)!==item.bytes||response.result?.storage_class!=='Standard')throw Error('Unexpected upload metadata.');await remoteHash(item);}
   console.log(`Verified ${++done}/${inventory.objects.length}: ${item.file}`);
- }
+ };
+ const pending=inventory.objects.filter(x=>x.file!=='index.json');let next=0,failed=false;
+ const workers=Array.from({length:4},async()=>{try{while(!failed&&next<pending.length){const item=pending[next++];await upload(item);}}catch(e){failed=true;throw e;}});
+ const results=await Promise.allSettled(workers);const error=results.find(x=>x.status==='rejected');if(error)throw error.reason;
+ await upload(inventory.objects.find(x=>x.file==='index.json'));
  fs.writeFileSync(path.join(directory,'r2-verified.json'),JSON.stringify({account,bucket,verifiedAt:new Date().toISOString(),files:inventory.objects.length,bytes:inventory.bytes,inventorySHA256:await hash(path.join(directory,'inventory.json'))},null,2));
  console.log('Every remote object matches its local SHA-256 checksum.');
 }

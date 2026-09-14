@@ -12,8 +12,9 @@ npm start                # use your own licensed local avatar package in Setting
 ```
 
 The Mac release uses protected downloads from a private Cloudflare R2 bucket.
-The installer contains the app and signed catalogue, without character models.
-Choose a character in **Settings → Avatar**, download its base package, then
+The installer includes an encrypted Tia base package and the signed catalogue.
+First launch briefly connects to unlock Tia; subsequent launches work offline.
+Choose other characters in **Settings → Avatar**, download their base packages, then
 optionally add Balanced (2K) or Best (4K) textures. All five current characters
 retain their wardrobe, colors, props, expressions and motion libraries.
 Downloaded packages remain encrypted on disk. Content keys are delivered to the
@@ -59,8 +60,9 @@ Pipeline (`tools/`):
   smooth surfaces: [rebuild and verification guide](docs/SARAH-ASSETS.md).
 
 Mac: after configuring the verified R2 gateway and private release files, run
-`npm run pack` (app folder) or `npm run dmg` (installer). Both include only the
-signed catalogue and app connection information, never the 3D source assets.
+`npm run pack` (app folder) or `npm run dmg` (installer). Both include encrypted
+Tia, the signed catalogue and app connection information. Raw models and
+content keys are never bundled.
 Notarization: put an App Store Connect API key (Developer role) at
 `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` and create
 `~/.config/gpt-live-avatar/notarize.env` exporting `APPLE_API_KEY` (path),

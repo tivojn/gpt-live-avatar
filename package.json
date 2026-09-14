@@ -58,6 +58,10 @@
       {
         "from": "build/protected/assets-runtime.json",
         "to": "assets-runtime.json"
+      },
+      {
+        "from": "build/protected/starter/tia/base.gla",
+        "to": "avatars/tia/base.gla"
       }
     ],
     "dmg": {

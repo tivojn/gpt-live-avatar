@@ -1,7 +1,11 @@
 # Protected character delivery
 
 The Mac app uses a private Cloudflare R2 Standard bucket and a narrow Worker
-endpoint. GitHub hosts source and the installer; purchased character files are
+endpoint. The installer includes encrypted Tia with her appearance controls and
+motions, so first launch needs only a brief online unlock. Tia then works offline.
+Other characters and larger texture tiers download from R2.
+
+GitHub hosts source and the installer; purchased character files are
 not source-code dependencies and must not be uploaded to public releases as
 GLB, Blender, texture ZIP, or plaintext avatar folders.
 
@@ -64,7 +68,8 @@ Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
    `tia`, `sarah`, `iselda`, `ming-mei` and `seraphim`. These stay outside git.
 2. Run `npm run build-protected-assets`. It preserves the private release key
    file, builds the three tiers, round-trips every file against its source,
-   signs the catalogue and emits `build/protected/inventory.json`. Back up
+   signs the catalogue, links encrypted Tia into `build/protected/starter`, and
+   emits `build/protected/inventory.json`. Back up
    `private-build.json` privately; losing it loses future signing continuity.
    Never upload that file or `assets-runtime.json` to the asset bucket.
 3. Confirm Workers **Free** and activate R2 in that account's dashboard. Create
@@ -86,7 +91,8 @@ Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
    `electron qa/protected-grant.cjs`, and `electron qa/protected-app.cjs`.
 7. Run `npm run dmg`. The release guard refuses missing HTTPS configuration or
    private content/signing keys in the installer resources. Verify Apple
-   signing, notarization and the absence of embedded model files. Install with
+   signing, notarization and the absence of raw model files and content keys.
+   Confirm bundled encrypted Tia unlocks without downloading her base. Install with
    existing settings preserved, and repeat a real download from the installer.
 8. Publish the new DMG and source. Only after the new release downloads work,
    remove the old public `assets-v1` model/ZIP files and any old installers that

@@ -143,7 +143,7 @@ function avatarInfo(selection = config) {
   const roots = avatarRoots(selection);
   const file = rel => assets?.resolve(roots, rel);
   const result = { dir: roots[0] || '', roots, slug: selection.avatarDir ? '' : (avatarFallback ? 'tia' : selection.avatar), fallbackFor: avatarFallback, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
-  if (!roots.length) { result.problem = selection.avatarDir ? 'No avatar folder selected.' : 'This avatar is not installed yet. Download it in Settings.'; return result; }
+  if (!roots.length) { result.problem = assets?.locked(selection.avatar) ? 'This character is included. Connect to the internet and click Unlock in Settings once; then it will work offline.' : selection.avatarDir ? 'No avatar folder selected.' : 'This avatar is not installed yet. Download it in Settings.'; return result; }
   try {
     const manifestPath = file('manifest.json');
     if (!manifestPath) { result.problem = 'The avatar package has no manifest.'; return result; }
@@ -400,7 +400,7 @@ ipcMain.handle('gla:avatar:select', (_event, slug) => {
 ipcMain.handle('gla:avatar:use-bundled', () => { config.avatarDir = ''; saveConfig(); broadcastSettings(); return publicSettings(); });
 // Texture tiers and downloadable avatars.
 ipcMain.handle('gla:assets:status', (_event, slug) => assets.status(typeof slug === 'string' && slug ? slug : config.avatar));
-ipcMain.handle('gla:assets:refresh', async () => { await assets.refreshIndex(); broadcastSettings(); return publicSettings(); });
+ipcMain.handle('gla:assets:refresh', async () => { await assets.unlockInstalled();await assets.refreshIndex(); broadcastSettings(); return publicSettings(); });
 ipcMain.handle('gla:assets:download', async (_event, { slug, tier }) => {
   try { await assets.download(String(slug || config.avatar), String(tier)); broadcastSettings(); return { ok: true }; }
   catch (error) { broadcastSettings(); return { ok: false, error: error.message }; }
