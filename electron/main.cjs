@@ -94,12 +94,13 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+  return { ...config, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function broadcastSettings() {
   const value = publicSettings();
   for (const w of [avatarWindow, settingsWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:settings', value);
+  groupManager?.settingsChanged(value);
 }
 
 // ---------------------------------------------------------------- API key
@@ -586,7 +587,7 @@ app.whenReady().then(async () => {
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'));
   electronSession.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media');
   await startServer();
-  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES});
+  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, openSettingsWindow});
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [{ label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },

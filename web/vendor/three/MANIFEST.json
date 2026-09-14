@@ -17,6 +17,10 @@
     "RectAreaLightUniformsLib.js",
     "RectAreaLightTexturesLib.js",
     "basis_transcoder.js",
-    "basis_transcoder.wasm"
+    "basis_transcoder.wasm",
+    "avatar-morph-stream.js"
+  ],
+  "localChanges": [
+    "Opt-in avatar morph layer streaming in WebGLMorphtargets; source attributes, morph dictionary and influence arrays remain unchanged."
   ]
 }

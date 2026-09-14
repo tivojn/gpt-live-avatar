@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('gla', {
     setIgnoreMouse: value => ipcRenderer.send('gla:group:ignore-mouse', Boolean(value)),
     onReset: callback => subscribe('gla:group:reset', callback),
     onStop: callback => subscribe('gla:group:stop', callback),
+    showMenu: request => ipcRenderer.invoke('gla:group:menu', request),
+    onMenuAction: callback => subscribe('gla:group:menu-action', callback),
   },
   // settings and secrets
   getSettings: () => ipcRenderer.invoke('gla:settings:get'),
@@ -65,6 +67,7 @@ contextBridge.exposeInMainWorld('gla', {
   // native right-click menu; main answers with an action id
   showMenu: state => ipcRenderer.invoke('gla:menu:show', state),
   onMenuAction: callback => subscribe('gla:menu-action', callback),
+  onAvatarSuspended: callback => subscribe('gla:avatar:suspended', callback),
   // window controls for the avatar window
   window: {
     remember: bounds => ipcRenderer.send('gla:window:remember', bounds),

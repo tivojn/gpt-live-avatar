@@ -210,7 +210,7 @@ export class Avatar3DAppearance {
 
   updateAssets(selection) {
     const relevant=Object.fromEntries(Object.entries(selection).filter(([k])=>['hair','clothes','expression','performance'].includes(k)||k.startsWith('texture:')));
-    const key=JSON.stringify(relevant);
+    const key=JSON.stringify([relevant,this.avatar.textureLimit]);
     if(key===this.assetSelectionKey)return;
     this.assetSelectionKey=key;
     const generation=++this.generation;
@@ -252,7 +252,7 @@ export class Avatar3DAppearance {
       });
       for(const item of bindings) {
         const file=profile==='quality'&&item.originalFile?item.originalFile:item.file;
-        const limit=Math.min(profile==='quality'?4096:profile==='eco'?1024:2048,this.avatar.renderer.capabilities.maxTextureSize);
+        const limit=Math.min(this.avatar.textureLimit||4096,profile==='quality'?4096:profile==='eco'?1024:2048,this.avatar.renderer.capabilities.maxTextureSize);
         const key=file+':'+limit;
         const prior=this.textureSelections.get(item.id);
         if(prior?.key===key){pending.push(prior);continue;}

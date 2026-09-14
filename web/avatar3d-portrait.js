@@ -313,16 +313,33 @@ export class AvatarPortrait {
         hook.call(m,shader,renderer);
         // Reuse the key's soft visibility for the broad sources. Three's
         // rectangular lights do not themselves cast shadows.
-        const physical=THREE.ShaderChunk.lights_physical_pars_fragment.replace('vec3 lightColor = rectAreaLight.color;','vec3 lightColor = rectAreaLight.color * avatarAreaShadow();');
+        // Every rectangular light uses the same surface/view lookup. Evaluate it
+        // once per fragment; keep the original area-light integration intact.
+        let physical=THREE.ShaderChunk.lights_physical_pars_fragment.replace('vec3 lightColor = rectAreaLight.color;','vec3 lightColor = rectAreaLight.color * avatarAreaShadow();');
+        physical='vec4 avatarLtc1,avatarLtc2; bool avatarLtcReady=false;\n'+physical;
+        physical=physical.replace('vec2 uv = LTC_Uv( normal, viewDir, roughness );\n\t\tvec4 t1 = texture2D( ltc_1, uv );\n\t\tvec4 t2 = texture2D( ltc_2, uv );',
+          'if(!avatarLtcReady){vec2 uv=LTC_Uv(normal,viewDir,roughness);avatarLtc1=texture2D(ltc_1,uv);avatarLtc2=texture2D(ltc_2,uv);avatarLtcReady=true;}\nvec4 t1=avatarLtc1;vec4 t2=avatarLtc2;');
         shader.fragmentShader=shader.fragmentShader.replace('#include <lights_physical_pars_fragment>','float avatarAreaShadow();\n'+physical);
-        shader.fragmentShader=shader.fragmentShader.replace('#include <shadowmap_pars_fragment>','#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>\nfloat avatarAreaShadow(){return mix(1.,getShadowMask(),.8);}');
+        shader.fragmentShader=shader.fragmentShader.replace('#include <shadowmap_pars_fragment>','#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>\nfloat avatarCachedAreaShadow;\nfloat avatarAreaShadow(){return avatarCachedAreaShadow;}');
+        shader.fragmentShader=shader.fragmentShader.replace('#include <lights_fragment_begin>','avatarCachedAreaShadow=mix(1.,getShadowMask(),.8);\n#include <lights_fragment_begin>');
       };
-      m.customProgramCacheKey=()=>cache.call(m)+':authored-area-shadow-v1';m.needsUpdate=true;
+      m.customProgramCacheKey=()=>cache.call(m)+':authored-area-shadow-v3';m.needsUpdate=true;
     }
   }
 
   quality(profile='balanced') {
     this.profile=profile;
+    // The resource-friendly preset needs cheaper lighting as well as smaller
+    // textures. Approximate each studio panel by its incident light at the
+    // head; Balanced/Best retain the original rectangular sources.
+    if(this.portraitLights){
+      if(!this.fastPortraitLights){this.fastPortraitLights=new THREE.Group();this.avatar.scene.add(this.fastPortraitLights);}
+      if(!this.fastPortraitLights.children.length)for(const source of this.portraitLights.children){
+        const light=new THREE.DirectionalLight();light.target=new THREE.Object3D();this.fastPortraitLights.add(light,light.target);light.userData.source=source;
+      }
+      for(const light of this.fastPortraitLights.children)if(light.isLight){const source=light.userData.source;light.color.copy(source.color);light.position.copy(source.position);light.intensity=source.intensity*source.width*source.height/Math.max(.1,source.position.lengthSq());}
+      this.portraitLights.visible=this.active&&profile!=='eco';this.fastPortraitLights.visible=this.active&&profile==='eco';
+    }
     const enabled=this.active&&profile!=='eco';
     const renderer=this.avatar.renderer;
     if(renderer.shadowMap.enabled!==enabled){renderer.shadowMap.enabled=enabled;this.avatar.model.traverse(n=>{for(const m of Array.isArray(n.material)?n.material:[n.material])if(m)m.needsUpdate=true;});}
@@ -348,6 +365,7 @@ export class AvatarPortrait {
       a.bones.head.getWorldPosition(this.portraitLights.position);
       this.portraitLights.position.y+=this.calibration.headOffset*scale;
       this.portraitLights.scale.setScalar(scale);
+      if(this.fastPortraitLights){this.fastPortraitLights.position.copy(this.portraitLights.position);this.fastPortraitLights.scale.copy(this.portraitLights.scale);}
     }
     if(a.headCenter&&a.bones.head){
       if(!this.hairCenterLocal)this.hairCenterLocal=a.headCenter.clone().applyMatrix4(a.bones.head.matrixWorld.clone().invert());
@@ -413,6 +431,7 @@ export class AvatarPortrait {
     if(this.unifiedHair){for(const n of this.unifiedHair.nodes)n.layers.enable(0);this.unifiedHair.mesh.removeFromParent();this.unifiedHair.mesh.geometry.dispose();this.unifiedHair=null;}
     for(const r of this.maps){r.texture.dispose();r.image.close();}
     for(const r of this.meshes){r.node.onBeforeRender=r.onBeforeRender;r.shadow?.dispose();}
+    this.fastPortraitLights?.removeFromParent();
     this.key?.shadow.dispose();this.key?.target.removeFromParent();this.maps=[];this.meshes=[];
   }
 }

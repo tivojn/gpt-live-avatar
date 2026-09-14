@@ -61,7 +61,7 @@ float occlusion(vec3 p,vec3 normal){
  return clamp(sum/8.,0.,.65);
 }
 void main(){
- vec4 beauty=texture2D(beautyMap,vUv);vec3 color=beauty.rgb;
+ vec4 beauty=texture2D(beautyMap,vUv);if(beauty.a<.00001){gl_FragColor=vec4(0.);return;}vec3 color=beauty.rgb;
  if(effects){
   vec4 diffuse=texture2D(diffuseMap,vUv);vec3 albedo=texture2D(albedoMap,vUv).rgb;
   vec3 raw=diffuse.rgb*albedo,soft=texture2D(softMap,vUv).rgb*albedo;
@@ -115,6 +115,10 @@ export class AvatarDiffusion {
    if(kind==='skin'&&map){shader.uniforms.diffusionRadiusMap={value:map};shader.fragmentShader='uniform sampler2D diffusionRadiusMap;\n'+shader.fragmentShader;}
    const scale=map?'texture2D(diffusionRadiusMap,vMapUv).r':'.0235';
    const lit=kind==='skin'||kind==='iris';
+   // Non-skin surfaces are only occluders in the diffusion pass. Keep their
+   // authored alpha/depth and deformation, skip their full PBR lighting.
+   if(!lit)shader.fragmentShader=shader.fragmentShader.replace('#include <alphatest_fragment>',
+     `#include <alphatest_fragment>\nif(avatarDiffusePass){gl_FragColor=vec4(0.,0.,0.,${material.transparent?'diffuseColor.a':'0.'});avatarAlbedo=vec4(0.);return;}`);
    const output=kind==='skin'?`vec4(totalDiffuse/max(material.diffuseContribution,vec3(.001)),.5+min(.049,${scale})*10.)`:kind==='iris'?'vec4(totalDiffuse/max(material.diffuseContribution,vec3(.001)),0.25)':`vec4(0.0,0.0,0.0,${material.transparent?'gl_FragColor.a':'0.0'})`;
    shader.fragmentShader=shader.fragmentShader.replace('#include <tonemapping_fragment>',
     `avatarAlbedo=vec4(0.);if(avatarDiffusePass){gl_FragColor=${output};avatarAlbedo=vec4(${lit?'material.diffuseContribution':'vec3(0.)'},gl_FragColor.a);}\n#include <tonemapping_fragment>`);
@@ -123,18 +127,19 @@ export class AvatarDiffusion {
   material.customProgramCacheKey=()=>cache.call(material)+':diffusion:'+kind;
   material.needsUpdate=true;
  }
- targets(width,height){
-  if(this.width===width&&this.height===height)return;
-  this.release();this.width=width;this.height=height;
+ targets(width,height,quality){
+  if(this.width===width&&this.height===height&&this.effects===quality)return;
+  this.release();this.width=width;this.height=height;this.effects=quality;
+  const fxWidth=Math.ceil(width/2),fxHeight=Math.ceil(height/2);this.fxWidth=fxWidth;this.fxHeight=fxHeight;
   const make=()=>new THREE.WebGLRenderTarget(width,height,{type:THREE.HalfFloatType,samples:4});
-  this.beauty=make();this.diffuse=new THREE.WebGLRenderTarget(width,height,{type:THREE.HalfFloatType,samples:4,count:2});this.diffuse.depthTexture=new THREE.DepthTexture(width,height,THREE.UnsignedIntType);
-  this.ping=new THREE.WebGLRenderTarget(width,height,{type:THREE.HalfFloatType,depthBuffer:false});
-  this.pong=this.ping.clone();
-  const uniforms={inputMap:{value:null},depthMap:{value:this.diffuse.depthTexture},maskMap:{value:this.diffuse.texture},
+  this.beauty=make();this.diffuse=quality?new THREE.WebGLRenderTarget(fxWidth,fxHeight,{type:THREE.HalfFloatType,count:2}):null;if(this.diffuse)this.diffuse.depthTexture=new THREE.DepthTexture(fxWidth,fxHeight,THREE.UnsignedIntType);
+  this.ping=quality?new THREE.WebGLRenderTarget(fxWidth,fxHeight,{type:THREE.HalfFloatType,depthBuffer:false}):null;
+  this.pong=this.ping?.clone();
+  const uniforms={inputMap:{value:null},depthMap:{value:this.diffuse?.depthTexture||null},maskMap:{value:this.diffuse?.texture||null},
    stepUV:{value:new THREE.Vector2()},nearPlane:{value:0},farPlane:{value:0},projectionScale:{value:0},radius:{value:0},channelVariance:{value:this.channelVariance}};
   this.filter=new THREE.ShaderMaterial({uniforms,vertexShader:vertex,fragmentShader:fragment,depthTest:false,depthWrite:false,toneMapped:false});
-  this.composite=new THREE.ShaderMaterial({uniforms:{beautyMap:{value:this.beauty.texture},diffuseMap:{value:this.diffuse.texture},albedoMap:{value:this.diffuse.textures[1]},softMap:{value:this.pong.texture},strength:{value:this.strength},
-   filmicMap:{value:this.filmic},effects:{value:true},exposure:{value:1},depthMap:{value:this.diffuse.depthTexture},inverseProjection:{value:new THREE.Matrix4()},pixelSize:{value:new THREE.Vector2(1/width,1/height)},aoStrength:{value:0},aoRadius:{value:0},projectionScale:{value:0}},
+  this.composite=new THREE.ShaderMaterial({uniforms:{beautyMap:{value:this.beauty.texture},diffuseMap:{value:this.diffuse?.texture||null},albedoMap:{value:this.diffuse?.textures[1]||null},softMap:{value:this.pong?.texture||null},strength:{value:this.strength},
+   filmicMap:{value:this.filmic},effects:{value:true},exposure:{value:1},depthMap:{value:this.diffuse?.depthTexture||null},inverseProjection:{value:new THREE.Matrix4()},pixelSize:{value:new THREE.Vector2(1/fxWidth,1/fxHeight)},aoStrength:{value:0},aoRadius:{value:0},projectionScale:{value:0}},
    vertexShader:vertex,fragmentShader:composite,depthTest:false,depthWrite:false,premultipliedAlpha:true,toneMapped:false});
   this.quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),this.filter);this.scene=new THREE.Scene();this.scene.add(this.quad);this.camera=new THREE.Camera();
  }
@@ -142,11 +147,13 @@ export class AvatarDiffusion {
   const a=this.avatar,r=a.renderer,head=a.bones.head?.getWorldPosition(new THREE.Vector3());
   const distance=head?a.camera.position.distanceTo(head):10;
   const headPixels=a.headRadius*a.canvas.height*a.camera.projectionMatrix.elements[5]/Math.max(.1,distance);
+  // Keep extra strand/skin sampling for a face-filling Best-quality portrait.
+  // Full-body and group views use the existing 4x MSAA without multiplying
+  // every surface and diffusion buffer by four.
   this.supersampling=quality&&a.canvas.width*a.canvas.height<=700000&&headPixels>(this.supersampling?130:180);
   const scale=this.supersampling?2:1;
-  // Bucket allocations so each pinch tick does not recreate large GPU buffers.
-  const width=Math.ceil(a.canvas.width*scale/128)*128,height=Math.ceil(a.canvas.height*scale/128)*128;
-  this.targets(width,height);
+  const width=a.canvas.width*scale,height=a.canvas.height*scale;
+  this.targets(width,height,quality);
   const target=r.getRenderTarget(),auto=r.shadowMap.autoUpdate;
   const saved=[];
   try{
@@ -163,15 +170,15 @@ export class AvatarDiffusion {
    }});
    r.setRenderTarget(this.diffuse);r.render(a.scene,a.camera);this.capture.value=false;
    const u=this.filter.uniforms;u.nearPlane.value=a.camera.near;u.farPlane.value=a.camera.far;
-   u.projectionScale.value=this.height*.5*a.camera.projectionMatrix.elements[5];
+   u.projectionScale.value=this.fxHeight*.5*a.camera.projectionMatrix.elements[5];
    u.radius.value=this.radius*a.model.getWorldScale(new THREE.Vector3()).y;
-   this.quad.material=this.filter;u.inputMap.value=this.diffuse.texture;u.stepUV.value.set(1/this.width,0);
+   this.quad.material=this.filter;u.inputMap.value=this.diffuse.texture;u.stepUV.value.set(1/this.fxWidth,0);
    r.setRenderTarget(this.ping);r.render(this.scene,this.camera);
-   u.inputMap.value=this.ping.texture;u.stepUV.value.set(0,1/this.height);r.setRenderTarget(this.pong);r.render(this.scene,this.camera);
+   u.inputMap.value=this.ping.texture;u.stepUV.value.set(0,1/this.fxHeight);r.setRenderTarget(this.pong);r.render(this.scene,this.camera);
    }
    this.quad.material=this.composite;this.composite.uniforms.strength.value=this.strength;
    const c=this.composite.uniforms;c.exposure.value=r.toneMappingExposure;c.inverseProjection.value.copy(a.camera.projectionMatrixInverse);
-   c.effects.value=quality;c.aoStrength.value=this.aoStrength;c.aoRadius.value=this.aoRadius*a.model.getWorldScale(new THREE.Vector3()).y;c.projectionScale.value=this.height*.5*a.camera.projectionMatrix.elements[5];
+   c.effects.value=quality;c.aoStrength.value=this.aoStrength;c.aoRadius.value=this.aoRadius*a.model.getWorldScale(new THREE.Vector3()).y;c.projectionScale.value=this.fxHeight*.5*a.camera.projectionMatrix.elements[5];
    r.setRenderTarget(target);r.render(this.scene,this.camera);
   }finally{
    for(const {m,...state} of saved)Object.assign(m,state);

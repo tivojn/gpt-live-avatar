@@ -1,3 +1,4 @@
+import { fitGarment } from '/avatar3d-garment-fit.js';
 import * as THREE from '/vendor/three/three.module.js';
 import { KTX2Loader } from '/vendor/three/KTX2Loader.js';
 
@@ -90,7 +91,7 @@ export class AvatarResources {
         }
       }
     });
-    const level=this.level(profile,pixels);
+    const level=Math.min(this.maxTextureSize||4096,this.level(profile,pixels));
     const variants=new Map([...textures].map(index=>{
       const r=this.records.get(index);
       return [index,r.variants.find(v=>v.size>=level)||r.variants.at(-1)];
@@ -137,7 +138,7 @@ export class AvatarResources {
     for(let i=0;i<record.nodes.length;i++){
       const node=record.nodes[i],pi=node.geometry.userData.deferredPrimitive??node.userData.residentPrimitive??i;
       node.userData.residentPrimitive=pi;node.userData.residentMesh=record.index;
-      node.geometry.dispose();node.geometry=geometries[pi];
+      node.geometry.dispose();node.geometry=geometries[pi];node.geometry.userData.avatarMorphStreaming=true;fitGarment(this.parser.json.extras?.openclamAvatar?.characterId,node);
       if(node.isSkinnedMesh)node.normalizeSkinWeights();
       node.boundingBox=null;node.boundingSphere=null;
       node.updateMorphTargets();

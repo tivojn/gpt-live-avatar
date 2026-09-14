@@ -73,6 +73,7 @@ import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
 import { BubblePolicy } from '/bubble-policy.js';
 import { VoicePreview } from '/voice-preview.js';
+import { frameDue, surfaceSize, renderPixelBudget, textureBudget } from '/avatar-render-budget.js';
 import { CompanionController, AvatarStudioStage, isSpatialAction } from '/avatar3d-companion.js';
 
 const $ = s => document.querySelector(s);
@@ -82,7 +83,7 @@ let settings = await gla.getSettings();
 let avatar = null; let companion = null; let ready = false; let renderRequest = 0; let lastFrame = 0;
 let reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => { reduce = e.matches; });
-const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 24, idleFps: 8, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 24, maxTexture: Infinity } };
+const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 30, idleFps: 10, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 15, maxTexture: Infinity } };
 const quality = () => QUALITY[settings.quality] || QUALITY.balanced;
 const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
 const setStatus = (text, dot = '') => { $('#status').textContent = text; $('#dot').className = 'dot ' + dot; if (dot === 'error') toast(text, 6000); };
@@ -192,8 +193,9 @@ const downscaleTextures = (instance, maxSize) => {
     }
   });
 };
-let loadGeneration = 0, loadingAvatar = false, avatarSwitchGeneration = 0;
+let loadGeneration = 0, loadingAvatar = false, avatarSwitchGeneration = 0, suspended=false;
 async function loadAvatar() {
+  if(suspended)return;
   const generation = ++loadGeneration; loadingAvatar = true;
   const info = settings.avatar;
   if (!info || !info.ok) { loadingAvatar = false; setStatus(info && info.problem ? info.problem : 'Choose an avatar in Settings.', 'error'); return; }
@@ -204,7 +206,7 @@ async function loadAvatar() {
   visemeNames = info.visemes || visemeNames;
   const instance = api.create({ width: 1024, height: 1536 });
   try {
-    await instance.load(info.modelURL, { resources: Boolean(info.residentAvailable), pose: info.pose, yaw: info.yaw, performance: quality().performance, motionLibrary: info.motionsURL, appearanceLibrary: info.appearanceURL });
+    await instance.load(info.modelURL, { resources: Boolean(info.residentAvailable), pose: info.pose, yaw: info.yaw, performance: quality().performance, motionLibrary: info.motionsURL, appearanceLibrary: info.appearanceURL, textureLimit:textureBudget(1,settings.hardware?.memoryGB) });
   } catch (error) { instance.dispose(); if (generation === loadGeneration) { loadingAvatar = false; setStatus('Avatar failed to load: ' + error.message, 'error'); } return; }
   if (generation !== loadGeneration) { instance.dispose(); return; }
   loadingAvatar = false;
@@ -233,6 +235,7 @@ function applyQuality() {
 // ---------------------------------------------------------------- render loop
 const pointer = { x: 0, y: 0, seen: false };
 let gaze = { x: 0, y: 0 };
+let renderSurface=null,maskPaintedAt=0;
 let frameGeometry = null; // {view, fit} of the last painted frame for hit tests and bubble placement
 let manualUntil = 0, dragging = false;
 function paint(now) {
@@ -287,8 +290,8 @@ function paint(now) {
   view.projectedHeight = 1536 * scale;
   // Small pose/breathing changes should not reallocate a WebGL drawing
   // buffer for every one-pixel change in the visible rectangle.
-  view.pixelWidth = Math.max(32, Math.ceil(view.w * density / 32) * 32);
-  view.pixelHeight = Math.max(32, Math.ceil(view.h * density / 32) * 32);
+  renderSurface=surfaceSize(view.w*density,view.h*density,renderPixelBudget(settings.quality,1,settings.hardware?.memoryGB),renderSurface,now);
+  view.pixelWidth=renderSurface.w;view.pixelHeight=renderSurface.h;
   sampleAudio(now);
   const target = pointer.seen ? { x: Math.max(-1, Math.min(1, (pointer.x / cssW - .5) * 2)) * .6, y: Math.max(-1, Math.min(1, (pointer.y / cssH - .5) * -2)) * .35 } : { x: 0, y: 0 };
   gaze = { x: gaze.x + (target.x - gaze.x) * .08, y: gaze.y + (target.y - gaze.y) * .08 };
@@ -309,7 +312,7 @@ function paint(now) {
   context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, stageEl.width, stageEl.height);
   context.drawImage(image, 0, 0, image.width, image.height, rect.x*dpr, rect.y*dpr, rect.w*dpr, rect.h*dpr);
   stageEl.style.visibility='visible';
-  updateHitMask();
+  if(now-maskPaintedAt>80||!hitMask){updateHitMask();maskPaintedAt=now;}
 }
 // The window may hang past the screen edge (a close-up makes it larger than
 // the display; you can drag her half off screen). Overlays are clamped to the
@@ -504,10 +507,11 @@ window.gla_geometry = () => frameGeometry && { fit: frameGeometry.fit, joints: a
 window.gla_play = id => performAction(id.startsWith('clip:') || isSpatialAction(id) || id.startsWith('go-') || ['sit', 'stand', 'wave', 'dance', 'heart', 'stay','smile','laugh'].includes(id) ? id : 'clip:' + id);
 function loop(now) {
   renderRequest = 0;
+  if(suspended)return;
   const q = quality();
-  const active = speaking || live.state !== 'idle' || (avatar && avatar.motion && avatar.motion.active) || now < manualUntil || dragging || Boolean(stage);
-  const interval = 1000 / (dragging || pinching ? 60 : active ? q.activeFps : q.idleFps);
-  if (now - lastFrame >= interval) { lastFrame = now; try { paint(now); maintainStage(now); } catch (error) { console.error(error); } }
+  const active = speaking || live.state !== 'idle' || avatar?.motion?.active || avatar?.options?.transition || now < manualUntil || dragging || companion?.walking || companion?.come || companion?.destination || stage?.turning;
+  const due=frameDue(now,lastFrame,active?q.activeFps:q.idleFps);
+  if (document.visibilityState==='visible'&&due!==null) { lastFrame=due; try { paint(now); maintainStage(now); } catch (error) { console.error(error); } }
   renderRequest = requestAnimationFrame(loop);
 }
 const wake = () => { if (!renderRequest) renderRequest = requestAnimationFrame(loop); };
@@ -912,6 +916,11 @@ const applySettings = next => {
   if (fallback && fallback !== (previous.avatar && previous.avatar.fallbackFor)) toast(`${fallback} is not downloaded yet, so Tia is shown. Download it under Settings › Avatar.`, 8000);
 };
 gla.onSettings(applySettings);
+gla.onAvatarSuspended(value=>{
+  suspended=Boolean(value);
+  if(suspended){++loadGeneration;loadingAvatar=false;takeManualPlacement();avatar?.dispose();avatar=null;companion=null;ready=false;frameGeometry=null;cancelAnimationFrame(renderRequest);renderRequest=0;}
+  else void gla.getSettings().then(applySettings);
+});
 applySettings(settings);
 </script>
 </body>

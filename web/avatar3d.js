@@ -14,6 +14,7 @@ import * as THREE from '/vendor/three/three.module.js';
 import { GLTFLoader } from '/vendor/three/GLTFLoader.js';
 import { AvatarVolumeSkin } from '/avatar3d-volume.js';
 import { NaturalAttention } from '/avatar3d-attention.js';
+import { fitGarment } from '/avatar3d-garment-fit.js';
 import { AvatarClearance } from '/avatar3d-clearance.js';
 import { RoomEnvironment } from '/vendor/three/RoomEnvironment.js';
 import { Avatar3DOptions, Avatar3DAppearance, mountAvatar3DOptions } from '/avatar3d-options.js';
@@ -215,6 +216,7 @@ class Avatar3D {
     });
     this.model.traverse(node => {
       if (!node.isMesh) return;
+      node.geometry.userData.avatarMorphStreaming=true;
       node.frustumCulled = false;
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       for (const material of materials) {
@@ -238,6 +240,7 @@ class Avatar3D {
     this.collectBones();
     const library = gltf.parser?.json?.extras?.openclamAvatar;
     this.characterId=library?.characterId||null;
+    this.model.traverse(node=>{if(node.isMesh)fitGarment(this.characterId,node);});
     if(library?.preserveVolumeNodes?.length)this.volumeSkin=new AvatarVolumeSkin(this,library.preserveVolumeNodes);
     this.authoredExpressions = (library?.expressions || []).slice(0,128);
     this.authoredChannels = library?.channelAliases || {};
@@ -258,6 +261,8 @@ class Avatar3D {
     // Start at a medium texture size; the first fitted frame selects the
     // actual display size. A small companion should not decode 4K maps only
     // to discard them immediately. Quality still loads original textures.
+    this.textureLimit=options.textureLimit||4096;
+    if(this.resources)this.resources.maxTextureSize=this.textureLimit;
     await this.resources?.update(options.performance||'balanced',800,true);
     if(options.appearanceLibrary) {
       try {await this.appearance.loadPacks(options.appearanceLibrary);}

@@ -1,3 +1,4 @@
+import { activeMorphLayers, copyMorphLayer, morphCapacity } from './avatar-morph-stream.js';
 /**
  * @license
  * Copyright 2010-2026 Three.js Authors
@@ -4539,18 +4540,26 @@ function WebGLMorphtargets( gl, capabilities, textures ) {
 
 	function update( object, geometry, program ) {
 
-		const objectInfluences = object.morphTargetInfluences;
+		const sourceInfluences = object.morphTargetInfluences;
+        const streaming = geometry.userData.avatarMorphStreaming === true && !object.isInstancedMesh;
+        const active = streaming ? activeMorphLayers(sourceInfluences) : null;
+        const objectInfluences = streaming ? new Float32Array(sourceInfluences.length) : sourceInfluences;
+
 
 		// the following encodes morph targets into an array of data textures. Each layer represents a single morph target.
 
 		const morphAttribute = geometry.morphAttributes.position || geometry.morphAttributes.normal || geometry.morphAttributes.color;
-		const morphTargetsCount = ( morphAttribute !== undefined ) ? morphAttribute.length : 0;
+		const authoredCount = ( morphAttribute !== undefined ) ? morphAttribute.length : 0;
+        const morphTargetsCount = morphCapacity(object,geometry,authoredCount);
 
 		let entry = morphTextures.get( geometry );
 
 		if ( entry === undefined || entry.count !== morphTargetsCount ) {
 
-			if ( entry !== undefined ) entry.texture.dispose();
+			if ( entry !== undefined ) {
+                entry.texture.dispose();
+                geometry.removeEventListener( 'dispose', entry.onDispose );
+            }
 
 			const hasMorphPosition = geometry.morphAttributes.position !== undefined;
 			const hasMorphNormals = geometry.morphAttributes.normal !== undefined;
@@ -4582,61 +4591,15 @@ function WebGLMorphtargets( gl, capabilities, textures ) {
 			texture.type = FloatType;
 			texture.needsUpdate = true;
 
-			// fill buffer
-
-			const vertexDataStride = vertexDataCount * 4;
-
-			for ( let i = 0; i < morphTargetsCount; i ++ ) {
-
-				const morphTarget = morphTargets[ i ];
-				const morphNormal = morphNormals[ i ];
-				const morphColor = morphColors[ i ];
-
-				const offset = width * height * 4 * i;
-
-				for ( let j = 0; j < morphTarget.count; j ++ ) {
-
-					const stride = j * vertexDataStride;
-
-					if ( hasMorphPosition === true ) {
-
-						morph.fromBufferAttribute( morphTarget, j );
-
-						buffer[ offset + stride + 0 ] = morph.x;
-						buffer[ offset + stride + 1 ] = morph.y;
-						buffer[ offset + stride + 2 ] = morph.z;
-						buffer[ offset + stride + 3 ] = 0;
-
-					}
-
-					if ( hasMorphNormals === true ) {
-
-						morph.fromBufferAttribute( morphNormal, j );
-
-						buffer[ offset + stride + 4 ] = morph.x;
-						buffer[ offset + stride + 5 ] = morph.y;
-						buffer[ offset + stride + 6 ] = morph.z;
-						buffer[ offset + stride + 7 ] = 0;
-
-					}
-
-					if ( hasMorphColors === true ) {
-
-						morph.fromBufferAttribute( morphColor, j );
-
-						buffer[ offset + stride + 8 ] = morph.x;
-						buffer[ offset + stride + 9 ] = morph.y;
-						buffer[ offset + stride + 10 ] = morph.z;
-						buffer[ offset + stride + 11 ] = ( morphColor.itemSize === 4 ) ? morph.w : 1;
-
-					}
-
-				}
-
-			}
+            // Non-avatar geometry retains the upstream behavior. Avatar layers
+            // are filled below, including the very first upload.
+            const vertexDataStride = vertexDataCount * 4;
+            if (!streaming) for(let i=0;i<morphTargetsCount;i++)
+                copyMorphLayer(buffer,width*height*4*i,vertexDataStride,morphTargets[i],morphNormals[i],morphColors[i]);
 
 			entry = {
 				count: morphTargetsCount,
+                indices: [], stride: vertexDataStride, weights: objectInfluences,
 				texture: texture,
 				size: new Vector2( width, height )
 			};
@@ -4653,9 +4616,25 @@ function WebGLMorphtargets( gl, capabilities, textures ) {
 
 			}
 
-			geometry.addEventListener( 'dispose', disposeTexture );
+			entry.onDispose = disposeTexture;
+            geometry.addEventListener( 'dispose', disposeTexture );
 
 		}
+
+        if(streaming) {
+            const data=entry.texture.image.data, layerSize=entry.size.x*entry.size.y*4;
+            const wanted=new Set(active), assigned=new Set();
+            for(let slot=0;slot<entry.count;slot++)if(wanted.has(entry.indices[slot])){
+                objectInfluences[slot]=sourceInfluences[entry.indices[slot]];assigned.add(entry.indices[slot]);
+            }
+            for(const index of active){
+                if(assigned.has(index))continue;
+                let slot=0;while(slot<entry.count&&objectInfluences[slot]!==0)slot++;
+                copyMorphLayer(data,slot*layerSize,entry.stride,geometry.morphAttributes.position?.[index],geometry.morphAttributes.normal?.[index],geometry.morphAttributes.color?.[index]);
+                entry.indices[slot]=index;objectInfluences[slot]=sourceInfluences[index];entry.texture.addLayerUpdate(slot);entry.texture.needsUpdate=true;
+            }
+            geometry.userData.avatarMorphGPU={authored:authoredCount,active:active.length,layers:entry.count,bytes:data.byteLength};
+        }
 
 		//
 		if ( object.isInstancedMesh === true && object.morphTexture !== null ) {
@@ -4676,7 +4655,7 @@ function WebGLMorphtargets( gl, capabilities, textures ) {
 
 
 			program.getUniforms().setValue( gl, 'morphTargetBaseInfluence', morphBaseInfluence );
-			program.getUniforms().setValue( gl, 'morphTargetInfluences', objectInfluences );
+			program.getUniforms().setValue( gl, 'morphTargetInfluences', streaming ? objectInfluences.subarray(0,morphTargetsCount) : objectInfluences );
 
 		}
 
@@ -7456,7 +7435,7 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
 		//
 
 		const morphAttribute = geometry.morphAttributes.position || geometry.morphAttributes.normal || geometry.morphAttributes.color;
-		const morphTargetsCount = ( morphAttribute !== undefined ) ? morphAttribute.length : 0;
+		const morphTargetsCount = morphCapacity(object,geometry,morphAttribute?.length||0);
 
 		let morphTextureStride = 0;
 
@@ -18355,7 +18334,7 @@ class WebGLRenderer {
 			}
 
 			const morphAttribute = geometry.morphAttributes.position || geometry.morphAttributes.normal || geometry.morphAttributes.color;
-			const morphTargetsCount = ( morphAttribute !== undefined ) ? morphAttribute.length : 0;
+			const morphTargetsCount = morphCapacity(object,geometry,morphAttribute?.length||0);
 
 			const materialProperties = properties.get( material );
 			const lights = currentRenderState.state.lights;

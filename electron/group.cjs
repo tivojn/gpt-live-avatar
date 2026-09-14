@@ -1,5 +1,5 @@
 'use strict';
-const {BrowserWindow,ipcMain,screen}=require('electron');
+const {BrowserWindow,ipcMain,screen,Menu}=require('electron');
 const path=require('node:path');
 const {normalizeDelegate}=require('./delegate.cjs');
 const cleanText=(s,max)=>typeof s==='string'?s.trim().slice(0,max):'';
@@ -27,15 +27,15 @@ function setupGroup(deps){
  const open=()=>{
   if(window&&!window.isDestroyed()){window.show();window.focus();return true;}
   closing=false;const primary=deps.getAvatar(),display=screen.getDisplayMatching(primary?.getBounds()||screen.getPrimaryDisplay().workArea);
-  primary?.webContents.send('gla:menu-action','end:hidden');primary?.hide();
+  primary?.webContents.send('gla:menu-action','end:hidden');primary?.webContents.send('gla:avatar:suspended',true);primary?.hide();
   window=new BrowserWindow({...display.workArea,show:false,transparent:true,frame:false,hasShadow:false,resizable:false,minimizable:false,fullscreenable:false,alwaysOnTop:true,skipTaskbar:true,backgroundColor:'#00000000',title:'GPT-Live Avatar · Together',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:false,backgroundThrottling:false}});
   window.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});window.setAlwaysOnTop(true,'floating');window.loadURL(deps.origin+'/group.html');
-  window.once('ready-to-show',()=>window?.show());window.on('close',cancel);window.on('closed',()=>{window=null;if(!closing)deps.getAvatar()?.showInactive();});
+  window.once('ready-to-show',()=>window?.show());window.on('close',cancel);window.on('closed',()=>{window=null;if(!closing){deps.getAvatar()?.webContents.send('gla:avatar:suspended',false);deps.getAvatar()?.showInactive();}});
   window.webContents.on('render-process-gone',()=>{cancel();window?.close();});
   return true;
  };
  ipcMain.handle('gla:group:open',(event)=>{if(event.sender.getURL()!==deps.origin+'/avatar.html'&&event.sender.getURL()!==deps.origin+'/settings.html')return false;return open();});
- ipcMain.handle('gla:group:catalogue',guard(()=>{const settings=deps.getSettings();return {avatars:catalogue(),looks:settings.avatarLooks||{},defaults:settings.appearanceDefaults,voices:deps.voices,quality:settings.quality,selected:deps.getConfig().avatar,hasKey:settings.hasKey,reasoning:settings.reasoningMode==='delegate'?settings.delegate.model:'gpt-5.6-luna'};}));
+ ipcMain.handle('gla:group:catalogue',guard(()=>{const settings=deps.getSettings();return {avatars:catalogue(),looks:settings.avatarLooks||{},defaults:settings.appearanceDefaults,voices:deps.voices,quality:settings.quality,hardware:settings.hardware,selected:deps.getConfig().avatar,hasKey:settings.hasKey,reasoning:settings.reasoningMode==='delegate'?settings.delegate.model:'gpt-5.6-luna'};}));
  ipcMain.handle('gla:group:reply',guard(async(event,request)=>{const r=conversationRequest(request,catalogue()),config=deps.getConfig();const choice=config.reasoningMode==='delegate'?config:normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:'gpt-5.6-luna'});return deps.backend.answer(event.sender.id,r.id,choice,r.history,r.instructions);}));
  ipcMain.handle('gla:group:voice',guard(async(_event,{sdp,voice,text}={})=>{const speechText=cleanText(text,1200);if(!speechText||!deps.voices.includes(voice))throw Error('Choose a voice and a spoken line.');pendingVoice?.abort();const abort=new AbortController();pendingVoice=abort;try{return await deps.createSession({sdp,voice,preview:true,speechText},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}finally{if(pendingVoice===abort)pendingVoice=null;}}));
  ipcMain.handle('gla:group:live',guard(async(_event,request={})=>{
@@ -50,8 +50,23 @@ function setupGroup(deps){
  }));
  ipcMain.handle('gla:group:transcribe',guard(async(_event,request)=>{pendingInput?.abort();const abort=new AbortController();pendingInput=abort;try{return await require('./group-input.cjs').transcribe(request,deps.readApiKey,AbortSignal.any([abort.signal,AbortSignal.timeout(45000)]));}finally{if(pendingInput===abort)pendingInput=null;}}));
  ipcMain.handle('gla:group:cancel',guard(()=>{cancel();return {};}));
+ ipcMain.handle('gla:group:menu',guard(async(_event,request={})=>{
+  const actor=catalogue().find(a=>a.slug===request.slug);if(!actor)throw Error('This character is unavailable.');
+  const send=action=>()=>{if(window&&!window.isDestroyed())window.webContents.send('gla:group:menu-action',{slug:actor.slug,action});};
+  await new Promise(resolve=>Menu.buildFromTemplate([
+   {label:actor.name,enabled:false},
+   ...deps.avatarCatalogueMenu(request.catalogue,send),
+   {type:'separator'},
+   {label:'Follow cursor',type:'checkbox',checked:request.catalogue?.current?.followCursor==='true',click:send('follow-cursor')},
+   {label:'Face the audience',click:send('face-audience')},
+   {label:'Restore size and position',click:send('recover')},
+   {type:'separator'},
+   ...[['auto','Bubble Only on Incoming Messages'],['always','Bubble Always On'],['off','Bubble Off']].map(([mode,label])=>({label,type:'radio',checked:(request.bubbleMode||'auto')===mode,click:send('bubble:'+mode)})),
+   {type:'separator'},{label:'Settings…',click:deps.openSettingsWindow},
+  ]).popup({window,callback:resolve}));return {};
+ }));
  ipcMain.handle('gla:group:close',guard(()=>{cancel();window.close();return {};}));
  ipcMain.on('gla:group:ignore-mouse',(event,ignore)=>{if(window&&!window.isDestroyed()&&event.sender===window.webContents)window.setIgnoreMouseEvents(Boolean(ignore),{forward:true});});
- return {open,recover(){if(!window||window.isDestroyed())return false;window.setBounds(screen.getDisplayMatching(window.getBounds()).workArea);window.show();window.webContents.send('gla:group:reset');return true;},dispose(){closing=true;clearInterval(visibilityTimer);cancel();window?.destroy();window=null;}};
+ return {open,settingsChanged(value){if(window&&!window.isDestroyed())window.webContents.send('gla:settings',value);},recover(){if(!window||window.isDestroyed())return false;window.setBounds(screen.getDisplayMatching(window.getBounds()).workArea);window.show();window.webContents.send('gla:group:reset');return true;},dispose(){closing=true;clearInterval(visibilityTimer);cancel();window?.destroy();window=null;}};
 }
 module.exports={setupGroup,conversationRequest};
