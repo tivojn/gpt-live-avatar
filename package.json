@@ -20,6 +20,7 @@
     "openai": "^7.15.0"
   },
   "devDependencies": {
+    "aws4fetch": "^1.0.20",
     "electron": "43.4.0",
     "electron-builder": "26.15.3"
   },

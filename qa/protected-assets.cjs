@@ -27,4 +27,9 @@ const {pack,hash}=require('../tools/build-protected-assets.cjs'),{ProtectedPacka
  assert.equal(grant.status,200);const grantBody=await grant.json();assert.deepEqual(JSON.parse(crypto.privateDecrypt({key:device.privateKey,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(grantBody.wrappedKeys,'base64'))),keys);assert.equal(reads,1,'Key authorization does not read R2');
  assert.equal((await worker.fetch(new Request('https://downloads.example/authorize',{method:'POST',headers:auth,body:'x'.repeat(2049)}),env)).status,413);
  console.log('Account-wide storage cap, upload allowlist and device-wrapped content key authorization passed.');
+ const {createR2Reader}=await import('../tools/cloud/r2-reader.mjs');let requests=0,lastRequest,storageStatus=200;
+ const cross=createR2Reader({R2_STORAGE_ACCOUNT:'a'.repeat(32),R2_BUCKET:'test-private',R2_READ_ACCESS_KEY_ID:'test-access',R2_READ_SECRET_ACCESS_KEY:'test-secret'},async request=>{requests++;lastRequest=request;return new Response('data',{status:storageStatus,headers:{'Content-Length':'4'}});});
+ const object=await cross.get('fixture-base.gla.p000');assert.equal(object.size,4);assert.equal(requests,1);assert.equal(lastRequest.method,'GET');assert.equal(lastRequest.redirect,'error');assert.equal(new URL(lastRequest.url).search,'');assert.match(lastRequest.headers.get('Authorization'),/^AWS4-HMAC-SHA256 /);assert.equal(await new Response(object.body).text(),'data');
+ storageStatus=503;await assert.rejects(cross.get('fixture-base.gla.p000'));assert.equal(requests,2,'Transient failures never cause hidden R2 retries');await assert.rejects(cross.get('../secret'));assert.equal(requests,2,'Invalid paths never reach storage');
+ console.log('Private cross-account S3 signing, streaming, no redirects and one-read failure limit passed.');
  }finally{server?.close();fs.rmSync(root,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

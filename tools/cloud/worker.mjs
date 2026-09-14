@@ -1,5 +1,6 @@
 // Deploy only on a confirmed Workers Free account for a hard request cutoff.
 // One allowed GET performs at most one R2 read; no public bucket URL exists.
+import { createR2Reader } from './r2-reader.mjs';
 export function createWorker(catalogue,objects){
  const allowed=new Map(objects.map(p=>[p.file,p]));
  return {async fetch(request,env){
@@ -26,7 +27,7 @@ export function createWorker(catalogue,objects){
   const headers={'Content-Type':'application/octet-stream','Content-Length':String(entry.bytes),'ETag':'"'+entry.sha256+'"','Cache-Control':'private, max-age=86400','X-Content-Type-Options':'nosniff'};
   if(request.method==='HEAD')return new Response(null,{headers});
   if(request.headers.has('Range'))return fail(416,'Retry this download part in full.');
-  if(!env.AVATAR_ASSETS)return fail(503,'Downloads are not activated.');
-  try{const object=await env.AVATAR_ASSETS.get(name);if(!object||object.size!==entry.bytes)return fail(503,'This download is temporarily unavailable.');return new Response(object.body,{headers});}catch{return fail(503,'Please try this download again later.');}
+  const storage=env.AVATAR_ASSETS||createR2Reader(env);if(!storage)return fail(503,'Downloads are not activated.');
+  try{const object=await storage.get(name);if(!object||object.size!==entry.bytes){await object?.body?.cancel();return fail(503,'This download is temporarily unavailable.');}return new Response(object.body,{headers});}catch{return fail(503,'Please try this download again later.');}
  }};
 }

@@ -41,6 +41,13 @@ bounds public downloads to at most 3.1 million R2 reads in a 31-day month, below
 R2 Standard's 10 million monthly Class B allowance. Requests stop when Workers
 Free reaches its limit; they do not automatically upgrade the account.
 
+The public gateway and R2 can live in separate accounts. In this deployment,
+R2 stays in the existing storage account and a new Workers Free account hosts
+the gateway. A bucket-scoped **Object Read only** S3 credential is stored only
+in Worker secrets. The gateway signs a single private S3 GET and streams it;
+it never returns credentials or presigned URLs to clients. Redirects and
+automatic storage retries are disabled to preserve the one-read bound.
+
 The uploader sums objects across the account's buckets and refuses a planned
 peak above **10,000,000,000 bytes**, including retained releases. It accepts only
 the signed catalogue and encrypted download parts, uses Standard storage, and
@@ -49,7 +56,8 @@ archives, private build files or raw sources. Unknown inventory, pagination or
 storage classes fail closed.
 
 This is an enforced upload-workflow cap, not a native R2 account quota. Keep
-other writers, uploads and paid services out of this dedicated account. Manual
+other writers and uploads away from the avatar bucket and reserve the remaining
+R2 free allowance in its storage account. Manual
 uploads or changing to Workers Paid can bypass these cost assumptions. Keep
 `r2.dev` and public custom bucket domains disabled. The Worker needs only GET;
 do not add listing, upload, transcoding, AI or other billable routes.
@@ -72,13 +80,18 @@ Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
    emits `build/protected/inventory.json`. Back up
    `private-build.json` privately; losing it loses future signing continuity.
    Never upload that file or `assets-runtime.json` to the asset bucket.
-3. Confirm Workers **Free** and activate R2 in that account's dashboard. Create
+3. Confirm Workers **Free** for the gateway account. Activate R2 in the storage
+   account (which may be separate). Create
    the private Standard bucket `gpt-live-avatar-protected`. Do not enable its
    public development URL or a public custom domain.
-4. Run `node tools/cloud/prepare-worker.cjs ACCOUNT_ID`, then
-   `node tools/cloud/upload-r2.cjs ACCOUNT_ID gpt-live-avatar-protected` for a
+4. Run `node tools/cloud/upload-r2.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected` for a
    dry run. Add `--apply` only for the approved account. It uses the active
    Wrangler login, or `CLOUDFLARE_API_TOKEN`, without printing the credential.
+   After verification, run `node tools/cloud/prepare-worker.cjs FREE_GATEWAY_ACCOUNT_ID`.
+   For separate accounts, privately save `build/protected/r2-reader-secret.json`
+   with `account`, `bucket`, `permission: "object-read-only"`, `accessKeyId` and
+   `secretAccessKey`, using a token scoped only to the avatar bucket. Keep this
+   file outside git, installer resources and uploads, with file mode 600.
 5. Run `node tools/cloud/deploy.cjs --workers-free-confirmed`. It requires a
    verified R2 inventory, deploys the narrow gateway, installs its secrets,
    checks the live signed catalogue and updates `electron/asset-download.json`.
