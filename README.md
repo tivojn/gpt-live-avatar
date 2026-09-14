@@ -6,14 +6,22 @@ is included; the first launch needs internet for a brief unlock.
 
 ## Getting started from a clone
 
+**Coworkers and AI coding assistants: start with [the independent development handoff](docs/DEVELOPER-HANDOFF.md).** It covers using the existing R2 service, running feature changes with isolated settings, and building without the owner's Apple credentials.
+
 The renderer and application code are public. Purchased character assets are
 separately licensed and must not be redistributed as raw models or texture ZIPs.
+Install the official Mac app first, then:
 
 ```bash
-npm install
+npm ci
+npm run import-release -- "/Applications/GPT-Live Avatar.app"
 npm test
-npm start                # use your own licensed local avatar package in Settings
+npm run start:isolated
 ```
+
+The import command verifies and reuses only the encrypted client resources
+already included in the release. These remain ignored by Git. No Cloudflare
+login or owner API keys are required. Use your own voice and Codex accounts.
 
 The Mac release uses protected downloads from a private Cloudflare R2 bucket.
 The installer includes an encrypted Tia base package and the signed catalogue.

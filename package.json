@@ -8,13 +8,19 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node qa/qa.js && node qa/asset-revisions.cjs && node qa/controls.cjs && node qa/delegate.cjs && node qa/group.cjs && node qa/attention.cjs && node qa/group-live.cjs && node qa/render-budget.cjs && node qa/agent.cjs && node qa/codex-agent.cjs && node qa/agent-progress.cjs && node qa/protected-assets.cjs",
+    "test": "node qa/qa.js && node qa/asset-revisions.cjs && node qa/controls.cjs && node qa/delegate.cjs && node qa/group.cjs && node qa/attention.cjs && node qa/group-live.cjs && node qa/render-budget.cjs && node qa/agent.cjs && node qa/codex-agent.cjs && node qa/agent-progress.cjs && node qa/protected-assets.cjs && node qa/import-release.cjs",
     "pack": "electron-builder --mac dir",
     "dmg": "bash tools/dmg.sh",
     "fetch-assets": "bash tools/fetch-assets.sh",
     "build-protected-assets": "node tools/build-protected-assets.cjs",
     "prepack": "node tools/verify-release.cjs",
-    "predmg": "node tools/verify-release.cjs"
+    "predmg": "node tools/verify-release.cjs",
+    "import-release": "node tools/import-release.cjs",
+    "start:isolated": "node tools/start-isolated.cjs",
+    "prepack:local": "node tools/verify-release.cjs",
+    "pack:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir -c.mac.identity=null -c.mac.notarize=false",
+    "predmg:local": "node tools/verify-release.cjs",
+    "dmg:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg -c.mac.identity=null -c.mac.notarize=false -c.dmg.sign=false"
   },
   "dependencies": {
     "openai": "^7.15.0"
