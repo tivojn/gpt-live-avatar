@@ -1,5 +1,9 @@
 # GPT-Live Avatar
 
+[Download the signed and notarized Mac installer](https://github.com/tivojn/gpt-live-avatar/releases/latest).
+Open the DMG, copy GPT-Live Avatar to Applications, and launch it. Encrypted Tia
+is included; the first launch needs internet for a brief unlock.
+
 ## Getting started from a clone
 
 The renderer and application code are public. Purchased character assets are
