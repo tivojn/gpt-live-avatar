@@ -56,7 +56,10 @@ const checks=[];
  backend.fetch=async()=>json({error:{message:'secret-token'}},401);await assert.rejects(backend.answer(1,'bad',{},[{role:'user',text:'Q'}],''),e=>!e.message.includes('secret')&&/Authentication/.test(e.message));
  const frames=Buffer.from('data: '+JSON.stringify({type:'response.output_text.delta',delta:'你好'})+'\r\n\r\ndata: '+JSON.stringify({type:'response.completed'})+'\r\n\r\n');
  assert.equal(await streamText(new Response(new ReadableStream({start(controller){for(const byte of frames)controller.enqueue(Uint8Array.of(byte));controller.close();}}))),'你好');
- checks.push('Four authenticated inference routes, correct wire formats and safe stream errors');
+ backend.fetch=async()=>json({data:[{id:'gpt-6-astra'},{id:'gpt-5.6-terra'},{id:'gpt-5.6-luna'},{id:'gpt-5.6-sol'},{id:'gpt-image-2'}]});
+ const apiModels=await backend.models(normalizeDelegate({})),oauthModels=await backend.models(normalizeDelegate({delegateAuth:'oauth2'}));
+ for(const model of ['gpt-6-astra','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna']){assert(apiModels.includes(model));assert(oauthModels.includes(model));}assert(!apiModels.includes('gpt-image-2'));
+ checks.push('Four authenticated inference routes, Astra/Terra/Luna/Sol catalogue, correct wire formats and safe stream errors');
  const context=vm.createContext({EventTarget,Event,CustomEvent,performance,setTimeout,clearTimeout,TextEncoder});
  vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../web/delegate-client.js'),'utf8').replace(/export /g,'')+'\nglobalThis.Bridge=DelegateClient;globalThis.chunks=commentaryChunks;',context);
  class Live extends EventTarget{constructor(){super();this.reasoningMode='delegate';this.generation=1;this.state='connected';this.sent=[];}conversation(){return [{role:'user',text:'Unfinished question segment'}];}appendCommentary(content,id){this.sent.push({content,id});return true;}emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail}));}}

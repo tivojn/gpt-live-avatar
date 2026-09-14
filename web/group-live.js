@@ -2,7 +2,7 @@ import {LiveClient} from '/live-client.js';
 import {GroupCapture} from '/group-capture.js';
 import {commentaryChunks} from '/delegate-client.js';
 import {needsAgent} from '/group-agent-request.js';
-import {addressedSpeaker,playbackEcho,quotedContext} from '/group-context.js';
+import {addressedSpeaker,addressedText,playbackEcho,quotedContext} from '/group-context.js';
 
 // Hysteresis rejects clicks and brief noise; release tolerates ordinary pauses.
 export class SpeechGate {
@@ -65,7 +65,7 @@ export class LiveGroup {
  // avatar's output through its human-input audio channel.
  routeAudio(){for(const p of this.peers.values())p.micGain.gain.value=p.slug===this.active&&!this.muted?1:0;}
  actionResult(entry){
-  if(!entry?.tool)return;const key=entry.id+':'+entry.tool+':'+(entry.path||entry.url||'');
+  if(!entry?.tool)return;const key=entry.id+':'+entry.tool+':'+(entry.callId||entry.path||entry.url||'');
   if(this.actions.some(a=>a.key===key))return;
   this.actions.push({...entry,key});this.actions=this.actions.slice(-64);
   this.share({verifiedAction:entry});
@@ -139,6 +139,13 @@ export class LiveGroup {
    const recent=this.history.filter(l=>l.speaker!=='_human'&&performance.now()-(l.at||0)<15000).map(l=>l.text);
    if(playbackEcho(result.text,recent))throw Error('Only speaker playback was heard.');
    p.lastHumanText=result.text;p.humanSegments=new Map([[id,result.text]]);p.humanFinal=true;p.routingPending=false;p.humanChangedAt=performance.now();p.target=this.target(result.text);p.agentDue=performance.now()+150;
+   // A vocative selects the listener without opening a speaking/tool turn.
+   // The following recording can start fresh while directed keeps the name.
+   if(addressedSpeaker(result.text,this.cast)&&!addressedText(result.text,this.cast).trim()){
+    p.agentDue=0;p.acceptUser=false;this.awaitingHuman=false;this.awaitingNextHuman=true;
+    this.recordLine({speaker:'_human',id,text:result.text,at:performance.now()});
+    this.emit('floor',{speaker:'_human',listener:p.target});this.emit('status','Listening · '+this.cast.find(c=>c.slug===p.target)?.name);return;
+   }
    this.recordLine({speaker:'_human',id,text:result.text,at:performance.now()});this.emit('text',{speaker:'_human',text:result.text});
   }catch(error){if(current()){p.routingPending=false;p.acceptUser=false;this.awaitingHuman=false;this.awaitingNextHuman=true;this.emit('status','Please say that again or type it. '+error.message);}}
  }
@@ -166,7 +173,7 @@ export class LiveGroup {
   void this.api.cancel();
   this.userSpeaking=true;this.awaitingHuman=true;this.awaitingNextHuman=false;this.advanceAt=0;this.userUntil=now+1600;
   const p=this.peers.get(this.active);if(p){
-   const continuing=p.acceptUser&&!p.heard&&!p.segments.size&&now-(p.humanChangedAt||0)<4000;
+   const continuing=p.acceptUser&&!p.heard&&!p.segments.size&&(p.routingPending||now-(p.humanChangedAt||0)<4000);
    if(!continuing){p.humanSegments=new Map();p.lastHumanText='';p.lastHumanId='';p.agentHandledText='';p.agentDue=0;p.humanFinal=false;p.target=this.directed||p.slug;p.client.resetInputTranscript?.();}
    if(this.capture){p.lastHumanId ||= 'mic-'+Date.now().toString(36);p.routingPending=true;p.inputRevision=(p.inputRevision||0)+1;this.capture.begin(p.lastHumanId);}
    p.acceptUser=true;p.delegating=false;this.finishLine(p,true);p.segments.clear();p.heard=false;p.lastText=now;p.openAt=now;p.client.appendInstructions('The real human is speaking. Stop your current speech and listen silently. The application will identify their addressee and explicitly open that character’s floor after the transcript settles. Wait for that instruction before answering.');}

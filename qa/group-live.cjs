@@ -50,6 +50,14 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('n
  const recognize=recognition.confirmInput(listener);await new Promise(r=>setTimeout(r,0));resolveRecognition({ok:true,text:'Hi Tia, create shared.txt.'});await recognize;assert.equal(listener.target,'tia');assert.equal(recognition.history.at(-1).text,'Hi Tia, create shared.txt.');
  recognition.transcript(listener,{role:'user',id:'late',text:'My idea. Create shared.txt.',final:true});assert.equal(listener.lastHumanText,'Hi Tia, create shared.txt.','Late captions do not replace verified routing');assert(listener.humanFinal);
  listener.inputRevision=2;listener.routingPending=true;const outdated=recognition.confirmInput(listener);await new Promise(r=>setTimeout(r,0));listener.inputRevision=3;resolveRecognition({ok:true,text:'Sarah, delete it.'});await outdated;assert.equal(listener.lastHumanText,'Hi Tia, create shared.txt.');
+ // Slow transcription plus a pause after the name used to throw away the
+ // original mic buffer and route the remaining task to the previous speaker.
+ const captured=[];recognition.capture.begin=id=>captured.push(id);
+ Object.assign(listener,{heard:false,segments:new Map(),acceptUser:true,routingPending:true,lastHumanId:'name-and-task',humanChangedAt:performance.now()-9000,client:{appendInstructions(){},resetInputTranscript(){}},audio:{},micGain:{gain:{}}});
+ recognition.interrupt(performance.now());assert.equal(listener.lastHumanId,'name-and-task');assert.equal(captured.at(-1),'name-and-task','Pending recognition retains the name-containing microphone buffer');recognition.userSpeaking=false;
+ const isolated=recognition.confirmInput(listener);await new Promise(r=>setTimeout(r,0));resolveRecognition({ok:true,text:'Sarah.'});await isolated;assert.equal(recognition.directed,'sarah');assert.equal(listener.agentDue,0);assert.equal(listener.acceptUser,false,'A name alone never authorizes work');
+ assert.equal(recognition.target('Create a snack list.'),'sarah','A following request retains the selected listener');assert.equal(recognition.target('And Tia, read it.'),'tia');
+ for(const text of ['Run Python to check the file','Take a screenshot of the app','Read the webpage I have open','Click the preview button','执行脚本'])assert(needsAgent(text),text);
  // Speech encoding is bounded, mono PCM at 16 kHz and clips overflow.
  const {speechWav}=await import('data:text/javascript;base64,'+Buffer.from(fs.readFileSync(path.join(__dirname,'../web/group-capture.js'),'utf8')).toString('base64'));
  const wav=speechWav(new Float32Array(48000).fill(.5),48000),view=new DataView(wav.buffer);assert.equal(wav.length,32044);assert.equal(view.getUint32(24,true),16000);assert.equal(view.getInt16(44,true),16383);

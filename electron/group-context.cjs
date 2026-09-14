@@ -6,9 +6,9 @@ class GroupContext {
  record({id,speaker,request,receipt}){
   if(!receipt?.tool)return null;
   const entry={id,speaker,request:String(request||'').slice(0,1000),tool:receipt.tool,ok:receipt.ok!==false};
-  for(const key of ['path','url','title','error'])if(typeof receipt[key]==='string')entry[key]=receipt[key].slice(0,1200);
+  for(const key of ['path','url','title','error','command','output','summary','callId'])if(typeof receipt[key]==='string')entry[key]=receipt[key].slice(0,2000);
   if(receipt.trashed)entry.trashed=true;
-  const key=id+':'+entry.tool+':'+(entry.path||entry.url||'');
+  const key=id+':'+entry.tool+':'+(entry.callId||entry.path||entry.url||'');
   if(this.actions.some(a=>a.key===key))return null;
   this.actions.push({...entry,key});this.actions=this.actions.slice(-64);return entry;
  }

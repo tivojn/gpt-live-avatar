@@ -1,7 +1,7 @@
 'use strict';
 const {readJSON}=require('./delegate-auth.cjs');
 const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
-const MODEL_CHOICES={openai:['gpt-5.6-luna','gpt-5.6-sol','gpt-5.6-terra'],xai:['grok-4.6','grok-build']};
+const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build']};
 const validModel=m=>typeof m==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(m);
 function normalizeDelegate(config,patch={}){
   const mode=['managed','delegate'].includes(patch.reasoningMode)?patch.reasoningMode:(['managed','delegate'].includes(config.reasoningMode)?config.reasoningMode:'managed');
@@ -81,7 +81,7 @@ class DelegateBackend {
     const credential=await this.auth.bearer(provider,auth),url=provider==='openai'?'https://api.openai.com/v1/models':'https://api.x.ai/v1/models';
     let response;try{response=await this.fetch(url,{headers:{Authorization:`Bearer ${credential.access}`},redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw Error('Could not load the model list.');}
     if(!response.ok){await response.body?.cancel();throw Error(providerError(response.status));}
-    const data=await readJSON(response,1024*1024);return (data.data||[]).map(m=>m.id).filter(m=>validModel(m)&&(provider==='openai'?/^(gpt-5|o[34])/.test(m)&&!/(live|audio|image|transcri|tts)/.test(m):/^grok/.test(m))).sort();
+    const data=await readJSON(response,1024*1024);return (data.data||[]).map(m=>m.id).filter(m=>validModel(m)&&(provider==='openai'?/^(gpt-[56]|o[34])/.test(m)&&!/(live|audio|image|transcri|tts)/.test(m):/^grok/.test(m))).sort();
   }
 }
 module.exports={DelegateBackend,DEFAULT_MODELS,MODEL_CHOICES,normalizeDelegate,selected,messages,streamText,accountId};

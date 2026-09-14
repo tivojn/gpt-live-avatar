@@ -3,7 +3,7 @@
 const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function address(text,cast=[]){
  const raw=String(text||'').trim();
- const filler='(?:(?:hi|hey|hello|okay|ok|well|uh|um|oh|please|你好|嗨|嘿)[\\s,，.!！:：]*)*';
+ const filler='(?:(?:hi|hey|hello|okay|ok|well|uh|um|oh|please|and|now|so|你好|嗨|嘿)[\\s,，.!！:：]*)*';
  for(const c of [...cast].sort((a,b)=>(b.name||b.slug).length-(a.name||a.slug).length)){
   const name=escape(c.name||c.slug).replace(/[- ]/g,'[- ]?');
   const end="(?!['’]s\\b|[\\p{L}\\p{N}_]|\\.[a-z0-9]|\\s+dot\\b)";
@@ -16,7 +16,7 @@ function address(text,cast=[]){
  return null;
 }
 export function addressedSpeaker(text,cast){return address(text,cast)?.slug||null;}
-export function addressedText(text,cast){return address(text,cast)?.text||String(text||'');}
+export function addressedText(text,cast){return address(text,cast)?.text??String(text||'');}
 export function playbackEcho(text,candidates=[]){
  const normalize=s=>String(s||'').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
  const value=normalize(text);if(value.length<28)return false;

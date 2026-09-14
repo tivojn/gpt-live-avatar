@@ -9,6 +9,10 @@ const subscribe = (channel, callback) => {
 
 contextBridge.exposeInMainWorld('gla', {
   agent: {
+    codexStatus: ()=>ipcRenderer.invoke('gla:agent:codex-status'),
+    onQuestion: callback=>subscribe('gla:agent:question',callback),
+    onQuestionClose: callback=>subscribe('gla:agent:question-close',callback),
+    answerQuestion: (id,answers)=>ipcRenderer.send('gla:agent:question-answer',{id,answers}),
     run: request=>ipcRenderer.invoke('gla:agent:run',request),
     cancel: id=>ipcRenderer.invoke('gla:agent:cancel',id),
     recent: ()=>ipcRenderer.invoke('gla:agent:recent'),

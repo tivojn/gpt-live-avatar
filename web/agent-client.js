@@ -17,5 +17,16 @@ export function installAgentUI({api,execute,onStatus=()=>{},interactive=()=>{},n
  }
  get('[data-send]').onclick=()=>run(get('textarea').value);get('[data-page]').onclick=()=>{get('textarea').value='What do you think of this webpage? Read the current page and give me your assessment.';void run(get('textarea').value);};get('[data-stop]').onclick=stop;get('[data-close]').onclick=()=>dialog.close();
  dialog.addEventListener('close',()=>interactive(false));dialog.addEventListener('cancel',()=>interactive(false));get('textarea').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();void run(get('textarea').value);}});
+ // Codex asks for missing input in the same visible surface in solo and
+ // Together. Text content never becomes HTML, and closing means no answer.
+ let questionDialog=null;
+ api.onQuestion?.(request=>{
+  questionDialog?.close();const d=document.createElement('dialog');questionDialog=d;d.className='agent-dialog';d.dataset.id=request.id;
+  const title=document.createElement('h2');title.textContent=request.character+' has a question';d.append(title);const fields=[];
+  for(const q of request.questions||[]){const label=document.createElement('p');label.textContent=q.question;d.append(label);const input=document.createElement('textarea');input.setAttribute('aria-label',q.question);if(q.options?.length){const choices=document.createElement('div');for(const option of q.options){const b=document.createElement('button');b.textContent=option.label;b.title=option.description||'';b.onclick=()=>input.value=option.label;choices.append(b);}d.append(choices);}d.append(input);fields.push({q,input});}
+  const submit=document.createElement('button');submit.textContent='Send answer';submit.onclick=()=>{const answers=Object.fromEntries(fields.map(({q,input})=>[q.id,{answers:[input.value.trim()]}]));api.answerQuestion(request.id,answers);d.dataset.sent='true';d.close();};d.append(submit);
+  d.onclose=()=>{if(!d.dataset.sent)api.answerQuestion(request.id,{});if(questionDialog===d)questionDialog=null;d.remove();interactive(false);};document.body.append(d);interactive(true);d.showModal();fields[0]?.input.focus();
+ });
+ api.onQuestionClose?.(({id})=>{if(questionDialog?.dataset.id===id){questionDialog.dataset.sent='true';questionDialog.close();}});
  return {open(settings){get('h2').textContent='Ask '+name();get('.agent-folder').textContent=settings.agentFolder||'Desktop';interactive(true);dialog.showModal();get('textarea').focus();},stop,dialog};
 }

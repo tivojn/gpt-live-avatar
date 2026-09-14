@@ -26,7 +26,8 @@ const liveGroup=new LiveGroup(api,{
 });
 function liveMode(){return $('#liveMode').checked;}
 const status=(message,error=false)=>{$('#status').textContent=message;$('#status').classList.toggle('error',error);};
-const agentUI=installAgentUI({api:window.gla.agent,onStatus:message=>status(message),name:()=> 'the characters',interactive:value=>{if(value){api.setIgnoreMouse(false);ignore=false;}},execute:async(action,args,cancelled)=>{
+let helpCharacter='tia';
+const agentUI=installAgentUI({api:{...window.gla.agent,run:request=>api.reply({...request,speaker:helpCharacter,participants:[...actors.keys()],human:{enabled:true,name:human.name||'You'},topic:$('#topic').value,mode:$('#format').value,history:[...history],humanRequest:request.history.at(-1)?.text||''})},onStatus:message=>status(message),name:()=>actors.get(helpCharacter)?.info.name||'the characters',interactive:value=>{if(value){api.setIgnoreMouse(false);ignore=false;}},execute:async(action,args,cancelled)=>{
  if(action==='state')return {ok:true,characters:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,motions:[...a.avatar.motion.clips.values()].slice(0,180).map(c=>({id:c.id,label:c.label||c.id}))}))};
  const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(args.character).toLowerCase()));if(!actor)throw Error('That character is not visible.');
  if(action==='play_motion'){if(!actor.avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');const result=await actor.avatar.motion.play(args.motion,{loop:false});return {ok:result!==false,motion:args.motion,character:actor.slug};}
@@ -185,7 +186,7 @@ addEventListener('contextmenu',async event=>{
 });
 async function actorMenuAction({slug,action}){
  const actor=actors.get(slug);if(!actor)return;const a=actor.avatar,o=a.options;
- if(action==='agent'){agentUI.open(catalogue);return;}
+ if(action==='agent'){helpCharacter=slug;agentUI.open(catalogue);return;}
  if(action==='recover'){recoverActor(actor);return;}
  if(action==='face-audience'){actor.userOrbit=null;actor.yaw=0;return;}
  if(action.startsWith('bubble:')){actor.bubbleMode=action.slice(7);setBubble(actor,'');return;}

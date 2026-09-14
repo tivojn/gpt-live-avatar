@@ -82,7 +82,7 @@
       </div>
       <p id="delegateAccountState" class="state" aria-live="polite"></p>
       <label for="delegateModel">Model</label>
-      <div class="row"><input id="delegateModel" type="text" list="delegateModelChoices" autocomplete="off"><datalist id="delegateModelChoices"></datalist><button id="saveDelegateModel" type="button">Use model</button><button id="refreshDelegateModels" type="button">Refresh list</button></div>
+      <div class="row"><select id="delegateModel"></select><input id="delegateModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom reasoning model ID" hidden><button id="saveDelegateModel" type="button">Use model</button><button id="refreshDelegateModels" type="button">Refresh list</button></div>
       <p class="note">OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.</p>
       <button id="testDelegate" type="button">Test connection</button>
       <p class="state" id="delegateTestState" aria-live="polite"></p>
@@ -92,8 +92,16 @@
 
   <section>
     <h2>Actions and page context</h2>
-    <label><input id="agentEnabled" type="checkbox"> Let avatars help with files and the current page</label>
-    <p class="note">Ask in live talk or right-click → Help with this. Avatars can create new text files, read files in the selected folder, read a browser page when asked, and move or play motions. Files are never overwritten; explicitly requested deletions move individual files to Trash. Requested page and file text is sent to your selected reasoning provider.</p>
+    <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
+    <p class="note">Works in solo and Together. The addressed character carries out the task and shares verified results with the group.</p>
+    <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="basic">Built-in · simple file and page tasks</option><option value="codex">Codex · code, shell, files and connected tools</option></select>
+    <div id="codexOptions" hidden>
+      <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools and their app permissions. Availability depends on your Codex setup. Voice still uses your voice API key.</p>
+      <div class="row"><button id="codexCheck">Check Codex</button><span id="codexStatus" role="status"></span></div>
+      <label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel">Save model</button>
+      <label for="agentAccess">File and command access</label><select id="agentAccess"><option value="workspace">Selected folder · ask for additional access</option><option value="full">Full access · allow commands outside this folder</option></select>
+      <p class="note">Full access allows Codex to edit files and run commands across this Mac without command approval prompts. Connected apps keep their own permissions. You can stop a task at any time; completed actions remain.</p>
+    </div>
     <label>File folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
     <label for="agentBrowser">Browser when the avatar is in front</label><select id="agentBrowser"><option value="chrome">Chrome</option><option value="safari">Safari</option><option value="edge">Edge</option><option value="brave">Brave</option></select>
     <p class="note">An active supported browser takes priority. Reading needs macOS Automation permission and the browser’s “Allow JavaScript from Apple Events” option. The avatar reads the page only when requested.</p>
@@ -135,7 +143,7 @@
 </main>
 <script>
   const $ = s => document.querySelector(s);
-  let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' };
+  let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' }, codexModelChoices = [];
   const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
   const setState = (el, text, cls = '') => { el.textContent = text; el.className = 'state ' + cls; };
 
@@ -157,6 +165,7 @@
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
+    $('#agentEngine').value=settings.agentEngine||'basic';$('#codexOptions').hidden=settings.agentEngine!=='codex';$('#agentAccess').value=settings.agentAccess||'workspace';renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';$('#agentBrowser').value=settings.agentBrowser||'chrome';
   }
   function renderDelegate(s) {
@@ -168,10 +177,24 @@
     $('#signInNote').textContent=d.provider==='openai'?'Opens the OpenAI browser sign-in flow used by OpenClaw.':'Uses the xAI device-code flow used by OpenClam, compatible with Grok Build.';
     $('#deviceCode').textContent=a.userCode?'Your sign-in code: '+a.userCode:'';
     setState($('#delegateAccountState'),oauth?(a.error||a.message||(a.signedIn?'Signed in on this Mac.':'Not signed in.')):(a.hasKey?'API key saved on this Mac.':'Add an API key to use this provider.'),a.error?'bad':(oauth?a.signedIn:a.hasKey)?'ok':'');
-    if(document.activeElement!==$('#delegateModel'))$('#delegateModel').value=d.model;
-    renderDelegateModels(d.choices[d.provider]||[]);
+    renderDelegateModels(d.choices[d.provider]||[],d.model);
   }
-  function renderDelegateModels(models){$('#delegateModelChoices').replaceChildren(...models.map(id=>{const o=document.createElement('option');o.value=id;return o;}));}
+  function modelValue(id){const el=$('#'+id);return (el.value==='__custom__'?$('#'+id+'Custom').value:el.value).trim();}
+  function renderModelPicker(id,models,selected,accountDefault=false){
+    const el=$('#'+id),custom=$('#'+id+'Custom');
+    const focused=document.activeElement===el||document.activeElement===custom;
+    const useCustom=focused&&el.value==='__custom__';
+    if(focused)selected=modelValue(id);
+    const ids=[...new Set([...models,selected])].filter(Boolean);
+    const options=ids.map(value=>new Option(value,value));
+    if(accountDefault)options.unshift(new Option('Account default',''));
+    options.push(new Option('Custom model…','__custom__'));
+    el.replaceChildren(...options);el.value=useCustom?'__custom__':selected;custom.hidden=!useCustom;
+  }
+  function renderDelegateModels(models,selected=modelValue('delegateModel')||SETTINGS.delegate.model){
+    renderModelPicker('delegateModel',[...(SETTINGS.delegate.choices[SETTINGS.delegate.provider]||[]),...models],selected);
+  }
+  for(const id of ['delegateModel','agentCodexModel'])$('#'+id).onchange=()=>{const custom=$('#'+id+'Custom');custom.hidden=$('#'+id).value!=='__custom__';if(!custom.hidden)custom.focus();};
   // ---- avatars and texture tiers (bundled + cloud downloads with progress)
   const MB = bytes => `${Math.max(1, Math.round((bytes || 0) / 1048576))} MB`;
   let progress = null;
@@ -231,13 +254,17 @@
   };
   $('#clearKey').onclick = async () => { await gla.clearApiKey(); render(await gla.getSettings()); };
   $('#refreshModels').onclick = loadModels;
+  $('#agentEngine').onchange=()=>save({agentEngine:$('#agentEngine').value});
+  $('#agentAccess').onchange=()=>save({agentAccess:$('#agentAccess').value});
+  $('#codexSaveModel').onclick=()=>{const model=modelValue('agentCodexModel');if(model&&!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#codexStatus'),'Enter a valid model ID.','bad');return;}return save({agentCodexModel:model});};
+  $('#codexCheck').onclick=async()=>{setState($('#codexStatus'),'Checking Codex…');const r=await gla.agent.codexStatus();setState($('#codexStatus'),r.ok?(r.signedIn?'Signed in. ':'Sign in to Codex first. ')+(r.computerUse?'Computer Use tools connected.':'Computer Use tools not connected.'):r.error,r.ok&&r.signedIn?'ok':'bad');if(r.ok){codexModelChoices=r.models;renderModelPicker('agentCodexModel',[...(SETTINGS.delegate.choices.openai||[]),...codexModelChoices],modelValue('agentCodexModel'),true);}};
   $('#agentEnabled').onchange=()=>save({agentEnabled:$('#agentEnabled').checked});
   $('#agentBrowser').onchange=()=>save({agentBrowser:$('#agentBrowser').value});
   $('#agentChooseFolder').onclick=async()=>{await gla.agent.chooseFolder();render(await gla.getSettings());};
   $('#reasoningMode').onchange=()=>save({reasoningMode:$('#reasoningMode').value});
   $('#delegateProvider').onchange=()=>save({delegateProvider:$('#delegateProvider').value});
   $('#delegateAuth').onchange=()=>save({delegateAuth:$('#delegateAuth').value});
-  $('#saveDelegateModel').onclick=async()=>{const model=$('#delegateModel').value.trim();if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#delegateTestState'),'Enter a valid model ID.','bad');return;}await save({delegateModel:model});setState($('#delegateTestState'),'Model selected. Use Test connection to check account access.');};
+  $('#saveDelegateModel').onclick=async()=>{const model=modelValue('delegateModel');if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#delegateTestState'),'Enter a valid model ID.','bad');return;}await save({delegateModel:model});setState($('#delegateTestState'),'Model selected. Use Test connection to check account access.');};
   $('#refreshDelegateModels').onclick=async()=>{setState($('#delegateTestState'),'Loading model choices…');const r=await gla.delegate.models();if(r.ok)renderDelegateModels(r.models);setState($('#delegateTestState'),r.ok?'Model choices refreshed. Test a model to confirm account access.':r.error,r.ok?'':'bad');};
   $('#signIn').onclick=async()=>{const r=await gla.delegate.login(SETTINGS.delegate.provider);if(!r.ok)setState($('#delegateAccountState'),r.error,'bad');};
   $('#cancelSignIn').onclick=()=>gla.delegate.cancelLogin(SETTINGS.delegate.provider);

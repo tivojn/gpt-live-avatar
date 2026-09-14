@@ -51,6 +51,11 @@ follow-up replies with her until you address someone else. Say “Everyone,
 continue the conversation” to return to the roundtable.
 See [shared context and live input](docs/GROUP-CONVERSATIONS.md) for details.
 
+For shell commands, code execution, file editing, screenshots and connected
+browser/computer tools, choose **Codex** as the action engine in Settings.
+Both solo and Together use the real installed Codex engine and its account.
+See [Codex actions and setup](docs/CODEX-ACTIONS.md).
+
 ## Avatars and texture tiers
 
 The updated local Mac portrait build includes Tia's original 2K/4K maps,
