@@ -99,8 +99,9 @@
       <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools and their app permissions. Availability depends on your Codex setup. Voice still uses your voice API key.</p>
       <div class="row"><button id="codexCheck">Check Codex</button><span id="codexStatus" role="status"></span></div>
       <label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel">Save model</button>
-      <label for="agentAccess">File and command access</label><select id="agentAccess"><option value="workspace">Selected folder · ask for additional access</option><option value="full">Full access · allow commands outside this folder</option></select>
-      <p class="note">Full access allows Codex to edit files and run commands across this Mac without command approval prompts. Connected apps keep their own permissions. You can stop a task at any time; completed actions remain.</p>
+      <label for="agentAccess">Codex permissions</label><select id="agentAccess" aria-describedby="agentAccessDescription"></select>
+      <p class="note" id="agentAccessDescription" aria-live="polite"></p>
+      <p class="note">Applies to every character in solo and Together. Full access is the default for new installs. macOS and connected apps keep their own permission prompts. Changing this setting stops any current task; completed actions remain.</p>
     </div>
     <label>File folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
     <label for="agentBrowser">Browser when the avatar is in front</label><select id="agentBrowser"><option value="chrome">Chrome</option><option value="safari">Safari</option><option value="edge">Edge</option><option value="brave">Brave</option></select>
@@ -165,8 +166,14 @@
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
-    $('#agentEngine').value=settings.agentEngine||'basic';$('#codexOptions').hidden=settings.agentEngine!=='codex';$('#agentAccess').value=settings.agentAccess||'workspace';renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
+    $('#agentEngine').value=settings.agentEngine||'basic';$('#codexOptions').hidden=settings.agentEngine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';$('#agentBrowser').value=settings.agentBrowser||'chrome';
+  }
+  function renderPermissions(settings) {
+    const choices=settings.agentPermissionChoices||[], picker=$('#agentAccess');
+    picker.replaceChildren(...choices.map(choice=>new Option(choice.label,choice.value)));
+    picker.value=settings.agentAccess||'full';
+    $('#agentAccessDescription').textContent=choices.find(choice=>choice.value===picker.value)?.description||'';
   }
   function renderDelegate(s) {
     const d=s.delegate,a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',waiting=['starting','waiting'].includes(a.state);

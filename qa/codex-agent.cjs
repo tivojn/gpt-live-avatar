@@ -1,6 +1,10 @@
 'use strict';
 const assert=require('node:assert/strict');
 const {CodexAgent}=require('../electron/codex-agent.cjs');
+const {normalizePermission,codexPermissions}=require('../electron/agent-permissions.cjs');
+assert.equal(normalizePermission(undefined),'full');
+for(const value of ['workspace','auto_review','full'])assert.equal(normalizePermission(value),value);
+for(const invalid of ['',false,{},'typo'])assert.equal(codexPermissions(invalid).approvalPolicy,'on-request');
 class FakeClient{
  constructor(callbacks){Object.assign(this,callbacks);this.calls=[];this.n=0;}
  async start(){}
@@ -14,10 +18,10 @@ class FakeClient{
 }
 (async()=>{
  let client;const receipts=[],asks=[],updates=[];const agent=new CodexAgent({clientFactory:o=>client=new FakeClient(o),approve:async p=>{asks.push(p);return false;}});
- const config={agentFolder:'/tmp/avatar-qa'},request='Sarah, run Python to create a test file.',history=[{role:'assistant',text:'Tia created earlier.txt.'},{role:'user',text:request}];
+ const config={agentFolder:'/tmp/avatar-qa',agentAccess:'workspace'},request='Sarah, run Python to create a test file.',history=[{role:'assistant',text:'Tia created earlier.txt.'},{role:'user',text:request}];
  const tools={execute:async(name,args,signal)=>{signal.throwIfAborted();return {ok:true,character:args.character};}};
  const work=agent.answer(1,'one',config,history,request,'Sarah',tools,r=>receipts.push(r),p=>updates.push(p));await new Promise(r=>setImmediate(r));
- const start=client.calls.find(x=>x.method==='thread/start');assert.equal(start.p.sandbox,'workspace-write');assert.equal(start.p.approvalPolicy,'on-request');assert.equal(start.p.model,'gpt-5.6-sol');assert(start.p.developerInstructions.includes('Sarah'));assert(start.p.dynamicTools.some(t=>t.name==='play_motion'));
+ const start=client.calls.find(x=>x.method==='thread/start');assert.equal(start.p.sandbox,'workspace-write');assert.equal(start.p.approvalPolicy,'on-request');assert.equal(start.p.approvalsReviewer,'user');assert.equal(start.p.model,'gpt-5.6-sol');assert(start.p.developerInstructions.includes('Sarah'));assert(start.p.dynamicTools.some(t=>t.name==='play_motion'));
  const threadId='thread-1',turnId='turn-1';
  client.onEvent('item/started',{threadId,item:{type:'agentMessage',id:'stream',phase:'commentary',text:''}});
  client.onEvent('item/agentMessage/delta',{threadId,itemId:'stream',delta:'I’m checking the file.'});
@@ -38,5 +42,11 @@ class FakeClient{
  const result=await work;assert.equal(result.character,'Sarah');assert.equal(result.text,'I’m Sarah. Created and verified example.txt.');assert(receipts.some(r=>r.path?.endsWith('example.txt')));assert.equal(new Set(receipts.map(r=>r.callId)).size,receipts.length);
  const interrupted=agent.answer(1,'two',config,history,request,'Tia',tools);interrupted.catch(()=>{});await new Promise(r=>setImmediate(r));agent.cancel(1,'two');await assert.rejects(interrupted,/cancelled/);assert(client.calls.some(c=>c.method==='turn/interrupt'));assert.equal(agent.jobs.size,0);
  await assert.rejects(client.onRequest('item/tool/call',{threadId:'thread-2',tool:'move_avatar',arguments:{}}),/no longer active/);
+ for(const [mode,expected] of [['auto_review',{approvalPolicy:'on-request',sandbox:'workspace-write',approvalsReviewer:'auto_review'}],['full',{approvalPolicy:'never',sandbox:'danger-full-access',approvalsReviewer:'user'}],[undefined,{approvalPolicy:'never',sandbox:'danger-full-access',approvalsReviewer:'user'}]]){
+  const work=agent.answer(2,'mode-'+mode,{...config,agentAccess:mode},history,request,'Sarah',tools);work.catch(()=>{});await new Promise(r=>setImmediate(r));
+  const started=client.calls.filter(c=>c.method==='thread/start').at(-1).p;
+  for(const [key,value] of Object.entries(expected))assert.equal(started[key],value,mode+': '+key);
+  agent.cancel(2);await assert.rejects(work,/cancelled/);
+ }
  agent.close();console.log('Codex identity, shell/file receipts, dynamic avatar tools, explicit approval, final-only replies, cancellation and stale-tool rejection passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

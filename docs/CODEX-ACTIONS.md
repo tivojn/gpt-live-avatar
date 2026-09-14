@@ -14,11 +14,22 @@ GPT‑6 Astra, with a custom model option. Account availability is checked by
 Codex itself. The desktop engine is preferred over older standalone CLI
 installations; GLA_CODEX_PATH can explicitly select a different executable.
 
-**Selected folder** is the default command workspace. Codex asks for additional
-access when needed. **Full access** is an explicit alternative that permits
-commands and file edits outside that folder without command approval prompts.
-Connected apps and Computer Use retain their own approval flows. Stop or a live
-interruption cancels pending work; already completed side effects remain.
+Choose **Codex permissions** in Settings or any character’s right-click menu:
+
+- **Ask for approval**: work in the selected folder; ask for additional access.
+- **Approve for me**: use Codex’s own risk reviewer for additional access requests.
+- **Full access**: allow files, commands and internet without execution prompts.
+  This is the default for new profiles. Existing saved choices are preserved.
+
+The choice is shared by solo and Together and persists across restarts. Changing
+it stops current tasks before the next request uses the new policy. Unknown
+saved values fall back to Ask for approval. macOS, connected apps and Computer
+Use retain their own permission flows. Completed actions remain after stopping.
+
+Approve for me uses `on-request`, `workspace-write` and
+`approvalsReviewer: "auto_review"` in the Codex app server. It does not locally
+accept approval requests. A denial can block an action or require user input;
+managed Codex restrictions still apply. See [Codex Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review).
 
 Browser/computer control depends on the connected tools, not just the language
 model. On a Mac with the Codex Computer Use plugin configured, its `cua_repl`

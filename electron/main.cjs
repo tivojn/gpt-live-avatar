@@ -11,6 +11,7 @@ const os = require('node:os');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 const { AvatarAssets } = require('./assets.cjs');
+const { PERMISSION_CHOICES, validPermission, normalizePermission, permissionMenu } = require('./agent-permissions.cjs');
 const { historyItems } = require('./live-config.cjs');
 const { DelegateAuth } = require('./delegate-auth.cjs');
 const { DelegateBackend, normalizeDelegate, selected, MODEL_CHOICES } = require('./delegate.cjs');
@@ -39,7 +40,7 @@ const DEFAULTS = {
   quality: 'balanced',
   agentEnabled: true,
   agentEngine: 'basic',
-  agentAccess: 'workspace',
+  agentAccess: 'full',
   agentCodexModel: '',
   agentFolder: path.join(os.homedir(), 'Desktop'),
   agentBrowser: 'chrome',
@@ -78,7 +79,7 @@ function loadConfig() {
   Object.assign(config, normalizeDelegate(config));
   config.agentEnabled=config.agentEnabled===true;
   config.agentEngine=config.agentEngine==='codex'?'codex':'basic';
-  config.agentAccess=config.agentAccess==='full'?'full':'workspace';
+  config.agentAccess=normalizePermission(config.agentAccess);
   if(typeof config.agentFolder!=='string'||!path.isAbsolute(config.agentFolder))config.agentFolder=DEFAULTS.agentFolder;
   if(!['chrome','safari','edge','brave'].includes(config.agentBrowser))config.agentBrowser='chrome';
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
@@ -109,7 +110,7 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+  return { ...config, agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function broadcastSettings() {
@@ -334,13 +335,14 @@ ipcMain.handle('gla:appearance:set', (_event, { slug, selection }={}) => {
   config.avatarLooks={...config.avatarLooks,[slug]:clean};saveConfig();return true;
 });
 ipcMain.handle('gla:settings:get', () => publicSettings());
-ipcMain.handle('gla:settings:set', (_event, patch) => {
+ipcMain.handle('gla:settings:set', (_event, patch) => updateSettings(patch));
+function updateSettings(patch) {
   if (!patch || typeof patch !== 'object') return publicSettings();
   const previousAvatar=config.avatar;
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentBrowser,config.agentEngine,config.agentAccess,config.agentCodexModel]);
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(['basic','codex'].includes(patch.agentEngine))config.agentEngine=patch.agentEngine;
-  if(['workspace','full'].includes(patch.agentAccess))config.agentAccess=patch.agentAccess;
+  if(validPermission(patch.agentAccess))config.agentAccess=patch.agentAccess;
   if(typeof patch.agentCodexModel==='string'&&/^[a-zA-Z0-9._:-]{0,160}$/.test(patch.agentCodexModel))config.agentCodexModel=patch.agentCodexModel;
   if(['chrome','safari','edge','brave'].includes(patch.agentBrowser))config.agentBrowser=patch.agentBrowser;
   Object.assign(config,normalizeDelegate(config,patch));
@@ -358,7 +360,7 @@ ipcMain.handle('gla:settings:set', (_event, patch) => {
   config.windowHeight = Math.min(2000, Math.max(200, Math.round(Number(config.windowHeight) || DEFAULTS.windowHeight)));
   saveConfig(); broadcastSettings();
   return publicSettings();
-});
+}
 ipcMain.handle('gla:key:status', () => ({ hasKey: hasApiKey() }));
 ipcMain.handle('gla:key:clear', () => { delegateBackend?.cancelAll(); try { fs.unlinkSync(keyPath()); } catch {} broadcastSettings(); return { hasKey: false }; });
 ipcMain.handle('gla:key:set', async (_event, key) => {
@@ -517,6 +519,7 @@ ipcMain.on('gla:voice:preview-state', (event, value) => {
 ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
 
 // ---------------------------------------------------------------- avatar menu and hang-up watchdog
+function avatarPermissionsMenu() { return permissionMenu(config.agentAccess, value=>updateSettings({agentAccess:value})); }
 function showAvatarMenu(state) {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   const send = id => () => { if (avatarWindow && !avatarWindow.isDestroyed()) avatarWindow.webContents.send('gla:menu-action', id); };
@@ -526,6 +529,7 @@ function showAvatarMenu(state) {
     { label: 'Mute Microphone', type: 'checkbox', checked: Boolean(state.muted), enabled: live === 'connected', click: send('mute') },
     { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
     { label: 'Help with this…', enabled:config.agentEnabled, click:send('agent') },
+    avatarPermissionsMenu(),
     { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
     { type: 'separator' },
     { label: 'Avatar', submenu: (assets?.avatars() || []).map(a => ({ label: a.name + (a.installed ? '' : ' · download in Settings'), type: 'radio', checked: !config.avatarDir && config.avatar === a.slug, enabled: a.installed, click: send('avatar:' + a.slug) })) },
@@ -629,7 +633,7 @@ app.whenReady().then(async () => {
     const headers={...details.requestHeaders};if(own)headers['X-Gla-Asset-Key']=assetAccessKey;done({requestHeaders:headers});
   });
   agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();agentManager?.cancelAll();config.agentFolder=folder;saveConfig();broadcastSettings();}});
-  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
+  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, avatarPermissionsMenu, openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [{ label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },

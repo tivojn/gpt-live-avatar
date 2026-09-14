@@ -57,6 +57,7 @@ function setupGroup(deps){
   await new Promise(resolve=>Menu.buildFromTemplate([
    {label:actor.name,enabled:false},
    {label:'Help with this…',enabled:deps.getConfig().agentEnabled,click:send('agent')},
+   deps.avatarPermissionsMenu(),
    ...deps.avatarCatalogueMenu(request.catalogue,send),
    {type:'separator'},
    {label:'Follow cursor',type:'checkbox',checked:request.catalogue?.current?.followCursor==='true',click:send('follow-cursor')},
