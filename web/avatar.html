@@ -24,6 +24,11 @@
   #bubble .line { font-size: 12.5px; line-height: 1.35; padding: 5px 8px; border-radius: 9px; background: var(--bubble-assistant); }
   #bubble .line.user { background: var(--bubble-user); align-self: flex-end; max-width: 92%; } #bubble .line.assistant { align-self: flex-start; max-width: 92%; }
   #bubble .line.pending { opacity: .7; } #bubble .line:empty { display: none; }
+  #taskUpdate { margin-top: 7px; font-size: 12.5px; line-height: 1.4; max-height: 88px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+  #taskUpdate[hidden] { display: none; }
+  #bubble.has-task .lines { display: none; }
+  #bubble .dot.working { background: #d99828; animation: pulse 1.4s infinite; }
+  @media (prefers-reduced-motion: reduce) { #bubble .dot.working { animation: none; } }
   #bubble .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; } #bubble .row[hidden] { display: none; }
   #bubble button.icon { flex: 0 0 auto; width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--bubble-chip); color: inherit; display: grid; place-items: center; padding: 0; cursor: pointer; }
   #bubble button.icon:hover { background: var(--bubble-chip-hover); } #bubble button.icon.active { background: rgba(255,91,77,.55); }
@@ -51,10 +56,10 @@
 </head>
 <body>
 <canvas id="stage"></canvas>
-<!-- Speech bubble: conversation only. It appears while she talks and fades
-     when the conversation goes quiet; every control lives in the right-click menu. -->
+<!-- Speech and task progress share the same overhead bubble. -->
 <div id="bubble" class="hidden">
   <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span></div>
+  <div id="taskUpdate" hidden role="status" aria-live="polite"></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
   <div class="row" id="steerRow">
     <button class="icon" id="muteBtn" title="Mute microphone"><svg class="on" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><svg class="off" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M3 17 17 3"/></svg></button>
@@ -87,11 +92,20 @@ matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => {
 const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 30, idleFps: 10, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 15, maxTexture: Infinity } };
 const quality = () => QUALITY[settings.quality] || QUALITY.balanced;
 const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
-const setStatus = (text, dot = '') => { $('#status').textContent = text; $('#dot').className = 'dot ' + dot; if (dot === 'error') toast(text, 6000); };
+let taskActivity = null, conversationStatus = {text: 'Loading…', dot: ''};
+const paintStatus = () => { const task=taskActivity && performance.now()<taskActivity.until ? taskActivity : null; $('#status').textContent=task?.label||conversationStatus.text; $('#dot').className='dot '+(task?(task.active?'working':task.state==='error'?'error':''):conversationStatus.dot); };
+const setStatus = (text, dot = '') => { conversationStatus={text,dot};paintStatus();if(dot==='error')toast(text,6000); };
+const taskStatus = (_message, update) => { if(!update)return;taskActivity=update;syncBubble();placeBubble(); };
 const bubblePolicy = new BubblePolicy();
 const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
 const showBubble = (ms = 9000) => { bubblePolicy.incoming(performance.now(), ms); syncBubble(); };
 const syncBubble = () => {
+  const task=taskActivity && performance.now()<taskActivity.until ? taskActivity : null;
+  bubblePolicy.activity=Boolean(task);
+  bubble.classList.toggle('has-task',Boolean(task));
+  $('#taskUpdate').hidden=!task?.detail;
+  if($('#taskUpdate').textContent!==(task?.detail||''))$('#taskUpdate').textContent=task?.detail||'';
+  paintStatus();
   bubblePolicy.setMode(bubbleMode());
   if (bubbleMode() === 'off' && document.activeElement === $('#steer')) $('#steer').blur();
   bubblePolicy.editor = live.state === 'connected' && document.activeElement === $('#steer');
@@ -556,8 +570,12 @@ const considerReply = reply => { if (!companion) return; companion.consider(late
 
 // ---------------------------------------------------------------- live session
 const live = new LiveClient({ createSession: (sdp, options) => gla.createLiveSession(sdp, options) });
-const delegate = new DelegateClient(live,gla.delegate,message=>{if(message)toast(message,message==='Thinking…'?2000:7000);});
-const agentUI=installAgentUI({api:gla.agent,name:()=>settings.avatar?.name||settings.personaName,onStatus:message=>toast(message,4000),interactive:value=>{if(value){gla.window.setIgnoreMouse(false);ignoring=false;}},execute:async(action,args,cancelled)=>{
+let delegateStatusID='';
+const delegate = new DelegateClient(live,gla.delegate,message=>{
+ if(message==='Thinking…'){delegateStatusID='delegate-'+crypto.randomUUID();taskStatus(message,{id:delegateStatusID,label:'Working…',detail:'',active:true,until:Infinity});}
+ else if(taskActivity?.id===delegateStatusID){taskStatus(message,{id:delegateStatusID,label:message?'Couldn’t finish':'',detail:message||'',state:message?'error':'cancelled',active:false,until:message?performance.now()+8000:0});}
+});
+const agentUI=installAgentUI({api:gla.agent,name:()=>settings.avatar?.name||settings.personaName,onStatus:taskStatus,interactive:value=>{if(value){gla.window.setIgnoreMouse(false);ignoring=false;}},execute:async(action,args,cancelled)=>{
  if(!avatar||!ready)throw Error('The avatar is still loading.');
  const slug=settings.avatar?.slug,name=settings.avatar?.name||settings.personaName;
  const state=()=>({ok:true,characters:[{slug,name,motions:[...avatar.motion.clips.values()].map(c=>({id:c.id,label:c.label||c.id})).slice(0,180)}]});
@@ -599,7 +617,7 @@ live.addEventListener('transcript', ({ detail }) => {
   const { role, text, final } = detail; if (!text) return;
   const line = role === 'user' ? $('#lineUser') : $('#lineAssistant');
   line.textContent = text; line.classList.toggle('pending', !final);
-  if (role === 'assistant') showBubble(9000); // incoming replies alone wake auto mode
+  if (role === 'assistant') { if(taskActivity&&!taskActivity.active)taskActivity=null;showBubble(9000); } // incoming replies alone wake auto mode
   if (role === 'user') {
     lastUserActivity = performance.now();
     if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } }
@@ -621,7 +639,7 @@ setInterval(() => {
 }, 1000);
 addEventListener('pagehide', () => live.stop('unload'));
 addEventListener('beforeunload', () => live.stop('unload'));
-setInterval(() => { if (live.state === 'connected') $('#dot').className = 'dot ' + (speaking ? 'speaking' : 'live'); }, 250);
+setInterval(() => { if(live.state==='connected'){conversationStatus.dot=speaking?'speaking':'live';paintStatus();} },250);
 // Five bars flash with whoever is talking: blue for you, green for her.
 const meterBars = [...document.querySelectorAll('#meter i'), ...document.querySelectorAll('#listenMeter i')];
 const meterShape = [.45, .8, 1, .8, .45];

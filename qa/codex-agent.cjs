@@ -13,12 +13,21 @@ class FakeClient{
  close(){}
 }
 (async()=>{
- let client;const receipts=[],asks=[];const agent=new CodexAgent({clientFactory:o=>client=new FakeClient(o),approve:async p=>{asks.push(p);return false;}});
+ let client;const receipts=[],asks=[],updates=[];const agent=new CodexAgent({clientFactory:o=>client=new FakeClient(o),approve:async p=>{asks.push(p);return false;}});
  const config={agentFolder:'/tmp/avatar-qa'},request='Sarah, run Python to create a test file.',history=[{role:'assistant',text:'Tia created earlier.txt.'},{role:'user',text:request}];
  const tools={execute:async(name,args,signal)=>{signal.throwIfAborted();return {ok:true,character:args.character};}};
- const work=agent.answer(1,'one',config,history,request,'Sarah',tools,r=>receipts.push(r));await new Promise(r=>setImmediate(r));
+ const work=agent.answer(1,'one',config,history,request,'Sarah',tools,r=>receipts.push(r),p=>updates.push(p));await new Promise(r=>setImmediate(r));
  const start=client.calls.find(x=>x.method==='thread/start');assert.equal(start.p.sandbox,'workspace-write');assert.equal(start.p.approvalPolicy,'on-request');assert.equal(start.p.model,'gpt-5.6-sol');assert(start.p.developerInstructions.includes('Sarah'));assert(start.p.dynamicTools.some(t=>t.name==='play_motion'));
  const threadId='thread-1',turnId='turn-1';
+ client.onEvent('item/started',{threadId,item:{type:'agentMessage',id:'stream',phase:'commentary',text:''}});
+ client.onEvent('item/agentMessage/delta',{threadId,itemId:'stream',delta:'I’m checking the file.'});
+ assert(updates.some(p=>p.state==='update'&&p.text==='I’m checking the file.'));
+ const count=updates.length;
+ client.onEvent('item/started',{threadId,item:{type:'reasoning',id:'private'}});
+ client.onEvent('item/reasoning/textDelta',{threadId,itemId:'private',delta:'private reasoning'});
+ client.onEvent('item/started',{threadId,item:{type:'agentMessage',id:'final',phase:'final_answer',text:''}});
+ client.onEvent('item/agentMessage/delta',{threadId,itemId:'final',delta:'unfinished final answer'});
+ assert.equal(updates.length,count,'Only public commentary streams into progress');
  const response=await client.onRequest('item/tool/call',{threadId,turnId,tool:'move_avatar',arguments:{character:'Sarah',destination:'upper-right'}});assert(response.success);assert(response.contentItems[0].text.includes('Sarah'));
  const approval=await client.onRequest('item/commandExecution/requestApproval',{threadId,turnId,command:'rm sensitive-file'});assert.equal(approval.decision,'decline');assert.equal(asks.length,1);
  client.onEvent('item/completed',{threadId,item:{type:'commandExecution',id:'c1',command:'python3 task.py',exitCode:0,aggregatedOutput:'Created example.txt'}});

@@ -27,7 +27,7 @@ const liveGroup=new LiveGroup(api,{
 function liveMode(){return $('#liveMode').checked;}
 const status=(message,error=false)=>{$('#status').textContent=message;$('#status').classList.toggle('error',error);};
 let helpCharacter='tia';
-const agentUI=installAgentUI({api:{...window.gla.agent,run:request=>api.reply({...request,speaker:helpCharacter,participants:[...actors.keys()],human:{enabled:true,name:human.name||'You'},topic:$('#topic').value,mode:$('#format').value,history:[...history],humanRequest:request.history.at(-1)?.text||''})},onStatus:message=>status(message),name:()=>actors.get(helpCharacter)?.info.name||'the characters',interactive:value=>{if(value){api.setIgnoreMouse(false);ignore=false;}},execute:async(action,args,cancelled)=>{
+const agentUI=installAgentUI({api:{...window.gla.agent,run:request=>api.reply({...request,speaker:helpCharacter,participants:[...actors.keys()],human:{enabled:true,name:human.name||'You'},topic:$('#topic').value,mode:$('#format').value,history:[...history],humanRequest:request.history.at(-1)?.text||''})},onStatus:(_message,update)=>{if(!update)return;const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(update.character).toLowerCase()));if(!actor)return;for(const a of actors.values())if(a!==actor){a.activity=null;refreshBubble(a);}actor.activity=update;refreshBubble(actor);},name:()=>actors.get(helpCharacter)?.info.name||'the characters',interactive:value=>{if(value){api.setIgnoreMouse(false);ignore=false;}},execute:async(action,args,cancelled)=>{
  if(action==='state')return {ok:true,characters:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,motions:[...a.avatar.motion.clips.values()].slice(0,180).map(c=>({id:c.id,label:c.label||c.id}))}))};
  const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(args.character).toLowerCase()));if(!actor)throw Error('That character is not visible.');
  if(action==='play_motion'){if(!actor.avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');const result=await actor.avatar.motion.play(args.motion,{loop:false});return {ok:result!==false,motion:args.motion,character:actor.slug};}
@@ -58,12 +58,17 @@ function position(actor){
 }
 function recoverActor(actor){const cell=innerWidth/actors.size,i=[...actors.keys()].indexOf(actor.slug),h=Math.min(innerHeight*.68,740),w=Math.min(cell+90,h*.9);Object.assign(actor,{w,h,x:cell*(i+.5)-w/2,y:innerHeight-h-24});position(actor);}
 function arrange(){for(const actor of actors.values())recoverActor(actor);}
-function setBubble(actor,text){actor.message=text;refreshBubble(actor);}
+function setBubble(actor,text){actor.message=text;if(text&&actor.activity&&!actor.activity.active)actor.activity=null;refreshBubble(actor);}
 function refreshBubble(actor){
- const text=actor.message||(actor.bubbleMode==='always'?(actor.slug===speaker?'Speaking…':running?'Listening':'Ready'):'');
+ const activity=actor.activity&&performance.now()<actor.activity.until?actor.activity:null;
+ const text=activity?[activity.label,activity.detail].filter(Boolean).join('\n'):actor.message||(actor.bubbleMode==='always'?(actor.slug===speaker?'Speaking…':running?'Listening':'Ready'):'');
+ actor.bubble.classList.toggle('task-update',Boolean(activity));actor.bubble.setAttribute('aria-label',activity?actor.info.name+' task progress':actor.info.name+' speech');
  actor.bubble.hidden=actor.bubbleMode==='off';if(actor.bubble.textContent!==text)actor.bubble.textContent=text;
+ const width=actor.bubble.offsetWidth||270,height=actor.bubble.offsetHeight||0;
+ actor.bubble.style.left=Math.max(width/2+8-actor.x,Math.min(actor.w/2,innerWidth-width/2-8-actor.x))+'px';
+ actor.bubble.style.bottom=Math.min(actor.h,actor.y+actor.h-height-8)+'px';
 }
-function stop(message='Stopped. Everyone is resting.'){runGeneration++;running=false;speaker='';listener='';waitingHuman=false;wantsTurn=false;const resolve=humanResolve;humanResolve=null;resolve?.(null);microphone.cancel();voice.stop();liveGroup.stop();for(const a of actors.values()){setBubble(a,'');a.el.classList.remove('speaking');}controls();status(message);}
+function stop(message='Stopped. Everyone is resting.'){runGeneration++;running=false;speaker='';listener='';waitingHuman=false;wantsTurn=false;const resolve=humanResolve;humanResolve=null;resolve?.(null);microphone.cancel();voice.stop();liveGroup.stop();for(const a of actors.values()){a.activity=null;setBubble(a,'');a.el.classList.remove('speaking');}controls();status(message);}
 async function loadCast(){
  const generation=++loadGeneration;stop('Loading characters…');loading=true;controls();const slugs=selected().slice(0,5);
  for(const [slug,actor] of actors)if(!slugs.includes(slug)){actor.avatar.dispose();actor.el.remove();actors.delete(slug);}

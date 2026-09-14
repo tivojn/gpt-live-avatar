@@ -54,3 +54,10 @@ demand and shuts down after a minute without work.
 References: [Codex App Server](https://learn.chatgpt.com/docs/app-server),
 [Computer Use](https://learn.chatgpt.com/docs/computer-use),
 [Browser](https://learn.chatgpt.com/docs/browser).
+
+Task progress appears in the addressed avatar’s overhead bubble in solo and
+Together mode. Public Codex commentary streams into the bubble; tool activity
+uses readable labels. Private reasoning and raw command output are excluded.
+Auto mode keeps the bubble visible until the task finishes, then briefly shows
+the result. Bubble Off still hides it. Cancelling or starting a newer task
+prevents late updates from replacing the current task.

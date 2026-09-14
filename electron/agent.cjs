@@ -29,17 +29,18 @@ function setupAgent(deps){
   if(typeof id!=='string'||!/^[\w-]{1,160}$/.test(id))throw Error('Invalid agent request.');
   if(!Array.isArray(history))throw Error('A user request is required.');const latest=latestUserRequest(history);if(!latest||latest.length>6000)throw Error('Use a request of up to 6,000 characters.');
   const speaker=typeof character==='string'?character.slice(0,60):config.personaName||'Tia';
+  const update=value=>progress(sender,{...value,id,character:speaker});
   const key=sender.id+':'+speaker+':'+(String(turnId||id).slice(0,160))+':'+crypto.createHash('sha256').update(latest).digest('hex');
   if(completed.has(key))return completed.get(key);
   const choice=config.reasoningMode==='delegate'?config:{...config,...normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:config.backendModel||'gpt-5.6-luna'})};
-  const agent=createAgentTools({config,request:latest,avatarCommand:(action,args,signal)=>command(sender,action,args,signal),referenceFile:fileReferences.get(sender.id),onReceipt:receipt=>{if(receipt.ok&&receipt.path&&['create_text_file','read_text_file','trash_file'].includes(receipt.tool))fileReferences.set(sender.id,receipt.path);if(config.agentEngine!=='codex'&&typeof onReceipt==='function')onReceipt(receipt);},progress:value=>progress(sender,{id,...value})});
-  progress(sender,{id,state:'thinking',tool:''});
+  const agent=createAgentTools({config,request:latest,avatarCommand:(action,args,signal)=>command(sender,action,args,signal),referenceFile:fileReferences.get(sender.id),onReceipt:receipt=>{if(receipt.ok&&receipt.path&&['create_text_file','read_text_file','trash_file'].includes(receipt.tool))fileReferences.set(sender.id,receipt.path);if(config.agentEngine!=='codex'&&typeof onReceipt==='function')onReceipt(receipt);},progress:update});
+  update({state:'thinking',tool:''});
   const work=config.agentEngine==='codex'
-   ?codex.answer(sender.id,id,config,history,latest,speaker,agent,receipt=>onReceipt?.(receipt),value=>progress(sender,{id,...value}))
+   ?codex.answer(sender.id,id,config,history,latest,speaker,agent,receipt=>onReceipt?.(receipt),update)
    :deps.backend.answer(sender.id,id,choice,history,`You are ${speaker}, a desktop companion completing a real user's request. Give a concise plain-language result without markdown or code blocks, suitable to read aloud. ${agent.instructions}`,agent);
   completed.set(key,work);while(completed.size>64)completed.delete(completed.keys().next().value);
-  try{const result=await work;progress(sender,{id,state:'complete',tool:'',text:result.text,receipts:result.receipts});return result;}
-  catch(e){completed.delete(key);progress(sender,{id,state:'error',tool:'',error:e.message});throw e;}
+  try{const result=await work;update({state:'complete',tool:'',text:result.text,receipts:result.receipts});return result;}
+  catch(e){completed.delete(key);update({state:/cancelled|aborted/i.test(e.message)?'cancelled':'error',tool:'',error:e.message});throw e;}
  }
  const handle=(channel,fn)=>ipcMain.handle(channel,async(e,...args)=>{try{if(!allowed(e))throw Error('Unavailable outside the app.');return {ok:true,...await fn(e,...args)};}catch(e){return {ok:false,error:String(e.message).slice(0,600)};}});
  handle('gla:agent:run',(e,r)=>answer(e.sender,r));
