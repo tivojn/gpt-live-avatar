@@ -22,7 +22,9 @@ const WEB = path.join(__dirname, '..', 'web');
 const DEFAULT_OPENCLAM_AVATAR = path.join(os.homedir(), 'Library', 'Application Support', 'OpenClam Studio', 'backend-data', 'avatars', 'tia');
 // Bundled avatar packages (resource-friendly tier) and the shipped catalogue.
 const BUNDLED_AVATARS = app.isPackaged ? path.join(process.resourcesPath, 'avatars') : path.join(__dirname, '..', 'build', 'assets', 'bundle');
-const BUNDLED_INDEX = app.isPackaged ? path.join(process.resourcesPath, 'assets-index.json') : path.join(__dirname, '..', 'build', 'assets', 'index.json');
+const BUNDLED_INDEX = app.isPackaged ? path.join(process.resourcesPath, 'assets-index.json') : path.join(__dirname, '..', 'build', 'protected', 'index.json');
+const ASSET_RUNTIME=app.isPackaged?path.join(process.resourcesPath,'assets-runtime.json'):path.join(__dirname,'..','build','protected','assets-runtime.json');
+const assetAccessKey=crypto.randomBytes(32).toString('base64url');
 const LIVE_MODEL = 'gpt-live-1';
 const DEFAULT_BACKEND_MODEL = 'gpt-5.6-luna';
 const RECOMMENDED_BACKENDS = ['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'];
@@ -145,7 +147,7 @@ function avatarInfo(selection = config) {
   try {
     const manifestPath = file('manifest.json');
     if (!manifestPath) { result.problem = 'The avatar package has no manifest.'; return result; }
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const manifest = JSON.parse(assets.read(manifestPath));
     if (manifest.renderer !== '3d') { result.problem = 'This folder is not a 3D avatar package.'; return result; }
     result.name = String(manifest.name || 'Avatar');
     result.manifest = manifest;
@@ -159,7 +161,7 @@ function avatarInfo(selection = config) {
     result.residentAvailable = Boolean(resident);
     const glb = manifest.model ? file(manifest.model) : null;
     if (!resident && !glb) { result.problem = 'The avatar package has no model.'; return result; }
-    result.modelBytes = resident ? 0 : fs.statSync(glb).size;
+    result.modelBytes = resident ? 0 : assets.size(glb);
     result.modelURL = baseURL + (resident ? 'runtime/resident/model.gltf' : manifest.model);
     result.motionsURL = baseURL + (file(path.join('runtime', 'motions', 'library.json')) ? 'runtime/motions/library.json' : 'motions/library.json');
     const appearance = manifest.appearance || 'appearance/index.json';
@@ -168,7 +170,7 @@ function avatarInfo(selection = config) {
     result.visemes = Array.isArray(manifest.visemes) ? manifest.visemes : ['sil', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou'];
     try {
       const libraryPath = file(path.join('runtime', 'motions', 'library.json')) || file(path.join('motions', 'library.json'));
-      const library = JSON.parse(fs.readFileSync(libraryPath, 'utf8'));
+      const library = JSON.parse(assets.read(libraryPath));
       result.clips = (library.clips || []).length;
       result.clipLabels = (library.clips || []).map(c => String(c.label || c.id || '').replace(/[^\w -]/g, '').slice(0, 60)).filter(Boolean);
     } catch { result.clips = 0; result.clipLabels = []; }
@@ -187,10 +189,13 @@ function safeJoin(root, rel) {
 function startServer() {
   return new Promise(resolve => {
     const server = http.createServer(async (request, response) => {
+      try {
+      if(!['GET','HEAD'].includes(request.method)){response.writeHead(405);response.end();return;}
       const url = new URL(request.url, 'http://127.0.0.1');
       let rel = decodeURIComponent(url.pathname);
       let file = null;
       if (rel.startsWith('/avatar/') || rel.startsWith('/avatar-package/')) {
+        if(request.headers['x-gla-asset-key']!==assetAccessKey){response.writeHead(403);response.end();return;}
         const scoped = rel.match(/^\/avatar-package\/([a-f0-9]{16})\/(.*)$/);
         const roots = scoped ? (packageRoots.get(scoped[1]) || []) : rel.startsWith('/avatar/') ? avatarRoots() : [];
         rel = scoped ? scoped[2] : rel.slice('/avatar/'.length);
@@ -208,7 +213,7 @@ function startServer() {
         // Motion clips ship raw-deflate compressed; inflate on the way out.
         if (!file && rel.endsWith('.json')) {
           const packed = assets.resolve(roots, rel + '.deflate');
-          if (packed) { try { sendBuffer(zlib.inflateRawSync(await fsp.readFile(packed)), 'application/json'); } catch { response.writeHead(500); response.end(); } return; }
+          if (packed) { try { sendBuffer(zlib.inflateRawSync(assets.read(packed)), 'application/json'); } catch { response.writeHead(500); response.end(); } return; }
         }
         if (!file) { response.writeHead(404); response.end(); return; }
       } else {
@@ -217,21 +222,27 @@ function startServer() {
         if (!file) { response.writeHead(403); response.end(); return; }
       }
       let stat;
-      try { stat = await fsp.stat(file); } catch { response.writeHead(404); response.end(); return; }
+      try { stat = typeof file==='string'?await fsp.stat(file):{size:assets.size(file),isFile:()=>true}; } catch { response.writeHead(404); response.end(); return; }
       if (!stat.isFile()) { response.writeHead(404); response.end(); return; }
-      const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+      const type = MIME[path.extname(typeof file==='string'?file:file.name).toLowerCase()] || 'application/octet-stream';
       const headers = { 'Content-Type': type, 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' };
       const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range || '');
       if (range && (range[1] || range[2])) {
         const start = range[1] ? Number(range[1]) : Math.max(0, stat.size - Number(range[2]));
         const end = range[1] && range[2] ? Math.min(Number(range[2]), stat.size - 1) : stat.size - 1;
+        if(start>=stat.size||end<start){response.writeHead(416,{'Content-Range':`bytes */${stat.size}`});response.end();return;}
         response.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Content-Length': end - start + 1 });
-        fs.createReadStream(file, { start, end }).pipe(response);
+        if(request.method==='HEAD'){response.end();return;}
+        assets.stream(file,start,end).on('error',()=>response.destroy()).pipe(response);
         return;
       }
       response.writeHead(200, { ...headers, 'Content-Length': stat.size });
       if (request.method === 'HEAD') { response.end(); return; }
-      fs.createReadStream(file).pipe(response);
+      assets.stream(file).on('error',()=>response.destroy()).pipe(response);
+      } catch {
+        if(response.headersSent)response.destroy();
+        else {response.writeHead(500);response.end('Cannot read this resource.');}
+      }
     });
     server.listen(0, '127.0.0.1', () => { serverOrigin = `http://127.0.0.1:${server.address().port}`; resolve(serverOrigin); });
   });
@@ -586,9 +597,10 @@ app.whenReady().then(async () => {
   loadConfig();
   delegateAuth=new DelegateAuth({directory:path.join(app.getPath('userData'),'delegate-credentials'),safeStorage,readOpenAIKey:readApiKey,openExternal:url=>shell.openExternal(url),onChange:broadcastSettings});
   delegateBackend=new DelegateBackend({auth:delegateAuth});
-  assets = new AvatarAssets({ bundledRoot: BUNDLED_AVATARS, downloadsRoot: path.join(app.getPath('userData'), 'avatars'), bundledIndexPath: BUNDLED_INDEX,
+  assets = new AvatarAssets({ bundledRoot: BUNDLED_AVATARS, downloadsRoot: path.join(app.getPath('userData'), 'avatars'), bundledIndexPath: BUNDLED_INDEX, runtimeConfigPath:ASSET_RUNTIME, safeStorage,
     developmentRoot: app.isPackaged ? undefined : path.join(__dirname, '..', 'build', 'assets', 'packages'),
     broadcast: progress => { for (const w of [avatarWindow, settingsWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:assets:progress', progress); } });
+  await assets.unlockInstalled();
   // Refresh the cloud catalogue in the background so new avatars and tiers
   // show up without an app update; failures keep the shipped copy.
   setTimeout(() => { assets.refreshIndex().then(() => broadcastSettings()).catch(() => {}); }, 2000);
@@ -598,12 +610,16 @@ app.whenReady().then(async () => {
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'));
   electronSession.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media');
   await startServer();
+  electronSession.defaultSession.webRequest.onBeforeSendHeaders({urls:[serverOrigin+'/*']},(details,done)=>{
+    const own=BrowserWindow.getAllWindows().some(w=>w.webContents.id===details.webContentsId&&w.webContents.getURL().startsWith(serverOrigin+'/'));
+    const headers={...details.requestHeaders};if(own)headers['X-Gla-Asset-Key']=assetAccessKey;done({requestHeaders:headers});
+  });
   agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();config.agentFolder=folder;saveConfig();broadcastSettings();}});
   groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request)});
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [{ label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: 'View', submenu: [{ label: 'Bring Characters Together…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:'CmdOrCtrl+Shift+0', click:requestAvatarRecovery }, { role: 'reload' }, { role: 'toggleDevTools' }] },
+    { label: 'View', submenu: [{ label: 'Bring Characters Together…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:'CmdOrCtrl+Shift+0', click:requestAvatarRecovery }, { role: 'reload' }, ...(!app.isPackaged?[{role:'toggleDevTools'}]:[])] },
   ]));
   createAvatarWindow();
   globalShortcut.register('CommandOrControl+Shift+0',requestAvatarRecovery);

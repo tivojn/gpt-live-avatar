@@ -1,0 +1,8 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const repo=path.resolve(__dirname,'..'),root=path.join(repo,'build/protected');
+const config=require('../electron/asset-download.json'),runtime=JSON.parse(fs.readFileSync(path.join(root,'assets-runtime.json'))),envelope=JSON.parse(fs.readFileSync(path.join(root,'index.json')));
+if(runtime.keys||runtime.privateKey)throw Error('Content keys and signing secrets must not be bundled in the installer.');
+if(!runtime.downloadToken||!runtime.publicKey||!crypto.verify(null,Buffer.from(envelope.payload),runtime.publicKey,Buffer.from(envelope.signature,'base64')))throw Error('Invalid protected release catalogue.');
+if(!config.baseURL||!/^https:\/\/[-a-z0-9.]+\/$/.test(config.baseURL))throw Error('R2 migration is not activated. Configure and test the live gateway before building a release installer.');
+console.log('Verified release configuration: signed catalogue, HTTPS downloads, no model content keys in the installer.');

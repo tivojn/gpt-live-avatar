@@ -1,49 +1,73 @@
 'use strict';
-// Avatar packages and texture tiers.
-//
-// The app ships a resource-friendly package per bundled avatar (512/1024
-// textures, meshes, rig, motions). The 2K "balanced" and 4K "best" textures,
-// and every non-bundled avatar, are downloaded on demand from the GitHub
-// release and unpacked next to the bundle in the user's data folder. Both
-// locations are overlaid when files are served, so a downloaded tier simply
-// adds larger variants to the same resident model.
+// Signed cloud catalogue and encrypted avatar packages, cached without unpacking.
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const https = require('node:https');
 const crypto = require('node:crypto');
-const { spawn } = require('node:child_process');
+const {pipeline}=require('node:stream/promises');
+const {ProtectedPackage}=require('./protected-assets.cjs');
 
-const RELEASE_BASE = 'https://github.com/tivojn/gpt-live-avatar/releases/download/assets-v1/';
+const DOWNLOAD_CONFIG=require('./asset-download.json');
+const RELEASE_BASE=DOWNLOAD_CONFIG.baseURL||'';
 const TIER_SIZES = { balanced: 2048, best: 4096 };
 const TIER_LABELS = { base: 'Avatar package (1K textures, meshes, motions)', balanced: 'Balanced: 2K textures', best: 'Best quality: 4K textures' };
 
 class AvatarAssets {
-  constructor({ bundledRoot, downloadsRoot, bundledIndexPath, developmentRoot, broadcast }) {
+  constructor({ bundledRoot, downloadsRoot, bundledIndexPath, developmentRoot, broadcast, runtimeConfigPath, safeStorage, baseURL=RELEASE_BASE, allowLocal=false }) {
     this.bundledRoot = bundledRoot; this.downloadsRoot = downloadsRoot; this.bundledIndexPath = bundledIndexPath;
     this.broadcast = broadcast || (() => {});
     this.developmentRoot = developmentRoot;
     this.active = null; // { slug, tier, request, cancelled }
     this.progress = null;
-    this.index = null;
+    this.index = null;this.baseURL=baseURL;this.allowLocal=allowLocal;this.packages=new Map();
+    try{this.runtime=JSON.parse(fs.readFileSync(runtimeConfigPath,'utf8'));}catch{this.runtime={};}
+    this.safeStorage=safeStorage;this.keyFile=path.join(downloadsRoot,'content-keys.bin');
+    if(safeStorage?.isEncryptionAvailable())try{this.runtime.keys=JSON.parse(safeStorage.decryptString(fs.readFileSync(this.keyFile)));}catch{}
+  }
+  async ensureKeys(){
+    if(this.runtime.keys&&Object.keys(this.runtime.keys).length)return;
+    if(!this.safeStorage?.isEncryptionAvailable())throw Error('macOS secure storage is unavailable. Unlock your login keychain and retry.');
+    if(this.keyRequest)return this.keyRequest;
+    this.keyRequest=(async()=>{
+      if(!this.baseURL||(!this.allowLocal&&new URL(this.baseURL).protocol!=='https:'))throw Error('Protected downloads are not configured for this build.');
+      const pair=await new Promise((resolve,reject)=>crypto.generateKeyPair('rsa',{modulusLength:2048},(e,publicKey,privateKey)=>e?reject(e):resolve({publicKey,privateKey})));
+      const response=await fetch(this.baseURL+'authorize',{method:'POST',headers:{Authorization:'Bearer '+this.runtime.downloadToken,'Content-Type':'application/json'},body:JSON.stringify({publicKey:pair.publicKey.export({type:'spki',format:'der'}).toString('base64')}),redirect:'error',signal:AbortSignal.timeout(15000)});
+      if(!response.ok){await response.body?.cancel();throw Error(`Could not unlock avatar downloads (HTTP ${response.status}). Please retry.`);}
+      const body=await response.text();if(body.length>2048)throw Error('Invalid avatar authorization.');
+      const keys=JSON.parse(crypto.privateDecrypt({key:pair.privateKey,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(JSON.parse(body).wrappedKeys,'base64')));
+      if(!keys||!Object.keys(keys).length||Object.entries(keys).some(([id,key])=>!/^[-a-z0-9]+$/.test(id)||typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)))throw Error('Invalid content keys.');
+      await fsp.mkdir(this.downloadsRoot,{recursive:true});await fsp.writeFile(this.keyFile,this.safeStorage.encryptString(JSON.stringify(keys)),{mode:0o600});this.runtime.keys=keys;this.packages.clear();
+    })().finally(()=>{this.keyRequest=null;});return this.keyRequest;
+  }
+  async unlockInstalled(){
+    if(this.runtime.keys)return;
+    let encrypted=false;try{encrypted=fs.readdirSync(this.downloadsRoot,{withFileTypes:true}).some(e=>e.isDirectory()&&fs.existsSync(path.join(this.downloadsRoot,e.name,'base.gla')));}catch{}
+    if(encrypted)try{await this.ensureKeys();}catch(e){this.lastKeyError=e.message;}
   }
 
   // ---- catalogue
   loadIndexSync() {
     if (this.index) return this.index;
     for (const p of [path.join(this.downloadsRoot, 'index.json'), this.bundledIndexPath]) {
-      try { const parsed = JSON.parse(fs.readFileSync(p, 'utf8')); if (parsed && parsed.avatars) { this.index = parsed; break; } } catch {}
+      try { const parsed = this.parseIndex(fs.readFileSync(p, 'utf8')); if (parsed && parsed.avatars) { this.index = parsed; break; } } catch {}
     }
     if (!this.index) this.index = { version: 1, avatars: {} };
     return this.index;
   }
+  parseIndex(data){
+    let doc=JSON.parse(data);
+    if(this.runtime.publicKey){if(typeof doc.payload!=='string'||!crypto.verify(null,Buffer.from(doc.payload),this.runtime.publicKey,Buffer.from(doc.signature||'','base64')))throw Error('The cloud catalogue signature is invalid.');doc=JSON.parse(doc.payload);if(doc.version!==2)throw Error('Unsupported catalogue version.');}
+    if(!doc||typeof doc.avatars!=='object'||Array.isArray(doc.avatars))throw Error('Invalid avatar catalogue.');
+    for(const [slug,a] of Object.entries(doc.avatars)){if(!/^[a-z0-9_-]{1,40}$/.test(slug)||typeof a.name!=='string'||a.name.length>80||/[<>&"']/.test(a.name))throw Error('Invalid avatar entry.');for(const [tier,p] of Object.entries(a.mac||{})){if(!['base','balanced','best'].includes(tier)||!/^[-a-z0-9]+\.gla$/.test(p.file)||p.format!=='gla-pack-v1'||!Number.isSafeInteger(p.bytes)||p.bytes<=12||p.bytes>10_000_000_000||! /^[a-f0-9]{64}$/.test(p.sha256))throw Error('Invalid protected download.');if(!Array.isArray(p.parts)||!p.parts.length||p.parts.length>160||p.parts.reduce((n,x)=>n+x.bytes,0)!==p.bytes||p.parts.some((x,i)=>x.file!==p.file+'.p'+String(i).padStart(3,'0')||!Number.isSafeInteger(x.bytes)||x.bytes<=0||x.bytes>64*1024*1024||! /^[a-f0-9]{64}$/.test(x.sha256)))throw Error('Invalid protected download parts.');}}
+    return doc;
+  }
   async refreshIndex() {
     try {
-      const data = await this.fetchBuffer(RELEASE_BASE + 'index.json', null, 15000);
-      const parsed = JSON.parse(data.toString('utf8'));
+      const data = await this.fetchBuffer(this.baseURL + 'index.json', null, 15000);
+      const parsed = this.parseIndex(data.toString('utf8'));
       if (parsed && parsed.avatars) {
         await fsp.mkdir(this.downloadsRoot, { recursive: true });
-        await fsp.writeFile(path.join(this.downloadsRoot, 'index.json'), JSON.stringify(parsed, null, 1));
+        await fsp.writeFile(path.join(this.downloadsRoot, 'index.json'), data);
         this.index = parsed;
       }
     } catch (error) { this.lastIndexError = error.message; }
@@ -56,34 +80,52 @@ class AvatarAssets {
     // indices from the previous downloaded model into its resident document.
     if (this.developmentRoot) {
       const local = path.join(this.developmentRoot, slug);
-      if (fs.existsSync(path.join(local, 'manifest.json'))) return [local];
+      if (this.exists(local,'manifest.json')) return [local];
     }
-    return [path.join(this.bundledRoot, slug), path.join(this.downloadsRoot, slug)].filter(dir => fs.existsSync(path.join(dir, 'manifest.json')) || fs.existsSync(path.join(dir, 'runtime')));
+    const b=path.join(this.bundledRoot,slug),d=path.join(this.downloadsRoot,slug);
+    const roots=fs.existsSync(path.join(d,'base.gla'))?[d,b]:[b,d];
+    return roots.filter(dir=>this.exists(dir,'manifest.json')||fs.existsSync(path.join(dir,'runtime'))||['balanced','best'].some(t=>fs.existsSync(path.join(dir,t+'.gla'))));
   }
-  installed(slug) { return this.roots(slug).some(dir => fs.existsSync(path.join(dir, 'manifest.json'))); }
+  installed(slug) { return this.roots(slug).some(dir=>this.exists(dir,'manifest.json')); }
   manifest(slug) {
-    try { return JSON.parse(fs.readFileSync(this.resolve(this.roots(slug), 'manifest.json'), 'utf8')); }
+    try { return JSON.parse(this.read(this.resolve(this.roots(slug),'manifest.json'))); }
     catch { return {}; }
   }
   matchingRevision(slug) {
     const file = this.resolve(this.roots(slug), 'manifest.json');
     let revision;
-    try { revision = JSON.parse(fs.readFileSync(file, 'utf8')).assetRevision; } catch {}
+    try { revision = JSON.parse(this.read(file)).assetRevision; } catch {}
     return !revision || revision === this.loadIndexSync().avatars?.[slug]?.assetRevision;
   }
-  bundled(slug) { return fs.existsSync(path.join(this.bundledRoot, slug, 'manifest.json')); }
-  resolve(roots, rel) {
-    for (const root of roots) {
-      const target = path.normalize(path.join(root, rel));
-      if (!target.startsWith(path.normalize(root) + path.sep)) continue;
-      if (fs.existsSync(target)) return target;
-    }
-    return null;
+  bundled(slug) { return this.exists(path.join(this.bundledRoot,slug),'manifest.json'); }
+  archive(file){
+    try{const stat=fs.statSync(file),cached=this.packages.get(file);if(cached&&cached.mtime===stat.mtimeMs&&cached.size===stat.size)return cached.pack;
+      const pack=new ProtectedPackage(file,this.runtime.keys);this.packages.set(file,{pack,mtime:stat.mtimeMs,size:stat.size});return pack;
+    }catch{return null;}
   }
+  exists(root,rel){return Boolean(this.resolve([root],rel));}
+  plaintextMatches(root,revision){
+    if(!revision)return true;
+    try{const own=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'))).assetRevision;return !own||own===revision;}catch{return !fs.existsSync(path.join(root,'manifest.json'));}
+  }
+  resolve(roots,rel){
+    if(typeof rel!=='string'||rel.includes('\\')||path.isAbsolute(rel)||rel.split('/').some(x=>x==='..'))return null;
+    let revision;
+    for(const root of roots){const base=this.archive(path.join(root,'base.gla'));if(base){revision=base.meta.assetRevision;break;}try{revision=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'))).assetRevision;break;}catch{}}
+    for(const root of roots){
+      for(const tier of ['base','balanced','best']){const pack=this.archive(path.join(root,tier+'.gla'));if(pack&&(!revision||pack.meta.assetRevision===revision)&&pack.entries.has(rel))return {pack,name:rel};}
+      const target=path.resolve(root,rel);if(this.plaintextMatches(root,revision)&&target.startsWith(path.resolve(root)+path.sep)&&fs.existsSync(target))return target;
+    }return null;
+  }
+  read(file){if(!file)throw Error('Missing avatar resource.');return typeof file==='string'?fs.readFileSync(file):file.pack.read(file.name);}
+  size(file){return typeof file==='string'?fs.statSync(file).size:file.pack.entries.get(file.name).size;}
+  stream(file,start,end){return typeof file==='string'?fs.createReadStream(file,{start,end}):file.pack.stream(file.name,start,end);}
   hasTier(slug, tier) {
     if (tier === 'base') return this.installed(slug);
     const size = TIER_SIZES[tier]; if (!size) return false;
+    if(this.roots(slug).some(root=>{const p=this.archive(path.join(root,tier+'.gla'));return p&&p.meta.assetRevision===this.manifest(slug).assetRevision;}))return true;
     return this.roots(slug).some(root => {
+      if(!this.plaintextMatches(root,this.manifest(slug).assetRevision))return false;
       const dir = path.join(root, 'runtime', 'resident');
       try { return fs.readdirSync(dir).some(name => name.startsWith('image-') && name.includes(`-${size}.`)); } catch { return false; }
     });
@@ -93,17 +135,17 @@ class AvatarAssets {
     const mac = entry.mac || {};
     const tiers = {};
     for (const tier of ['base', 'balanced', 'best']) {
-      if (tier === 'base' && this.bundled(slug)) continue;
+      if (tier === 'base' && this.bundled(slug) && this.matchingRevision(slug)) continue;
       const remote = mac[tier];
       if (!remote && tier !== 'base' && !this.hasTier(slug, tier)) continue;
-      tiers[tier] = { label: TIER_LABELS[tier], present: this.hasTier(slug, tier), bytes: remote ? remote.bytes : 0, available: Boolean(remote) && (tier === 'base' || this.matchingRevision(slug)) };
+      tiers[tier] = { label: TIER_LABELS[tier], present: this.hasTier(slug, tier) && (tier!=='base'||this.matchingRevision(slug)), bytes: remote ? remote.bytes : 0, available: Boolean(remote) && (tier === 'base' || this.matchingRevision(slug)) };
     }
     return { slug, name: entry.name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug), tiers,
       downloading: this.active && this.active.slug === slug ? this.progress : null };
   }
   avatars() {
     const index = this.loadIndexSync(); const slugs = new Set(Object.keys(index.avatars || {}));
-    for (const root of [this.developmentRoot, this.bundledRoot, this.downloadsRoot].filter(Boolean)) { try { for (const d of fs.readdirSync(root)) if (fs.existsSync(path.join(root, d, 'manifest.json'))) slugs.add(d); } catch {} }
+    for (const root of [this.developmentRoot, this.bundledRoot, this.downloadsRoot].filter(Boolean)) { try { for (const d of fs.readdirSync(root)) if (this.exists(path.join(root,d),'manifest.json')) slugs.add(d); } catch {} }
     return [...slugs].map(slug => ({ slug, name: ((index.avatars || {})[slug] || {}).name || this.manifest(slug).name || slug, bundled: this.bundled(slug), installed: this.installed(slug) }));
   }
 
@@ -111,7 +153,7 @@ class AvatarAssets {
   residentDocument(roots) {
     const file = this.resolve(roots, path.join('runtime', 'resident', 'model.gltf'));
     if (!file) return null;
-    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const doc = JSON.parse(this.read(file));
     const exists = name => Boolean(this.resolve(roots, path.join('runtime', 'resident', name)));
     for (const image of doc.images || []) {
       const variants = image.extras && Array.isArray(image.extras.openclamVariants) ? image.extras.openclamVariants : null;
@@ -123,67 +165,44 @@ class AvatarAssets {
   }
 
   // ---- downloads
-  fetchBuffer(url, onChunk, timeout = 30000, redirects = 0) {
-    return new Promise((resolve, reject) => {
-      const request = https.get(url, { headers: { 'User-Agent': 'gpt-live-avatar' }, timeout }, response => {
-        if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location && redirects < 6) {
-          response.resume(); resolve(this.fetchBuffer(new URL(response.headers.location, url).href, onChunk, timeout, redirects + 1)); return;
-        }
-        if (response.statusCode !== 200) { response.resume(); reject(new Error(`HTTP ${response.statusCode} for ${path.basename(url)}`)); return; }
-        const total = Number(response.headers['content-length']) || 0; const chunks = [];
-        let received = 0;
-        response.on('data', chunk => { received += chunk.length; if (onChunk) onChunk(chunk, received, total); else chunks.push(chunk); });
-        response.on('end', () => resolve(onChunk ? null : Buffer.concat(chunks)));
-        response.on('error', reject);
-        if (this.active) this.active.request = request;
-      });
-      request.on('timeout', () => request.destroy(new Error('Download timed out.')));
-      request.on('error', reject);
-    });
+  async response(url,signal){
+    const u=new URL(url);if(!this.baseURL||(!this.allowLocal&&u.protocol!=='https:')||u.origin!==new URL(this.baseURL).origin)throw Error('Protected downloads are not configured for this build.');
+    const response=await fetch(url,{headers:{'Authorization':'Bearer '+(this.runtime.downloadToken||''),'User-Agent':'GPT-Live-Avatar'},signal,redirect:'error'});
+    if(!response.ok){await response.body?.cancel();throw Error(response.status===429?'The download service has reached its safe daily limit. Please try tomorrow.':`Avatar download failed (HTTP ${response.status}).`);}return response;
+  }
+  async fetchBuffer(url,_unused,timeout=15000){
+    const r=await this.response(url,AbortSignal.timeout(timeout));let size=0,parts=[];for await(const chunk of r.body){size+=chunk.length;if(size>2*1024*1024)throw Error('Catalogue exceeds its size limit.');parts.push(chunk);}return Buffer.concat(parts);
   }
   emit(patch) { this.progress = { ...(this.progress || {}), ...patch }; this.broadcast(this.progress); }
-  async download(slug, tier) {
-    if (this.active) throw new Error('Another download is running.');
-    const index = this.loadIndexSync(); const remote = (((index.avatars || {})[slug] || {}).mac || {})[tier];
-    if (!remote) throw new Error(`No ${tier} package is published for ${slug}.`);
-    if (tier !== 'base' && !this.matchingRevision(slug)) throw new Error('These textures belong to a different avatar revision. Install the matching avatar package first.');
-    const dest = path.join(this.downloadsRoot, slug); const tmpDir = path.join(this.downloadsRoot, 'tmp');
-    await fsp.mkdir(dest, { recursive: true }); await fsp.mkdir(tmpDir, { recursive: true });
-    const zipPath = path.join(tmpDir, remote.file);
-    this.active = { slug, tier, request: null, cancelled: false };
-    this.progress = { slug, tier, phase: 'download', received: 0, total: remote.bytes || 0, percent: 0, error: '' };
-    this.broadcast(this.progress);
-    try {
-      const hash = crypto.createHash('sha256'); const out = fs.createWriteStream(zipPath);
-      let lastEmit = 0;
-      await this.fetchBuffer(RELEASE_BASE + remote.file, (chunk, received, total) => {
-        hash.update(chunk); out.write(chunk);
-        const size = total || remote.bytes || 0; const now = Date.now();
-        if (now - lastEmit > 150) { lastEmit = now; this.emit({ received, total: size, percent: size ? Math.min(99, Math.floor(received / size * 100)) : 0 }); }
-      });
-      await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()));
-      if (this.active.cancelled) throw new Error('Cancelled.');
-      this.emit({ phase: 'verify', percent: 99 });
-      const digest = hash.digest('hex');
-      if (remote.sha256 && digest !== remote.sha256) throw new Error('The download was corrupted; please try again.');
-      this.emit({ phase: 'extract' });
-      await new Promise((resolve, reject) => {
-        const child = spawn('/usr/bin/ditto', ['-x', '-k', zipPath, dest], { stdio: 'ignore' });
-        child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error(`Unpacking failed (${code}).`)));
-      });
-      await fsp.rm(zipPath, { force: true });
-      this.emit({ phase: 'done', percent: 100 });
-    } catch (error) {
-      await fsp.rm(zipPath, { force: true }).catch(() => {});
-      this.emit({ phase: 'error', error: error.message });
-      throw error;
-    } finally { this.active = null; setTimeout(() => { if (!this.active) { this.progress = null; this.broadcast(null); } }, 1500); }
+  async download(slug,tier){
+    if(this.downloading)throw Error('Another download is running.');
+    this.downloading=true;try{return await this.performDownload(slug,tier);}finally{this.downloading=false;}
   }
-  cancel() { if (this.active) { this.active.cancelled = true; if (this.active.request) this.active.request.destroy(new Error('Cancelled.')); } }
+  async performDownload(slug,tier){
+    if(this.active)throw Error('Another download is running.');
+    if(!/^[a-z0-9_-]{1,40}$/.test(slug)||!['base','balanced','best'].includes(tier))throw Error('Invalid avatar selection.');
+    const entry=this.loadIndexSync().avatars?.[slug],remote=entry?.mac?.[tier];if(!remote||remote.format!=='gla-pack-v1')throw Error('No protected package is published for this avatar.');
+    if(tier!=='base'&&(!this.installed(slug)||!this.matchingRevision(slug)))throw Error('Download the matching avatar package first.');
+    await this.ensureKeys();
+    const dest=path.join(this.downloadsRoot,slug),tmp=path.join(this.downloadsRoot,'tmp',crypto.randomUUID()+'.partial');await fsp.mkdir(path.dirname(tmp),{recursive:true});await fsp.mkdir(dest,{recursive:true});
+    const abort=new AbortController();this.active={slug,tier,abort,cancelled:false};this.emit({slug,tier,phase:'download',received:0,total:remote.bytes,percent:0,error:''});
+    try{
+      const hash=crypto.createHash('sha256');let bytes=0,last=0;const signal=AbortSignal.any([abort.signal,AbortSignal.timeout(20*60*1000)]);
+      const chunks=async function*(){for(const part of remote.parts){const r=await this.response(this.baseURL+part.file,signal),partHash=crypto.createHash('sha256');let received=0;for await(const chunk of r.body){signal.throwIfAborted();bytes+=chunk.length;received+=chunk.length;if(received>part.bytes||bytes>remote.bytes)throw Error('Download is larger than its signed size.');hash.update(chunk);partHash.update(chunk);if(Date.now()-last>150){last=Date.now();this.emit({received:bytes,percent:Math.min(99,Math.floor(100*bytes/remote.bytes))});}yield chunk;}if(received!==part.bytes||partHash.digest('hex')!==part.sha256)throw Error('A download part failed verification. Please retry.');}}.bind(this);
+      await pipeline(chunks(),fs.createWriteStream(tmp,{flags:'wx',mode:0o600}),{signal});
+      this.emit({phase:'verify',percent:99});if(bytes!==remote.bytes||hash.digest('hex')!==remote.sha256)throw Error('The download failed its integrity check. Please retry.');
+      const pack=new ProtectedPackage(tmp,this.runtime.keys);if(pack.meta.slug!==slug||pack.meta.tier!==tier||pack.meta.assetRevision!==entry.assetRevision)throw Error('The package does not match this avatar revision.');
+      if(tier==='base'){const manifest=JSON.parse(pack.read('manifest.json'));if(manifest.assetRevision!==entry.assetRevision||manifest.renderer!=='3d')throw Error('Invalid avatar manifest.');}
+      abort.signal.throwIfAborted();await fsp.rename(tmp,path.join(dest,tier+'.gla'));this.packages.clear();this.emit({phase:'done',percent:100});
+    }catch(e){await fsp.rm(tmp,{force:true}).catch(()=>{});this.emit({phase:'error',error:abort.signal.aborted?'Cancelled.':e.message});throw e;}
+    finally{this.active=null;setTimeout(()=>{if(!this.active){this.progress=null;this.broadcast(null);}},1500);}
+  }
+  cancel(){if(this.active){this.active.cancelled=true;this.active.abort.abort();}}
   async remove(slug, tier) {
     if (this.active && this.active.slug === slug) throw new Error('Wait for the download to finish.');
     const dest = path.join(this.downloadsRoot, slug);
     if (tier === 'base') { await fsp.rm(dest, { recursive: true, force: true }); return; }
+    await fsp.rm(path.join(dest,tier+'.gla'),{force:true});this.packages.clear();
     const size = TIER_SIZES[tier]; if (!size) return;
     const dir = path.join(dest, 'runtime', 'resident');
     try { for (const name of await fsp.readdir(dir)) if (name.startsWith('image-') && name.includes(`-${size}.`)) await fsp.rm(path.join(dir, name), { force: true }); } catch {}

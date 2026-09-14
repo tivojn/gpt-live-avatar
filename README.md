@@ -2,30 +2,32 @@
 
 ## Getting started from a clone
 
-The large 3D assets are not in git; they live in this repository's
-`assets-v1` release. One command fetches what the apps bundle:
+The renderer and application code are public. Purchased character assets are
+separately licensed and must not be redistributed as raw models or texture ZIPs.
 
 ```bash
 npm install
-npm run fetch-assets      # Tia's resource-friendly package + the iOS 1K model + catalogue
-npm run pack              # Mac app in dist/mac-arm64
-npm run dmg               # Mac installer
+npm test
+npm start                # use your own licensed local avatar package in Settings
 ```
 
-iOS: `cd ios && xcodegen generate` (or open `GPTLiveAvatar.xcodeproj`), then
-build the `GPTLiveAvatar` scheme. Signing uses team X7R8N6MMSU; change it in
-`ios/project.yml` for another account. Everything else (2K/4K tiers, Sarah,
-SGT Sara) is downloaded by the apps on demand from the same release.
+The Mac release uses protected downloads from a private Cloudflare R2 bucket.
+The installer contains the app and signed catalogue, without character models.
+Choose a character in **Settings → Avatar**, download its base package, then
+optionally add Balanced (2K) or Best (4K) textures. All five current characters
+retain their wardrobe, colors, props, expressions and motion libraries.
+Downloaded packages remain encrypted on disk. Content keys are delivered to the
+app separately and stored using macOS secure storage; they are not in the
+source repository or public installer. See the
+[protected asset deployment guide](docs/PROTECTED-ASSETS.md) for the build,
+storage cap, traffic limits and protection boundaries.
+
+Older installers and the legacy iOS downloader use the retired raw-file format.
+Existing local packages still work. The iOS source requires a protected-loader
+port before a new public iOS release; its old GitHub download URLs are not a
+supported distribution path.
 
 ## Avatars and texture tiers
-
-The public starter packages and the iOS app ship the resource-friendly Tia package (1K
-textures, meshes, rig, motions). Balanced (2K) and Best quality (4K) textures,
-and every other avatar, are downloaded on demand from the public GitHub
-release `assets-v1` of this repository, with a percentage
-progress bar in Settings. `index.json` in that release is the catalogue; both
-apps refresh it at start / when Settings opens, so new avatars appear without
-an app update.
 
 The updated local Mac portrait build includes Tia's original 2K/4K maps,
 authored lighting environment and 4K color variants. Best selects these
@@ -56,8 +58,9 @@ Pipeline (`tools/`):
 - Sarah's complete original wardrobe, props, facial expressions, colors and
   smooth surfaces: [rebuild and verification guide](docs/SARAH-ASSETS.md).
 
-Mac: `npm run pack` (app folder) or `npm run dmg` (installer; bundles
-`build/assets/bundle` and `build/assets/index.json`).
+Mac: after configuring the verified R2 gateway and private release files, run
+`npm run pack` (app folder) or `npm run dmg` (installer). Both include only the
+signed catalogue and app connection information, never the 3D source assets.
 Notarization: put an App Store Connect API key (Developer role) at
 `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` and create
 `~/.config/gpt-live-avatar/notarize.env` exporting `APPLE_API_KEY` (path),
