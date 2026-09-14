@@ -90,25 +90,35 @@ export class LiveGroup {
    this.emit('text',{speaker:p.slug,text:[...p.segments.values()].join(' ')});
   }else if(detail.role==='user'&&p.acceptUser&&this.human.enabled&&!this.muted){
    this.advanceAt=0;this.userUntil=performance.now()+1600;
+   p.humanSegments ||= new Map();if(p.humanSegments.get(detail.id)!==detail.text)p.humanChangedAt=performance.now();
+   p.humanSegments.set(detail.id,detail.text);while(p.humanSegments.size>16)p.humanSegments.delete(p.humanSegments.keys().next().value);
+   p.lastHumanText=[...p.humanSegments.values()].join(' ').slice(0,6000);p.lastHumanId=detail.id;
    this.emit('text',{speaker:'_human',text:detail.text});
    if(detail.final&&detail.text.trim()){
     this.history=this.history.slice(-95);this.history.push({speaker:'_human',text:detail.text.trim()});this.emit('line',this.history.at(-1));
-    if(!p.heard&&!this.userSpeaking){p.client.appendCommentary('Respond now to the human contribution you just heard, briefly and naturally.');p.openAt=performance.now();}
+    if(!p.delegating&&!p.heard&&!this.userSpeaking){p.client.appendCommentary('Respond now to the human contribution you just heard, briefly and naturally.');p.openAt=performance.now();}
    }
   }
  }
  async delegate(p,id){
   if(!this.running||this.active!==p.slug||p.client.reasoningMode!=='delegate')return;
+  p.delegatedIds ||= new Set();if(p.delegatedIds.has(id))return;p.delegatedIds.add(id);if(p.delegatedIds.size>128)p.delegatedIds.delete(p.delegatedIds.values().next().value);
   const generation=this.generation,floor=p.openAt;p.delegating=true;
+  if(p.acceptUser){const until=performance.now()+1800;while((!p.lastHumanText||performance.now()-(p.humanChangedAt||0)<350)&&performance.now()<until&&this.running&&this.generation===generation)await new Promise(r=>setTimeout(r,100));}
+  if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;
   const history=[...this.history,...p.client.conversation().filter(x=>x.role==='user').slice(-1).map(x=>({speaker:'_human',text:x.text}))];
-  let result;try{result=await this.api.reply({id,speaker:p.slug,participants:this.cast.map(c=>c.slug),topic:this.topic,mode:this.mode,human:this.human,history});}catch(e){result={ok:false,error:e.message};}
+  let result;try{result=await this.api.reply({id,speaker:p.slug,participants:this.cast.map(c=>c.slug),topic:this.topic,mode:this.mode,human:this.human,history,humanRequest:p.acceptUser?p.lastHumanText:'',turnId:p.lastHumanId});}catch(e){result={ok:false,error:e.message};}
   if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;p.delegating=false;
   const text=result.ok?result.text:'The reasoning connection failed. Say briefly that you could not complete that request.';
   for(const chunk of commentaryChunks(text))p.client.appendCommentary(chunk,id);
  }
  interrupt(now){
+  void this.api.cancel();
   this.userSpeaking=true;this.advanceAt=0;this.userUntil=now+1600;
-  const p=this.peers.get(this.active);if(p){p.acceptUser=true;this.finishLine(p,true);p.segments.clear();p.heard=false;p.lastText=now;p.openAt=now;p.client.appendInstructions('The human is interrupting. Pause your current speech immediately, listen, then answer their actual contribution when they finish. Your speaking floor remains open.');}
+  const p=this.peers.get(this.active);if(p){
+   const continuing=p.acceptUser&&!p.heard&&!p.segments.size&&now-(p.humanChangedAt||0)<4000;
+   if(!continuing){p.humanSegments=new Map();p.lastHumanText='';p.lastHumanId='';}
+   p.acceptUser=true;p.delegating=false;this.finishLine(p,true);p.segments.clear();p.heard=false;p.lastText=now;p.openAt=now;p.client.appendInstructions('The human is interrupting. Pause your current speech immediately, listen, then answer their actual contribution when they finish. Your speaking floor remains open.');}
   for(const peer of this.peers.values())peer.audio.muted=true;this.routeAudio();
   this.emit('floor',{speaker:'_human',listener:this.active});this.emit('status','Listening · go ahead');this.emit('interruption',{at:now});
  }
@@ -145,7 +155,7 @@ export class LiveGroup {
  say(text){
   text=String(text||'').trim().slice(0,1200);if(!text||!this.running)return;
   this.history=this.history.slice(-95);this.history.push({speaker:'_human',text});this.emit('line',this.history.at(-1));
-  this.open(this.active); // Explicit typed interruption, using the same live voice.
+  this.open(this.active);const peer=this.peers.get(this.active);if(peer){peer.acceptUser=true;peer.lastHumanText=text;peer.lastHumanId='typed-'+Date.now();peer.humanSegments=new Map([[peer.lastHumanId,text]]);peer.humanChangedAt=performance.now();} // Explicit typed interruption, using the same live voice.
  }
  stop(){
   this.generation++;this.running=false;clearInterval(this.timer);this.timer=null;

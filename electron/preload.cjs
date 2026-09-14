@@ -8,6 +8,16 @@ const subscribe = (channel, callback) => {
 };
 
 contextBridge.exposeInMainWorld('gla', {
+  agent: {
+    run: request=>ipcRenderer.invoke('gla:agent:run',request),
+    cancel: id=>ipcRenderer.invoke('gla:agent:cancel',id),
+    recent: ()=>ipcRenderer.invoke('gla:agent:recent'),
+    chooseFolder: ()=>ipcRenderer.invoke('gla:agent:folder'),
+    onProgress: callback=>subscribe('gla:agent:progress',callback),
+    onAction: callback=>subscribe('gla:agent:action',callback),
+    onCancel: callback=>subscribe('gla:agent:action-cancel',callback),
+    actionResult: (id,result)=>ipcRenderer.send('gla:agent:action-result',{id,result}),
+  },
   group: {
     open: () => ipcRenderer.invoke('gla:group:open'),
     close: () => ipcRenderer.invoke('gla:group:close'),

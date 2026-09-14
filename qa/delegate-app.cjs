@@ -4,7 +4,7 @@ const {app,BrowserWindow,Menu,safeStorage}=require('electron');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const repo=path.resolve(__dirname,'..'),output=path.join(repo,'build/qa-delegate-app');fs.mkdirSync(output,{recursive:true});
 app.setPath('userData',path.join(output,'profile'));fs.mkdirSync(app.getPath('userData'),{recursive:true});delete process.env.GLA_OPENAI_KEY;
-fs.writeFileSync(path.join(app.getPath('userData'),'config.json'),JSON.stringify({avatar:'tia',quality:'friendly',bubbleMode:'off',avatarLooks:{tia:{}}}));
+fs.writeFileSync(path.join(app.getPath('userData'),'config.json'),JSON.stringify({avatar:'tia',agentEnabled:false,quality:'friendly',bubbleMode:'off',avatarLooks:{tia:{}}}));
 app.whenReady().then(()=>fs.writeFileSync(path.join(app.getPath('userData'),'openai-key.bin'),safeStorage.encryptString('sk-test-not-a-real-key')));
 const calls=[],errors=[];let menu;
 const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const m=build.call(Menu,items);m.popup=()=>menu=items;return m;};

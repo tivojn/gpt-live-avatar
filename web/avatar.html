@@ -69,6 +69,7 @@
 <dialog id="steerDialog"><form method="dialog"><label for="steerMessage">Send a message</label><input id="steerMessage" autocomplete="off"><button value="cancel">Cancel</button> <button value="send">Send</button></form></dialog>
 <script type="module" src="/avatar3d.js"></script>
 <script type="module">
+import { installAgentUI } from './agent-client.js';
 import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
 import { BubblePolicy } from '/bubble-policy.js';
@@ -556,6 +557,22 @@ const considerReply = reply => { if (!companion) return; companion.consider(late
 // ---------------------------------------------------------------- live session
 const live = new LiveClient({ createSession: (sdp, options) => gla.createLiveSession(sdp, options) });
 const delegate = new DelegateClient(live,gla.delegate,message=>{if(message)toast(message,message==='Thinking…'?2000:7000);});
+const agentUI=installAgentUI({api:gla.agent,name:()=>settings.avatar?.name||settings.personaName,onStatus:message=>toast(message,4000),interactive:value=>{if(value){gla.window.setIgnoreMouse(false);ignoring=false;}},execute:async(action,args,cancelled)=>{
+ if(!avatar||!ready)throw Error('The avatar is still loading.');
+ const slug=settings.avatar?.slug,name=settings.avatar?.name||settings.personaName;
+ const state=()=>({ok:true,characters:[{slug,name,motions:[...avatar.motion.clips.values()].map(c=>({id:c.id,label:c.label||c.id})).slice(0,180)}]});
+ if(action==='state')return state();
+ if(![slug,name,settings.personaName].filter(Boolean).some(v=>v.toLowerCase()===String(args.character).toLowerCase()))throw Error('That character is not visible in solo mode.');
+ if(cancelled())throw Error('Cancelled.');
+ if(action==='move_avatar'){
+  await performAction('go-'+args.destination);if(!companion?.destination)throw Error('Movement could not start. Check Reduce Motion or drag state.');
+  const start=performance.now();while(companion?.destination&&performance.now()-start<24000){if(cancelled()){await performAction('stay');throw Error('Cancelled.');}await new Promise(r=>setTimeout(r,80));}
+  if(companion?.destination)throw Error('Movement has not reached the destination yet.');return {ok:true,character:slug,destination:args.destination,reached:true};
+ }
+ if(action==='play_motion'){if(!avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');await performAction('clip:'+args.motion);return {ok:avatar.motion.active?.id===args.motion,character:slug,motion:args.motion};}
+ throw Error('Unknown avatar action.');
+}});
+
 const preview = new VoicePreview({ createSession: (sdp, options) => gla.createLiveSession(sdp, options), live, audio,
   notify: state => { gla.reportVoicePreview(state); if (state.error) toast(state.error, 6000); else if (state.state !== 'idle') toast(`${state.state === 'connecting' ? 'Loading' : 'Playing'} ${state.voice} voice preview…`, 3000); } });
 addEventListener('pagehide', () => preview.stop());
@@ -696,7 +713,8 @@ addEventListener('contextmenu', event => {
   if (bubble.contains(event.target) || $('#listen').contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
 });
 gla.onMenuAction(id => {
-  if (id === 'call') toggleCall();
+  if (id === 'agent') agentUI.open(settings);
+  else if (id === 'call') toggleCall();
   else if (id === 'mute') toggleMute();
   else if (id === 'hush') { delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); }
   else if (id === 'steer') { if (live.state === 'connected') { if (bubbleMode() === 'off') $('#steerDialog').showModal(); else { bubble.classList.remove('hidden'); $('#steer').focus(); syncBubble(); } } else toast('Start a conversation first.'); }
@@ -874,6 +892,7 @@ let wheelSave = 0;
 // Click-through: transparent pixels pass to the app underneath, unless the bubble is there.
 let ignoring = false;
 addEventListener('mousemove', event => {
+  if(agentUI.dialog.open){if(ignoring){gla.window.setIgnoreMouse(false);ignoring=false;}return;}
   const overBubble = !bubble.classList.contains('hidden') && bubble.contains(event.target);
   const overPill = !$('#listen').classList.contains('hidden') && $('#listen').contains(event.target);
   const hit = overBubble || overPill || $('#steerDialog').open || dragging || pinching || Boolean(gesture) || paintedAt(event.clientX, event.clientY);
@@ -906,7 +925,7 @@ const applySettings = next => {
     })();
     if (live.state === 'connected') live.appendInstructions(`The on-screen avatar is now ${settings.personaName}. Use this name from now on. Available motions: ${(settings.avatar?.clipLabels || []).join(', ')}.`);
   } else if (!avatar && settings.avatar?.ok && !ready && !loadingAvatar) void loadAvatar();
-  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel;
+  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel||previous.agentEnabled!==settings.agentEnabled;
   if (previous.voice !== settings.voice || changedReasoning) {
     delegate.cancel();
     preview.stop(); clearTimeout(applySettings.voiceTimer);

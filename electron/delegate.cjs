@@ -12,12 +12,12 @@ function normalizeDelegate(config,patch={}){
   return {reasoningMode:mode,delegateProvider:provider,delegateAuth:auth,delegateModels:models};
 }
 function selected(config){const c=normalizeDelegate(config);return {provider:c.delegateProvider,auth:c.delegateAuth,model:c.delegateModels[c.delegateProvider+':'+c.delegateAuth]};}
-function messages(history){
+function messages(history,limit=2400){
   if(!Array.isArray(history))return [];
   let bytes=0,result=[];
   for(const item of history.slice(-48).reverse()){
     if(!item||!['user','assistant'].includes(item.role)||typeof item.text!=='string')continue;
-    const content=item.text.trim().slice(-2400);if(!content)continue;
+    const content=item.text.trim().slice(-limit);if(!content)continue;
     bytes+=Buffer.byteLength(content);if(bytes>16000)break;result.unshift({role:item.role,content});
   }
   return result;
@@ -48,17 +48,17 @@ class DelegateBackend {
   constructor({auth,fetchImpl=fetch}){this.auth=auth;this.fetch=fetchImpl;this.requests=new Map();}
   cancel(owner,id){for(const [key,r] of this.requests)if(r.owner===owner&&(!id||r.id===id)){r.abort.abort();this.requests.delete(key);}}
   cancelAll(){for(const r of this.requests.values())r.abort.abort();this.requests.clear();}
-  async answer(owner,id,config,history,instructions){
+  async answer(owner,id,config,history,instructions,agent=null){
     if(typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(id))throw Error('Invalid delegation request.');
-    const context=messages(history);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
+    const context=messages(history,agent?6000:2400);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
     this.cancel(owner);const abort=new AbortController(),request={owner,id,abort},key=owner+':'+id;this.requests.set(key,request);
     try{
       const {provider,auth,model}=selected(config),credential=await this.auth.bearer(provider,auth);
       if(abort.signal.aborted)throw Error('Request cancelled.');
-      const signal=AbortSignal.any([abort.signal,AbortSignal.timeout(90000)]);
+      const signal=AbortSignal.any([abort.signal,AbortSignal.timeout(agent?150000:90000)]);
       const headers={'Authorization':`Bearer ${credential.access}`,'Content-Type':'application/json','Accept':'text/event-stream'};
       let url,body;
-      const brief=String(instructions||'').slice(0,6000)+'\nAnswer the latest user question from the conversation. Give only the final result, in at most 70 words. Do not describe private reasoning. You have no external tools in this request; do not claim to have searched or changed anything.';
+      const brief=String(instructions||'').slice(0,6000)+(agent?'\nUse the supplied tools for requested actions. Do not claim success before a successful tool result. Give a concise final answer describing actual results; never reveal private reasoning.':'\nAnswer the latest user question from the conversation. Give only the final result, in at most 70 words. Do not describe private reasoning. You have no external tools in this request; do not claim to have searched or changed anything.');
       if(provider==='openai'){
         url=auth==='oauth2'?'https://chatgpt.com/backend-api/codex/responses':'https://api.openai.com/v1/responses';
         body={model,instructions:brief,input:context.map(m=>({role:m.role,content:[{type:m.role==='assistant'?'output_text':'input_text',text:m.content}]})),reasoning:{effort:'low'},store:false,stream:true};
@@ -69,6 +69,7 @@ class DelegateBackend {
         body={model:auth==='oauth2'?'grok-build':model,messages:[{role:'system',content:brief},...context],max_completion_tokens:1400,stream:true};
         if(auth==='oauth2')Object.assign(headers,{'X-XAI-Token-Auth':'xai-grok-cli','x-grok-client-version':'1.0.4','x-grok-client-identifier':'grok-shell','x-authenticateresponse':'authenticate-response','x-grok-client-mode':'interactive','User-Agent':'grok-shell/1.0.4 (macos; aarch64)','x-grok-model-override':model});
       }
+      if(agent)return await require('./agent-model.cjs').runAgent({fetchImpl:this.fetch,url,headers,body,signal,agent,provider,model});
       let response;try{response=await this.fetch(url,{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal});}catch{throw Error(abort.signal.aborted?'Request cancelled.':'Could not reach the selected model. Please try again.');}
       if(!response.ok){await response.body?.cancel();throw Error(providerError(response.status));}
       const text=await streamText(response);if(abort.signal.aborted)throw Error('Request cancelled.');

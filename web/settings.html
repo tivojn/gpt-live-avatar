@@ -91,6 +91,15 @@
   </section>
 
   <section>
+    <h2>Actions and page context</h2>
+    <label><input id="agentEnabled" type="checkbox"> Let avatars help with files and the current page</label>
+    <p class="note">Ask in live talk or right-click → Help with this. Avatars can create new text files, read files in the selected folder, read a browser page when asked, and move or play motions. Existing files are preserved. Requested page and file text is sent to your selected reasoning provider.</p>
+    <label>File folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
+    <label for="agentBrowser">Browser when the avatar is in front</label><select id="agentBrowser"><option value="chrome">Chrome</option><option value="safari">Safari</option><option value="edge">Edge</option><option value="brave">Brave</option></select>
+    <p class="note">An active supported browser takes priority. Reading needs macOS Automation permission and the browser’s “Allow JavaScript from Apple Events” option. The avatar reads the page only when requested.</p>
+  </section>
+
+  <section>
     <h2>Persona</h2>
     <label for="personaName">Name</label>
     <input id="personaName" type="text">
@@ -148,6 +157,7 @@
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
+    $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';$('#agentBrowser').value=settings.agentBrowser||'chrome';
   }
   function renderDelegate(s) {
     const d=s.delegate,a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',waiting=['starting','waiting'].includes(a.state);
@@ -217,6 +227,9 @@
   };
   $('#clearKey').onclick = async () => { await gla.clearApiKey(); render(await gla.getSettings()); };
   $('#refreshModels').onclick = loadModels;
+  $('#agentEnabled').onchange=()=>save({agentEnabled:$('#agentEnabled').checked});
+  $('#agentBrowser').onchange=()=>save({agentBrowser:$('#agentBrowser').value});
+  $('#agentChooseFolder').onclick=async()=>{await gla.agent.chooseFolder();render(await gla.getSettings());};
   $('#reasoningMode').onchange=()=>save({reasoningMode:$('#reasoningMode').value});
   $('#delegateProvider').onchange=()=>save({delegateProvider:$('#delegateProvider').value});
   $('#delegateAuth').onchange=()=>save({delegateAuth:$('#delegateAuth').value});

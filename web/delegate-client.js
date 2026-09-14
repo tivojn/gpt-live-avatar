@@ -21,7 +21,7 @@ export class DelegateClient {
       // Allow trailing transcription packets to arrive before reading context.
       if(performance.now()-this.changedAt<350&&performance.now()-p.createdAt<1800){p.timer=setTimeout(run,150);return;}
       this.onStatus('Thinking…');
-      let result;try{result=await this.api.answer({id,history:this.live.conversation()});}catch{result={ok:false,error:'The reasoning connection was interrupted.'};}
+      let result;try{result=await this.api.answer({id,history:this.live.conversation(),turnId:this.turn});}catch{result={ok:false,error:'The reasoning connection was interrupted.'};}
       if(this.pending!==p||this.live.generation!==p.generation||this.live.state!=='connected')return;
       this.pending=null;this.onStatus(result.ok?'':result.error);
       if(!result.ok){this.live.appendCommentary('The reasoning assistant could not answer this request. Briefly explain that it failed and invite the user to try again. Do not invent an answer.',id);return;}

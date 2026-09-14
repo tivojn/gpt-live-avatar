@@ -1,4 +1,5 @@
 import '/avatar3d.js';
+import {installAgentUI} from '/agent-client.js';
 import { frameDue, renderPixelBudget, textureBudget } from '/avatar-render-budget.js';
 import * as THREE from '/vendor/three/three.module.js';
 import {GroupVoice} from '/group-voice.js';
@@ -23,6 +24,20 @@ const liveGroup=new LiveGroup(api,{
 });
 function liveMode(){return $('#liveMode').checked;}
 const status=(message,error=false)=>{$('#status').textContent=message;$('#status').classList.toggle('error',error);};
+const agentUI=installAgentUI({api:window.gla.agent,onStatus:message=>status(message),name:()=> 'the characters',interactive:value=>{if(value){api.setIgnoreMouse(false);ignore=false;}},execute:async(action,args,cancelled)=>{
+ if(action==='state')return {ok:true,characters:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,motions:[...a.avatar.motion.clips.values()].slice(0,180).map(c=>({id:c.id,label:c.label||c.id}))}))};
+ const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(args.character).toLowerCase()));if(!actor)throw Error('That character is not visible.');
+ if(action==='play_motion'){if(!actor.avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');const result=await actor.avatar.motion.play(args.motion,{loop:false});return {ok:result!==false,motion:args.motion,character:actor.slug};}
+ if(action==='move_avatar'){
+  const points={'upper-left':[0,0],'upper-right':[1,0],'lower-left':[0,1],'lower-right':[1,1],center:[.5,.5],left:[0,.5],right:[1,.5],top:[.5,0],bottom:[.5,1]},p=points[args.destination];if(!p)throw Error('Unknown destination.');
+  const from={x:actor.x,y:actor.y},to={x:(innerWidth-actor.w)*p[0],y:70+(innerHeight-actor.h-70)*p[1]},start=performance.now();
+  await actor.avatar.motion.play(actor.avatar.options.walkingClip(),{loop:true});
+  try{while(true){if(cancelled()||!actors.has(actor.slug)||drag?.actor===actor)throw Error('Movement interrupted.');const t=Math.min(1,(performance.now()-start)/2000),e=t*t*(3-2*t);actor.x=from.x+(to.x-from.x)*e;actor.y=from.y+(to.y-from.y)*e;position(actor);if(t===1)break;await new Promise(requestAnimationFrame);}}finally{actor.avatar.motion.stop();}
+  return {ok:true,character:actor.slug,destination:args.destination,reached:true};
+ }
+ throw Error('Unknown avatar action.');
+}});
+
 const selected=()=>[...document.querySelectorAll('.choice input:checked')].map(i=>i.value);
 function compact(value){$('.panel').classList.toggle('compact',value);$('#compact').textContent=value?'Show controls':'Minimize';$('#compact').setAttribute('aria-expanded',String(!value));}
 function controls(){const available=actors.size>=2&&!loading;$('#start').disabled=!available||running||!catalogue?.hasKey;$('#stop').disabled=!running;for(const id of ['topic','rounds','format','join','humanName','liveMode'])$('#'+id).disabled=running;for(const el of document.querySelectorAll('.choice input,.choice select'))el.disabled=running;$('#liveControls').hidden=!running||!liveMode();$('#raise').hidden=liveMode()||!running||!human.enabled;$('#raise').disabled=waitingHuman||wantsTurn||currentTurn>=totalTurns-1;$('#raise').textContent=wantsTurn?'You’re next':'I’d like a turn';$('#humanTurn').hidden=!waitingHuman;$('#send').disabled=!waitingHuman||microphone.state!=='idle'||!$('#humanText').value.trim();}
@@ -119,6 +134,7 @@ function actorAt(event){
  return [...actors.values()].reverse().find(a=>a.hitMask.contains(event.clientX-a.x,event.clientY-a.y,a.w,a.h))?.el||null;
 }
 function syncMouse(){
+ if(agentUI.dialog.open){if(ignore){ignore=false;api.setIgnoreMouse(false);}return;}
  if(!hoverPoint||drag||gestureSize||wheelActor||menuOpen)return;
  const top=document.elementFromPoint(hoverPoint.x,hoverPoint.y),interactive=Boolean(top?.closest('.panel'))||Boolean(actorAt({clientX:hoverPoint.x,clientY:hoverPoint.y,target:top}));
  if(ignore===interactive){ignore=!interactive;api.setIgnoreMouse(ignore);}
@@ -166,6 +182,7 @@ addEventListener('contextmenu',async event=>{
 });
 async function actorMenuAction({slug,action}){
  const actor=actors.get(slug);if(!actor)return;const a=actor.avatar,o=a.options;
+ if(action==='agent'){agentUI.open(catalogue);return;}
  if(action==='recover'){recoverActor(actor);return;}
  if(action==='face-audience'){actor.userOrbit=null;actor.yaw=0;return;}
  if(action.startsWith('bubble:')){actor.bubbleMode=action.slice(7);setBubble(actor,'');return;}
@@ -184,6 +201,7 @@ async function actorMenuAction({slug,action}){
 api.onMenuAction(request=>void actorMenuAction(request).catch(e=>status(e.message,true)));
 window.gla.onSettings(next=>{
  if(!catalogue)return;
+ catalogue.agentFolder=next.agentFolder;catalogue.agentEnabled=next.agentEnabled;
  const changed=catalogue.quality!==next.quality;catalogue.hasKey=next.hasKey;catalogue.hardware=next.hardware;
  if(changed){catalogue.quality=next.quality;const performance=next.quality==='best'?'quality':next.quality==='friendly'?'eco':'balanced';
   for(const actor of actors.values()){const a=actor.avatar;if(a.disposed||!a.options)continue;a.textureLimit=textureBudget(actors.size,next.hardware?.memoryGB);if(a.resources)a.resources.maxTextureSize=a.textureLimit;a.options.select({...a.options.selection,performance});position(actor);actor.lastFrame=0;}
