@@ -786,3 +786,10 @@ hair and Sarah coverage results. These are reference renderer tests, not an
 EnConvo adapter test. Review movement from all angles, interruption and recovery
 inside EnConvo. There is no general cloth simulation or physical M2/16 GB
 acceptance result in this follow-up.
+
+### Protected download transport
+
+The Electron host supplies `net.fetch` to `AvatarAssets` so protected downloads
+use Chromium’s network stack, including HTTP/2. An EnConvo port should supply an
+equivalent native HTTP/2-capable client while retaining origin restrictions,
+redirect rejection, cancellation and signed per-part/whole-package checksums.

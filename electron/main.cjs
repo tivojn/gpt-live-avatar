@@ -2,7 +2,7 @@
 // GPT-Live Avatar: a desk avatar (Tia) on OpenAI GPT-Live-1.
 // The main process owns the API key and session creation; the renderer owns
 // WebRTC, the 3D avatar and the overhead bubble.
-const { app, BrowserWindow, ipcMain, safeStorage, dialog, shell, screen, session: electronSession, Menu, systemPreferences, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, net, dialog, shell, screen, session: electronSession, Menu, systemPreferences, globalShortcut } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -647,7 +647,7 @@ app.whenReady().then(async () => {
   loadConfig();
   delegateAuth=new DelegateAuth({directory:path.join(app.getPath('userData'),'delegate-credentials'),safeStorage,readOpenAIKey:readApiKey,openExternal:url=>shell.openExternal(url),onChange:broadcastSettings});
   delegateBackend=new DelegateBackend({auth:delegateAuth,codex:{answer:(...args)=>agentManager.reason(...args),status:(...args)=>agentManager.status(...args),cancel:(...args)=>agentManager?.cancel(...args),cancelAll:()=>agentManager?.cancelAll()}});
-  assets = new AvatarAssets({ bundledRoot: BUNDLED_AVATARS, downloadsRoot: path.join(app.getPath('userData'), 'avatars'), bundledIndexPath: BUNDLED_INDEX, runtimeConfigPath:ASSET_RUNTIME, safeStorage,
+  assets = new AvatarAssets({ bundledRoot: BUNDLED_AVATARS, downloadsRoot: path.join(app.getPath('userData'), 'avatars'), bundledIndexPath: BUNDLED_INDEX, runtimeConfigPath:ASSET_RUNTIME, safeStorage, fetcher:net.fetch.bind(net),
     developmentRoot: app.isPackaged ? undefined : path.join(__dirname, '..', 'build', 'assets', 'packages'),
     broadcast: progress => { for (const w of [avatarWindow, settingsWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:assets:progress', progress); } });
   await assets.unlockInstalled();

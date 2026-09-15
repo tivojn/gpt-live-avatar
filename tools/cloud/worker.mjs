@@ -22,9 +22,9 @@ export function createWorker(catalogue,objects){
    }catch{return fail(400,'Invalid authorization request.');}
   }
   if(!['GET','HEAD'].includes(request.method))return fail(405,'Method not allowed.');
-  if(name==='index.json')return new Response(request.method==='HEAD'?null:catalogue,{headers:{'Content-Type':'application/json','Cache-Control':'private, max-age=300'}});
+  if(name==='index.json')return new Response(request.method==='HEAD'?null:catalogue,{headers:{'Content-Type':'application/json','Cache-Control':'private, max-age=300','Vary':'Authorization'}});
   const entry=allowed.get(name);if(!entry||name==='index.json')return fail(404,'Not found.');
-  const headers={'Content-Type':'application/octet-stream','Content-Length':String(entry.bytes),'ETag':'"'+entry.sha256+'"','Cache-Control':'private, max-age=86400','X-Content-Type-Options':'nosniff'};
+  const headers={'Content-Type':'application/octet-stream','Content-Length':String(entry.bytes),'ETag':'"'+entry.sha256+'"','Cache-Control':'private, max-age=86400','Vary':'Authorization','X-Content-Type-Options':'nosniff'};
   if(request.method==='HEAD')return new Response(null,{headers});
   if(request.headers.has('Range'))return fail(416,'Retry this download part in full.');
   const storage=env.AVATAR_ASSETS||createR2Reader(env);if(!storage)return fail(503,'Downloads are not activated.');

@@ -43,8 +43,9 @@ Free reaches its limit; they do not automatically upgrade the account.
 
 The public gateway and R2 can live in separate accounts. In this deployment,
 R2 stays in the existing storage account and a new Workers Free account hosts
-the gateway. A bucket-scoped **Object Read only** S3 credential is stored only
-in Worker secrets. The gateway signs a single private S3 GET and streams it;
+the gateway. The gateway uses a bucket-scoped **Object Read only** S3 credential
+configured as a Worker secret; the maintainer retains its private local setup
+copy. It is never packaged in the app or disclosed to download clients. The gateway signs a single private S3 GET and streams it;
 it never returns credentials or presigned URLs to clients. Redirects and
 automatic storage retries are disabled to preserve the one-read bound.
 
@@ -129,3 +130,9 @@ never deletes their original licensed files.
 `node tools/build-motion-update.cjs REVISION` packages the complete motion library for each character into an encrypted `motions.gla`. It retains the existing model/texture archives and adds `motionUpdate: {revision, package}` outside the catalogue’s `mac` tiers. Earlier apps ignore that optional field and keep their existing downloads. The uploader includes both the old parts and new motion parts, checks the account-wide 10 GB cap before uploading, and the gateway serves only that verified inventory.
 
 A motion overlay must match the base `assetRevision`; its authenticated header has `tier: motions` and `motionRevision`. It may contain only `runtime/motions/` files. The signed download revision and SHA-256 must match before atomic installation. It does not replace the manifest, meshes, wardrobe or textures. New avatar downloads also fetch the current motion overlay. The encrypted Tia starter includes it; existing installations can use **Motion update** in Settings.
+
+The Electron asset client uses Chromium `net.fetch` for HTTP/2-capable
+transfers. Authorization, catalogue and part requests disable HTTP caching;
+the gateway also varies cached responses by Authorization. Origin validation,
+redirect rejection, cancellation and per-part/whole-archive SHA-256 checks
+remain in the asset layer.

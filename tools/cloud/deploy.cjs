@@ -20,8 +20,9 @@ const repo=path.resolve(__dirname,'../..'),dir=path.join(repo,'build/protected')
  run(['secret','bulk'],JSON.stringify({DOWNLOAD_TOKEN:privateBuild.downloadToken,CONTENT_KEYS:JSON.stringify(privateBuild.keys),...storageSecrets}));
  const response=await fetch(baseURL+'index.json',{headers:{Authorization:'Bearer '+privateBuild.downloadToken},redirect:'error',signal:AbortSignal.timeout(15000)}),envelope=await response.json();
  if(!response.ok||!crypto.verify(null,Buffer.from(envelope.payload),privateBuild.publicKey,Buffer.from(envelope.signature,'base64')))throw Error('The live signed catalogue did not verify.');
+ if(envelope.payload!==JSON.parse(fs.readFileSync(path.join(dir,'index.json'))).payload)throw Error('The live catalogue is not the uploaded release.');
  if((await fetch(baseURL+'index.json',{redirect:'error'})).status!==401)throw Error('The gateway must reject unauthenticated downloads.');
- const inventory=JSON.parse(fs.readFileSync(path.join(dir,'inventory.json'))),part=inventory.objects.find(p=>p.file!=='index.json');
+ const inventory=JSON.parse(fs.readFileSync(path.join(dir,'inventory.json'))),part=inventory.objects.filter(p=>p.file!=='index.json').reduce((smallest,p)=>!smallest||p.bytes<smallest.bytes?p:smallest,null);
  const download=await fetch(baseURL+part.file,{headers:{Authorization:'Bearer '+privateBuild.downloadToken},redirect:'error',signal:AbortSignal.timeout(120000)});
  if(!download.ok)throw Error('The deployed gateway could not read an encrypted download part.');
  const digest=crypto.createHash('sha256');let bytes=0;for await(const chunk of download.body){digest.update(chunk);bytes+=chunk.length;}

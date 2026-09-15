@@ -12,6 +12,38 @@ const {pack,hash}=require('../tools/build-protected-assets.cjs'),{ProtectedPacka
  const config=path.join(root,'keys.json');fs.writeFileSync(config,JSON.stringify({keys,publicKey,downloadToken:'test-token'}));const index=path.join(root,'index.json');fs.writeFileSync(index,envelope);let corrupt=false,slow=false;
  server=http.createServer((req,res)=>{if(req.headers.authorization!=='Bearer test-token'){res.writeHead(401);res.end();return;}if(req.url==='/index.json'){res.end(envelope);return;}const p=remote.parts.find(x=>'/'+x.file===req.url);if(!p){res.writeHead(404);res.end();return;}const b=fs.readFileSync(path.join(output,p.file));if(corrupt)b[b.length-1]^=1;if(slow){res.write(b.subarray(0,50));const timer=setTimeout(()=>res.end(b.subarray(50)),1000);res.on('close',()=>clearTimeout(timer));}else res.end(b);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const assets=new AvatarAssets({bundledRoot:bundled,downloadsRoot:downloads,bundledIndexPath:index,runtimeConfigPath:config,baseURL:'http://127.0.0.1:'+server.address().port+'/',allowLocal:true});await assets.refreshIndex();await assets.download('fixture','base');assert(assets.installed('fixture'));assert.equal(assets.manifest('fixture').assetRevision,'test-v1');assert.deepEqual(fs.readdirSync(path.join(downloads,'fixture')),['base.gla']);assert(assets.read(assets.resolve(assets.roots('fixture'),'runtime/resident/mesh.bin')).equals(original));
+ // Every protected network path uses the supplied transport, including the
+ // device-key grant. Real fixture bytes still pass the normal signed checks.
+ assert.equal(assets.fetcher,globalThis.fetch,'Node tools keep the default fetch');
+ const injectedConfig=path.join(root,'injected-runtime.json');fs.writeFileSync(injectedConfig,JSON.stringify({publicKey,downloadToken:'test-token'}));
+ const requestsSeen=[],baseURL='http://127.0.0.1:'+server.address().port+'/';
+ const fetcher=async(url,init)=>{
+  const pathname=new URL(url).pathname;
+  assert.equal(new URL(url).origin,new URL(baseURL).origin);
+  assert.equal(init.redirect,'error','The transport must not follow redirects');
+  assert.equal(init.cache,'no-store','Protected content bypasses and is not saved in the HTTP cache');
+  assert(init.signal instanceof AbortSignal,'Timeout/cancellation reaches the transport');
+  assert.equal(init.headers.Authorization||init.headers.authorization,'Bearer test-token');
+  requestsSeen.push({pathname,method:init.method||'GET'});
+  if(pathname==='/authorize'){
+   assert.equal(init.method,'POST');
+   const device=crypto.createPublicKey({key:Buffer.from(JSON.parse(init.body).publicKey,'base64'),type:'spki',format:'der'});
+   const wrappedKeys=crypto.publicEncrypt({key:device,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(JSON.stringify(keys))).toString('base64');
+   return new Response(JSON.stringify({wrappedKeys}));
+  }
+  return globalThis.fetch(url,init);
+ };
+ const injected=new AvatarAssets({bundledRoot:bundled,downloadsRoot:path.join(root,'injected-downloads'),bundledIndexPath:index,runtimeConfigPath:injectedConfig,baseURL,allowLocal:true,fetcher,
+  safeStorage:{isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from(s),decryptString:b=>b.toString()}});
+ assert.equal(injected.fetcher,fetcher);await injected.refreshIndex();await injected.download('fixture','base');
+ assert(injected.read(injected.resolve(injected.roots('fixture'),'runtime/resident/mesh.bin')).equals(original));
+ assert.equal(requestsSeen.filter(r=>r.pathname==='/authorize'&&r.method==='POST').length,1);
+ assert(requestsSeen.some(r=>r.pathname==='/index.json'));
+ assert(remote.parts.every(p=>requestsSeen.some(r=>r.pathname==='/'+p.file)));
+ const callsBeforeInvalid=requestsSeen.length;
+ await assert.rejects(injected.response('https://outside.example/part.gla.p000',new AbortController().signal),/not configured/);
+ assert.equal(requestsSeen.length,callsBeforeInvalid,'Origin rejection happens before the transport');
+ console.log('Injected asset transport covers authorization, catalogue and verified downloads, preserving no-store, redirect, origin and abort options.');
  const before=await hash(path.join(downloads,'fixture/base.gla'));corrupt=true;await assert.rejects(assets.download('fixture','base'),/verification/);assert.equal(await hash(path.join(downloads,'fixture/base.gla')),before,'A corrupt download preserves the installed revision');corrupt=false;slow=true;const pending=assets.download('fixture','base');setTimeout(()=>assets.cancel(),30);await assert.rejects(pending);assert.equal(await hash(path.join(downloads,'fixture/base.gla')),before);assert.deepEqual(fs.readdirSync(path.join(downloads,'tmp')),[]);
  // A motion-only update preserves the model/texture revision and cannot
  // override other files. Existing clients can still use the unchanged mac tiers.
@@ -37,7 +69,7 @@ const {pack,hash}=require('../tools/build-protected-assets.cjs'),{ProtectedPacka
  const invalid=JSON.parse(envelope);invalid.payload=invalid.payload.replace('Fixture','Hacked');assert.throws(()=>assets.parseIndex(JSON.stringify(invalid)),/signature/);
  const stale=path.join(bundled,'fixture');fs.mkdirSync(path.join(stale,'runtime/resident'),{recursive:true});fs.writeFileSync(path.join(stale,'manifest.json'),JSON.stringify({assetRevision:'old'}));fs.writeFileSync(path.join(stale,'runtime/resident/image-0-4096.png'),'stale');assert.equal(assets.resolve(assets.roots('fixture'),'runtime/resident/image-0-4096.png'),null,'Old plaintext textures cannot overlay an encrypted revision');assert.equal(assets.hasTier('fixture','best'),false);
  const {createWorker}=await import('../tools/cloud/worker.mjs');const worker=createWorker(envelope,remote.parts);let reads=0;const env={DOWNLOAD_TOKEN:'test-token',AVATAR_ASSETS:{get:async()=>{reads++;return {size:remote.parts[0].bytes,body:'data'};}}},url='https://downloads.example/'+remote.parts[0].file,auth={Authorization:'Bearer test-token'};
- assert.equal((await worker.fetch(new Request(url),env)).status,401);assert.equal((await worker.fetch(new Request(url,{method:'HEAD',headers:auth}),env)).status,200);assert.equal(reads,0);assert.equal((await worker.fetch(new Request(url,{headers:auth}),env)).status,200);assert.equal(reads,1);await worker.fetch(new Request('https://downloads.example/not-found',{headers:auth}),env);assert.equal(reads,1);await worker.fetch(new Request('https://downloads.example/index.json',{headers:auth}),env);assert.equal(reads,1);
+ assert.equal((await worker.fetch(new Request(url),env)).status,401);assert.equal((await worker.fetch(new Request(url,{method:'HEAD',headers:auth}),env)).status,200);assert.equal(reads,0);const partResponse=await worker.fetch(new Request(url,{headers:auth}),env);assert.equal(partResponse.status,200);assert.equal(partResponse.headers.get('Vary'),'Authorization');assert.equal(reads,1);await worker.fetch(new Request('https://downloads.example/not-found',{headers:auth}),env);assert.equal(reads,1);const catalogueResponse=await worker.fetch(new Request('https://downloads.example/index.json',{headers:auth}),env);assert.equal(catalogueResponse.headers.get('Vary'),'Authorization');assert.equal(reads,1);
  console.log('Encrypted round trips, authenticated ranges, tampering, signed catalogues, download integrity, cancellation, atomic replacement and one-read gateway passed.');
  const {plan}=require('../tools/cloud/upload-r2.cjs');const storage={objects:[...remote.parts,{file:'index.json',bytes:100,sha256:'0'.repeat(64)}]};
  assert.equal(plan(storage,[{name:'bucket',objects:[]}],'bucket').missing.length,storage.objects.length);

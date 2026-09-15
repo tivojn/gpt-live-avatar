@@ -13,9 +13,11 @@ const TIER_SIZES = { balanced: 2048, best: 4096 };
 const TIER_LABELS = { motions:'Motion update', base: 'Avatar package (1K textures, meshes, motions)', balanced: 'Balanced: 2K textures', best: 'Best quality: 4K textures' };
 
 class AvatarAssets {
-  constructor({ bundledRoot, downloadsRoot, bundledIndexPath, developmentRoot, broadcast, runtimeConfigPath, safeStorage, baseURL=RELEASE_BASE, allowLocal=false }) {
+  constructor({ bundledRoot, downloadsRoot, bundledIndexPath, developmentRoot, broadcast, runtimeConfigPath, safeStorage, baseURL=RELEASE_BASE, allowLocal=false, fetcher=globalThis.fetch }) {
     this.bundledRoot = bundledRoot; this.downloadsRoot = downloadsRoot; this.bundledIndexPath = bundledIndexPath;
     this.broadcast = broadcast || (() => {});
+    // The desktop supplies Chromium networking; Node remains the fixture default.
+    this.fetcher = fetcher;
     this.developmentRoot = developmentRoot;
     this.active = null; // { slug, tier, request, cancelled }
     this.progress = null;
@@ -31,7 +33,7 @@ class AvatarAssets {
     this.keyRequest=(async()=>{
       if(!this.baseURL||(!this.allowLocal&&new URL(this.baseURL).protocol!=='https:'))throw Error('Protected downloads are not configured for this build.');
       const pair=await new Promise((resolve,reject)=>crypto.generateKeyPair('rsa',{modulusLength:2048},(e,publicKey,privateKey)=>e?reject(e):resolve({publicKey,privateKey})));
-      const response=await fetch(this.baseURL+'authorize',{method:'POST',headers:{Authorization:'Bearer '+this.runtime.downloadToken,'Content-Type':'application/json'},body:JSON.stringify({publicKey:pair.publicKey.export({type:'spki',format:'der'}).toString('base64')}),redirect:'error',signal:AbortSignal.timeout(15000)});
+      const response=await this.fetcher(this.baseURL+'authorize',{method:'POST',headers:{Authorization:'Bearer '+this.runtime.downloadToken,'Content-Type':'application/json'},body:JSON.stringify({publicKey:pair.publicKey.export({type:'spki',format:'der'}).toString('base64')}),redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
       if(!response.ok){await response.body?.cancel();throw Error(`Could not unlock avatar downloads (HTTP ${response.status}). Please retry.`);}
       const body=await response.text();if(body.length>2048)throw Error('Invalid avatar authorization.');
       const keys=JSON.parse(crypto.privateDecrypt({key:pair.privateKey,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},Buffer.from(JSON.parse(body).wrappedKeys,'base64')));
@@ -174,7 +176,7 @@ class AvatarAssets {
   // ---- downloads
   async response(url,signal){
     const u=new URL(url);if(!this.baseURL||(!this.allowLocal&&u.protocol!=='https:')||u.origin!==new URL(this.baseURL).origin)throw Error('Protected downloads are not configured for this build.');
-    const response=await fetch(url,{headers:{'Authorization':'Bearer '+(this.runtime.downloadToken||''),'User-Agent':'GPT-Live-Avatar'},signal,redirect:'error'});
+    const response=await this.fetcher(url,{headers:{'Authorization':'Bearer '+(this.runtime.downloadToken||''),'User-Agent':'GPT-Live-Avatar'},signal,redirect:'error',cache:'no-store'});
     if(!response.ok){await response.body?.cancel();throw Error(response.status===429?'The download service has reached its safe daily limit. Please try tomorrow.':`Avatar download failed (HTTP ${response.status}).`);}return response;
   }
   async fetchBuffer(url,_unused,timeout=15000){
