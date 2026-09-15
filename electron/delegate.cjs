@@ -16,9 +16,9 @@ function normalizeDelegate(config,patch={}){
 function selected(config){const c=normalizeDelegate(config);return {provider:c.delegateProvider,auth:c.delegateAuth,model:c.delegateModels[c.delegateProvider+':'+c.delegateAuth]};}
 function usesCodexServer(config){return config.reasoningMode==='delegate'&&selected(config).auth==='codex_app_server';}
 function reasoningEngine(config){const d=selected(config);return config.reasoningMode==='delegate'?(d.auth==='codex_app_server'?'codex':d.auth==='local_runtime'?d.provider:null):null;}
-function actionEngine(config){return reasoningEngine(config)||(['codex','openclaw','hermes','grok'].includes(config.agentEngine)?config.agentEngine:'codex');}
+function actionEngine(config){return (config.agentFollowReasoning!==false&&reasoningEngine(config))||(['codex','openclaw','hermes','grok'].includes(config.agentEngine)?config.agentEngine:'codex');}
 function usesCodexActions(config){return actionEngine(config)==='codex';}
-function runtimeConfig(config){const engine=reasoningEngine(config);return engine==='codex'?codexConfig(config):engine?{...config,agentRuntimeModels:{...config.agentRuntimeModels,[engine]:selected(config).model}}:config;}
+function runtimeConfig(config,engine=reasoningEngine(config)){if(engine!==reasoningEngine(config))return config;return engine==='codex'?codexConfig(config):engine?{...config,agentRuntimeModels:{...config.agentRuntimeModels,[engine]:selected(config).model}}:config;}
 function codexConfig(config){return usesCodexServer(config)?{...config,agentCodexModel:selected(config).model}:config;}
 function messages(history,limit=2400){
   if(!Array.isArray(history))return [];

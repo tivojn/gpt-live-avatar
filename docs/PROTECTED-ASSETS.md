@@ -116,3 +116,9 @@ The legacy iOS client requires a separate protected-loader port before another
 public iOS release. Its old raw GitHub endpoint is intentionally not a fallback
 in the Mac downloader. Owner-supplied local packages remain usable; migration
 never deletes their original licensed files.
+
+## Motion-only releases (0.2.11+)
+
+`node tools/build-motion-update.cjs REVISION` packages the complete motion library for each character into an encrypted `motions.gla`. It retains the existing model/texture archives and adds `motionUpdate: {revision, package}` outside the catalogue’s `mac` tiers. Earlier apps ignore that optional field and keep their existing downloads. The uploader includes both the old parts and new motion parts, checks the account-wide 10 GB cap before uploading, and the gateway serves only that verified inventory.
+
+A motion overlay must match the base `assetRevision`; its authenticated header has `tier: motions` and `motionRevision`. It may contain only `runtime/motions/` files. The signed download revision and SHA-256 must match before atomic installation. It does not replace the manifest, meshes, wardrobe or textures. New avatar downloads also fetch the current motion overlay. The encrypted Tia starter includes it; existing installations can use **Motion update** in Settings.

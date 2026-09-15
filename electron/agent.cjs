@@ -38,7 +38,7 @@ function setupAgent(deps){
   const agent=createAvatarTools({avatarCommand:(action,args,signal)=>command(sender,action,args,signal),progress:update});
   update({state:'thinking',tool:''});
   const engine=actionEngine(config);
-  const work=(engine==='codex'?codex:runtimes[engine]).answer(sender.id,id,engineConfig(runtimeConfig(config),engine),history,latest,speaker,agent,receipt=>onReceipt?.(receipt),update);
+  const work=(engine==='codex'?codex:runtimes[engine]).answer(sender.id,id,engineConfig(runtimeConfig(config,engine),engine),history,latest,speaker,agent,receipt=>onReceipt?.(receipt),update);
   completed.set(key,work);while(completed.size>64)completed.delete(completed.keys().next().value);
   try{const result=await work;update({state:'complete',tool:'',text:result.text,receipts:result.receipts});return result;}
   catch(e){completed.delete(key);update({state:/cancelled|aborted/i.test(e.message)?'cancelled':'error',tool:'',error:e.message});throw e;}

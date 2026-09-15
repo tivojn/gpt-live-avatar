@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {DEFAULT_SHORTCUTS,AvatarShortcuts,validate}=require('../electron/shortcuts.cjs');
+assert.throws(()=>validate({recover:'Shift+T',closeup:'Command+9'}));
+assert.throws(()=>validate({recover:'CommandOrControl+Shift+9',closeup:process.platform==='darwin'?'Command+Shift+9':'Control+Shift+9'}));
+const keys=new Map(),other='Command+Alt+8';keys.set(other,()=>{});
+const api={register:(key,fn)=>{if(keys.has(key))return false;keys.set(key,fn);return true;},unregister:key=>keys.delete(key)};
+let recovered=0,closed=0;const s=new AvatarShortcuts(api,{recover:()=>recovered++,closeup:()=>closed++});s.start(DEFAULT_SHORTCUTS);
+keys.get(DEFAULT_SHORTCUTS.recover)();keys.get(DEFAULT_SHORTCUTS.closeup)();assert.equal(recovered,1);assert.equal(closed,1);
+assert.throws(()=>s.change({...DEFAULT_SHORTCUTS,closeup:other}));assert.deepEqual(s.values,DEFAULT_SHORTCUTS);assert(keys.has(DEFAULT_SHORTCUTS.recover),'Conflict restores existing shortcut');assert(keys.has(other),'Other app shortcut untouched');
+s.pause(true);assert(!keys.has(DEFAULT_SHORTCUTS.recover));s.change({...DEFAULT_SHORTCUTS,recover:'Command+Alt+4'});assert(!keys.has('Command+Alt+4'),'Recording does not trigger shortcut');s.pause(false);assert(keys.has('Command+Alt+4'));assert(!keys.has(DEFAULT_SHORTCUTS.recover));s.clear();assert.equal(keys.size,1);
+console.log('Shortcut validation, conflicts, recording suspension and callback routing passed.');

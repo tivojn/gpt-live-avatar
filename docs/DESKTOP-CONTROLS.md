@@ -50,7 +50,7 @@ Equipping a prop expands the transparent host to the display work area. The view
 
 Pinching updates the character scale on animation frames inside this stable host, instead of waiting for a pause and repeatedly resizing the macOS window. Hold-to-drag also accepts a deliberate movement before the hold timer expires, coalesces pointer movement per frame, and cleans up on release, cancellation, lost capture and window blur. Hit testing reads a small cached alpha mask instead of reading GPU pixels for every mouse event. Position changes are saved after movement settles; temporary display-size windows are never saved as the preferred avatar size.
 
-After a close-up or a return to center, the first drag or pinch takes over from automatic positioning using the currently displayed size and position. Manual movement keeps the head reachable on screen. **⌘⇧D** (shown beside **Bring Avatar Back** in the menu; **⌘⇧0** remains an alias) restores the captured upper-right placement and size, even when another app has focus. Placement is relative to the primary display's work area and scales down for smaller displays. `qa/placement-app.cjs` checks this full sequence in the actual renderer.
+After a close-up or a return to center, the first drag or pinch takes over from automatic positioning using the currently displayed size and position. Manual movement keeps the head reachable on screen. **⌘⇧0** (shown beside **Bring Avatar Back** in the menu) restores the captured upper-right placement and size, even when another app has focus. Placement is relative to the primary display's work area and scales down for smaller displays. `qa/placement-app.cjs` checks this full sequence in the actual renderer.
 
 ## Tia's facial rendering
 
@@ -96,3 +96,9 @@ Additional verification:
 - `npx electron qa/delegate-live.cjs --live`: opt-in actual OpenAI model and voice handoff; uses a generated spoken question through WebRTC, never the hardware microphone. Account OAuth inference requires an actual user sign-in and is not proven by simulated-authentication tests.
 
 The compact Listening pill has a soft 3.4-second breathing microphone halo. It stops while muted, speaking or hidden and respects Reduce Motion. Click it to expand the conversation; the avatar body is not animated to indicate listening.
+
+## Face close-up and customizable shortcuts
+
+**⌘⇧9** opens a centered face close-up, using the current appearance. **⌘⇧0** returns to normal size at the default upper-right position. In Together, click a character first; close-up uses that character, and recovery restores the group. The character’s appearance and voice are unchanged.
+
+Settings → **Keyboard shortcuts** lets you record a combination for either action. Escape cancels recording. Conflicting combinations are rejected without losing the previous shortcuts. **Restore default shortcuts** restores ⌘⇧0 and ⌘⇧9. The chosen shortcuts appear in the right-click and View menus and remain available while another app is focused.

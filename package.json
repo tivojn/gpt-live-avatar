@@ -1,6 +1,6 @@
 {
   "name": "gpt-live-avatar",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Tia, a full-duplex desk avatar on OpenAI GPT-Live-1",
   "author": "Adam Cohen",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node qa/qa.js && node qa/asset-revisions.cjs && node qa/controls.cjs && node qa/delegate.cjs && node qa/group.cjs && node qa/attention.cjs && node qa/group-live.cjs && node qa/render-budget.cjs && node qa/agent.cjs && node qa/codex-agent.cjs && node qa/agent-progress.cjs && node qa/protected-assets.cjs && node qa/import-release.cjs && node qa/lip-sync.cjs && node qa/agent-runtimes.cjs && node qa/releases.cjs",
+    "test": "node qa/qa.js && node qa/asset-revisions.cjs && node qa/controls.cjs && node qa/shortcuts.cjs && node qa/delegate.cjs && node qa/group.cjs && node qa/attention.cjs && node qa/group-live.cjs && node qa/render-budget.cjs && node qa/agent.cjs && node qa/codex-agent.cjs && node qa/agent-progress.cjs && node qa/protected-assets.cjs && node qa/import-release.cjs && node qa/lip-sync.cjs && node qa/agent-runtimes.cjs && node qa/releases.cjs",
     "pack": "electron-builder --mac dir",
     "dmg": "bash tools/dmg.sh",
     "fetch-assets": "bash tools/fetch-assets.sh",
@@ -68,6 +68,10 @@
       {
         "from": "build/protected/starter/tia/base.gla",
         "to": "avatars/tia/base.gla"
+      },
+      {
+        "from": "build/protected/starter/tia/motions.gla",
+        "to": "avatars/tia/motions.gla"
       }
     ],
     "dmg": {

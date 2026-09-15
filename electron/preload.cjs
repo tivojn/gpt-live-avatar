@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('gla', {
     onMenuAction: callback => subscribe('gla:group:menu-action', callback),
   },
   // settings and secrets
+  shortcuts:{set:values=>ipcRenderer.invoke('gla:shortcuts:set',values),capture:value=>ipcRenderer.send('gla:shortcuts:capture',value===true)},
   getSettings: () => ipcRenderer.invoke('gla:settings:get'),
   setSettings: patch => ipcRenderer.invoke('gla:settings:set', patch),
   onSettings: callback => subscribe('gla:settings', callback),

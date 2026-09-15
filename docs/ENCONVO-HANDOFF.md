@@ -4,12 +4,12 @@
 the intelligence, credentials, voice conversation, tools and permissions.**
 
 For the EnConvo developer and their AI coding assistant. Updated September 15,
-2026 for GPT-Live Avatar **v0.2.10**. Use the tagged release for a reproducible
+2026 for GPT-Live Avatar **v0.2.11**. Use the tagged release for a reproducible
 application source reference.
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.10
-- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.10/GPT-Live.Avatar-0.2.10-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.10/SHA256SUMS-0.2.10.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.11
+- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.11/GPT-Live.Avatar-0.2.11-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.11/SHA256SUMS-0.2.11.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
@@ -22,7 +22,7 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### What is ready in v0.2.10
+### What is ready in v0.2.11
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
   overhead speech/task updates, protected downloads and the encrypted Tia
@@ -38,7 +38,7 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-The release includes `SHA256SUMS-0.2.10.txt`; use it to verify the downloaded
+The release includes `SHA256SUMS-0.2.11.txt`; use it to verify the downloaded
 installer rather than checksums from an older release.
 
 ## 1. Scope and ownership
@@ -77,8 +77,9 @@ The standalone app stores assignments as
 `avatarAgentBindings[characterId][engine]`. OpenClaw discovers native agents;
 Hermes discovers named profiles. A blank assignment follows the runtime's
 default, while an explicit missing assignment produces an error. The engine
-selected for reasoning also handles enabled actions; direct API/OAuth reasoning
-can instead use a separately selected action engine. Both solo and Together
+selected for reasoning handles enabled actions by default. An explicit action
+engine override can use a different runtime, including with direct API/OAuth
+reasoning. Permissions follow the effective action engine. Both solo and Together
 pass the addressed character and shared, verified task context to that engine.
 
 For EnConvo, map characters to **EnConvo agent IDs** using its existing registry.
@@ -169,7 +170,7 @@ Paths are relative to this repository. Follow transitive imports: copying only
 | Deformation corrections | [web/avatar3d-volume.js](../web/avatar3d-volume.js), [web/avatar3d-clearance.js](../web/avatar3d-clearance.js), [web/avatar3d-garment-fit.js](../web/avatar3d-garment-fit.js) | Joint volume and authored/character-specific clearance; keep with rig metadata. |
 | Motions/stage | [web/avatar3d-motion.js](../web/avatar3d-motion.js), [web/avatar3d-companion.js](../web/avatar3d-companion.js) | Clips, reactions, `CompanionController`, `AvatarStudioStage`. |
 | Eye behavior | [web/avatar3d-attention.js](../web/avatar3d-attention.js) | Irregular blinks and subtle binocular eye movement; already called by renderer. |
-| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.10, not the removed RMS/spectral classifier. |
+| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.11, not the removed RMS/spectral classifier. |
 | Connection sounds | [web/conversation-sounds.js](../web/conversation-sounds.js) | Synthesized connecting/ready/end cues; no samples or remote service. |
 | Task bubbles | [web/agent-progress.js](../web/agent-progress.js), [web/bubble-policy.js](../web/bubble-policy.js) | Public status, stale-event handling and Auto/Always/Off. |
 | Drawing/hit tests | [web/avatar-render-budget.js](../web/avatar-render-budget.js), [web/avatar-hit-mask.js](../web/avatar-hit-mask.js) | Pixel/texture budgets, frame pacing, cached alpha mask. |
@@ -685,7 +686,7 @@ credentials and M2/16 GB performance still need their own acceptance tests.
 
 > Read docs/ENCONVO-HANDOFF.md and inspect EnConvo's existing agent, credential,
 > voice, delegation and extension interfaces. Implement milestone A, then B,
-> before group work. Reuse v0.2.10's complete renderer dependency tree, real
+> before group work. Reuse v0.2.11's complete renderer dependency tree, real
 > audio-to-viseme pipeline and protected asset loader. EnConvo owns provider
 > credentials, reasoning, tools, microphone and conversation state. Build a
 > narrow adapter; do not instantiate the standalone app's Codex, OpenClaw,
@@ -695,3 +696,11 @@ credentials and M2/16 GB performance still need their own acceptance tests.
 > and original character proportions, and test inside EnConvo before claiming
 > completion. Treat proposed events/tools as interfaces to implement, not an
 > existing SDK. Report host assumptions, hardware measurements and limitations.
+
+### 0.2.11 integration additions
+
+Use `electron/shortcuts.cjs` only if EnConvo does not already own shortcuts. The defaults are **⌘⇧0** for recovery and **⌘⇧9** for a face close-up. `web/avatar-closeup.js` provides the framing calculation; both solo and Together use it without modifying models. Settings records custom combinations and handles conflicts.
+
+Action permissions are under **Action Engine & Permissions**, separate from **Delegate Reasoning Provider**. `agentFollowReasoning` defaults to true. An explicit external action choice turns following off and preserves independent action models and permissions. EnConvo can replace both routing controls with its own agent system.
+
+All five avatars now have 65 motions. `tools/retarget-meshy-motion.py` preserves the Meshy source’s body orientation and movement amplitude. The optional signed `motionUpdate` package contains only `runtime/motions/`; apply it before the base package for those paths, after verifying its signature, checksums, authenticated chunks and matching base revision. The Tia installer includes this encrypted overlay. Do not copy raw model or motion data into a public EnConvo repository.

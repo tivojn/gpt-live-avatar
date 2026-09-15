@@ -20,7 +20,7 @@ function permissionPatch(config,patch){
 function engineConfig(config,engine){return {...config,agentAccess:permissions(config)[engine]};}
 function selectEngine(engine){
  if(!ENGINES[engine])throw Error('Unknown agent engine.');
- return {reasoningMode:'delegate',delegateProvider:engine==='codex'?'openai':engine,delegateAuth:engine==='codex'?'codex_app_server':'local_runtime',agentEngine:engine};
+ return {reasoningMode:'delegate',delegateProvider:engine==='codex'?'openai':engine,delegateAuth:engine==='codex'?'codex_app_server':'local_runtime'};
 }
 function installed(config){
  return Object.fromEntries(Object.keys(ENGINES).map(engine=>{try{
@@ -31,14 +31,23 @@ function installed(config){
 }
 function providerMenu(config,{active,update,openSettings,available=installed(config)}){
  const values=permissions(config);
- return {label:'Delegate Reasoning Provider',submenu:[
+ return {label:'Action Engine & Permissions',submenu:[
+  {label:'Follow reasoning agent',type:'checkbox',checked:config.agentFollowReasoning!==false,click:()=>update({agentFollowReasoning:config.agentFollowReasoning===false})},
+  {label:'Handling actions: '+ENGINES[active],enabled:false},
+  {type:'separator'},
   ...Object.entries(ENGINES).map(([engine,label])=>({label:(active===engine?'✓ ':'')+label+(available[engine]?'':' · not installed'),submenu:[
-   {label:'Use '+label,type:'radio',checked:active===engine,enabled:available[engine],click:()=>update(selectEngine(engine))},
+   {label:'Use '+label+' for actions',type:'radio',checked:active===engine,enabled:available[engine],click:()=>update({agentEngine:engine,agentFollowReasoning:false})},
    {type:'separator'},
    ...permissionChoices(engine).map(choice=>({label:choice.label,type:'radio',checked:values[engine]===choice.value,enabled:available[engine],click:()=>update({agentPermissions:{[engine]:choice.value}})})),
    ...(engine==='codex'?[]:[{type:'separator'},{label:'Agent’s own permissions also apply',enabled:false}]),
   ]})),
+  {type:'separator'},{label:'Agent settings…',click:openSettings},
+ ]};
+}
+function reasoningMenu(config,{active,update,openSettings,available=installed(config)}){
+ return {label:'Delegate Reasoning Provider',submenu:[
+  ...Object.entries(ENGINES).map(([engine,label])=>({label:label+(available[engine]?'':' · not installed'),type:'radio',checked:active===engine,enabled:available[engine],click:()=>update(selectEngine(engine))})),
   {type:'separator'},{label:'More reasoning options…',click:openSettings},
  ]};
 }
-module.exports={ENGINES,ACP_PERMISSIONS,permissionChoices,permissions,permissionPatch,engineConfig,selectEngine,installed,providerMenu};
+module.exports={ENGINES,ACP_PERMISSIONS,permissionChoices,permissions,permissionPatch,engineConfig,selectEngine,installed,providerMenu,reasoningMenu};

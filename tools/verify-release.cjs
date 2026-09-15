@@ -6,5 +6,7 @@ if(runtime.keys||runtime.privateKey)throw Error('Content keys and signing secret
 if(!runtime.downloadToken||!runtime.publicKey||!crypto.verify(null,Buffer.from(envelope.payload),runtime.publicKey,Buffer.from(envelope.signature,'base64')))throw Error('Invalid protected release catalogue.');
 const starter=path.join(root,'starter/tia/base.gla'),entry=JSON.parse(envelope.payload).avatars.tia.mac.base;
 if(!fs.existsSync(starter)||fs.statSync(starter).size!==entry.bytes)throw Error('The encrypted Tia starter is missing or does not match the signed release.');
+const motion=JSON.parse(envelope.payload).avatars.tia.motionUpdate?.package;
+if(motion&&(!fs.existsSync(path.join(root,'starter/tia/motions.gla'))||fs.statSync(path.join(root,'starter/tia/motions.gla')).size!==motion.bytes))throw Error('The encrypted Tia motion update is missing.');
 if(!config.baseURL||!/^https:\/\/[-a-z0-9.]+\/$/.test(config.baseURL))throw Error('R2 migration is not activated. Configure and test the live gateway before building a release installer.');
 console.log('Verified release configuration: signed catalogue, HTTPS downloads, no model content keys in the installer.');

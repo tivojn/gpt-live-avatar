@@ -21,7 +21,7 @@ def skeleton(doc):
   if i not in world:world[i]=(get(parents[i]) if i in parents else np.eye(4))@local[i]
   return world[i]
  for i in range(len(nodes)):get(i)
- joints=sorted({j for s in doc['skins'] for j in s['joints']});names={nodes[j]['name']:j for j in joints}
+ joints=sorted({j for s in doc['skins'] for j in s['joints']});names={nodes[j]['name']:j for j in joints if nodes[j].get('name')!='neutral_bone'}
  return names,parents,local,np.array([world[i] for i in range(len(nodes))])
 
 def rot(a):
@@ -151,7 +151,9 @@ class Retarget:
    else:world[:,j]=loc[:,j]
    done.add(j)
   for j in range(len(self.sl)):visit(j)
-  target=self.local(self.world(world));value={**data,'bones':self.names,'frames':np.round(target[:,:,:3,:],7).reshape(count,-1).tolist()};value.pop('bounds',None)
+  target_world=self.world(world);target=self.local(target_world);value={**data,'bones':self.names,'frames':np.round(target[:,:,:3,:],7).reshape(count,-1).tolist()}
+  points=target_world[:,list(self.tnames.values()),:3,3];margin=.12*self.scale
+  value['bounds']=[np.round(points.min(axis=(0,1))-margin,5).tolist(),np.round(points.max(axis=(0,1))+margin,5).tolist()]
   if value.get('gesture'):value['gesture']['anchor']=self.chest
   if value.get('retargeting',{}).get('forwardSpeed'):value['retargeting']['forwardSpeed']*=self.scale
   return value

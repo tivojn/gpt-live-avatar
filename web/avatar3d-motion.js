@@ -99,9 +99,10 @@ export class Avatar3DMotion {
     if(generation!==this.generation)return false;
     this.options.transition=null;
     const selection=this.options.selection;
+    const chosen=value=>Boolean(value)&&value!=='none';
     const hands=this.options.bones.map(({name},i)=>
-      !/toe/i.test(name) && /index|middle|ring|pinky|thumb/.test(name) && (selection.prop||selection.hands
-        ||(name.endsWith('.l')&&selection.leftHand)||(name.endsWith('.r')&&selection.rightHand))
+      !/toe/i.test(name) && /index|middle|ring|pinky|thumb/.test(name) && (chosen(selection.prop)||chosen(selection.hands)
+        ||(name.endsWith('.l')&&chosen(selection.leftHand))||(name.endsWith('.r')&&chosen(selection.rightHand)))
         ? this.options.current[i] : null);
     // Meshy's preset rig carries body motion but no finger animation. Use
     // Tia's authored hand poses, while a user-selected grip always wins.

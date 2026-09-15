@@ -102,7 +102,7 @@
     <h2>Agent actions</h2>
     <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
     <p class="note">Works in solo and Together. Your selected agent handles tasks using its own account, tools and permissions. The addressed character shows progress and shares verified results with the group.</p>
-    <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="codex">Codex · code, shell, files and connected tools</option><option value="openclaw">OpenClaw · configured tools and account</option><option value="hermes">Hermes · configured tools and account</option><option value="grok">Grok Build · configured tools and account</option></select>
+    <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="follow">Follow reasoning agent (default)</option><option value="codex">Codex · code, shell, files and connected tools</option><option value="openclaw">OpenClaw · configured tools and account</option><option value="hermes">Hermes · configured tools and account</option><option value="grok">Grok Build · configured tools and account</option></select>
     <p id="sharedCodexEngine" class="note" hidden>Uses the Codex App Server connection and model selected under Reasoning above.</p>
     <div id="codexOptions" hidden>
       <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools and their app permissions. Availability depends on your Codex setup. Voice still uses your voice API key.</p>
@@ -163,6 +163,18 @@
   </section>
 
   <section>
+    <h2>Keyboard shortcuts</h2>
+    <p class="note">Click a shortcut, then press your new combination. Escape cancels. These work while you use other apps.</p>
+    <label for="shortcutRecover">Bring Avatar Back · normal size and position</label>
+    <button id="shortcutRecover" type="button" data-shortcut="recover"></button>
+    <label for="shortcutCloseup">Avatar Close-up · frame the face</label>
+    <button id="shortcutCloseup" type="button" data-shortcut="closeup"></button>
+    <p class="note">In Together, close-up uses the character you last clicked. Bring Avatar Back restores the group.</p>
+    <button id="resetShortcuts" type="button">Restore default shortcuts</button>
+    <p id="shortcutState" class="state" role="status"></p>
+  </section>
+
+  <section>
     <h2>Tips</h2>
     <p class="note">Drag Tia to move her. Scroll or pinch to resize. Option-drag or two-finger swipe to rotate. Double-click her to start or end a conversation; the bubble has the same controls. Say "do a kung fu punch", "sit down", "wave" or "dance" and she follows your words.</p>
   </section>
@@ -173,7 +185,7 @@
   let agentInventory=null;
   const runtimeConnections={}, runtimeNames={openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build'};
   const localDelegate=s=>s.reasoningMode==='delegate'&&s.delegate.auth==='local_runtime';
-  const localEngine=()=>SETTINGS.reasoningMode==='delegate'&&SETTINGS.delegate.auth==='codex_app_server'?'codex':localDelegate(SETTINGS)?SETTINGS.delegate.provider:SETTINGS.agentEngine;
+  const localEngine=()=>SETTINGS.effectiveActionEngine||SETTINGS.agentEngine||'codex';
   const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
   const setState = (el, text, cls = '') => { el.textContent = text; el.className = 'state ' + cls; };
 
@@ -183,6 +195,7 @@
     if (!voiceDraft || previousVoice !== settings.voice) voiceDraft = settings.voice;
     $('#voice').innerHTML = settings.voices.map(v => `<option value="${v}" ${v === voiceDraft ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}${v === 'marin' ? ' · default' : ''}</option>`).join('');
     updateVoiceState();
+    renderShortcuts();
     $('#conversationSounds').checked=settings.conversationSounds!==false;
     $('#personaName').value = settings.personaName || '';
     $('#persona').value = settings.persona || '';
@@ -196,9 +209,13 @@
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
-    const sharedCodex=settings.reasoningMode==='delegate'&&settings.delegate.auth==='codex_app_server';
-    const sharedRuntime=localDelegate(settings);const engine=sharedCodex?'codex':sharedRuntime?settings.delegate.provider:settings.agentEngine||'codex';
-    for(const option of $('#agentEngine').options)option.disabled=settings.installedEngines?.[option.value]===false;$('#agentEngine').value=engine;$('#agentEngine').disabled=sharedCodex||sharedRuntime;$('#sharedCodexEngine').hidden=!sharedCodex&&!sharedRuntime;$('#sharedCodexEngine').textContent=sharedRuntime?'Uses the '+runtimeNames[engine]+' connection selected under Reasoning above.':'Uses the Codex App Server connection and model selected under Reasoning above.';$('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
+    const engine=localEngine(), shared=engine===settings.effectiveReasoningEngine;
+    const sharedCodex=shared&&engine==='codex';
+    for(const option of $('#agentEngine').options)option.disabled=option.value!=='follow'&&settings.installedEngines?.[option.value]===false;
+    $('#agentEngine').value=settings.agentFollowReasoning!==false?'follow':engine;
+    $('#sharedCodexEngine').hidden=false;
+    $('#sharedCodexEngine').textContent='Actions: '+(engine==='codex'?'Codex App Server':runtimeNames[engine])+'. '+(settings.agentFollowReasoning!==false?(shared?'Follows your reasoning agent; permissions below belong to this action engine.':'Your reasoning choice has no action engine; uses your saved action provider. Choose a provider below to change it.'):'Independent of your reasoning provider. Changing reasoning will keep this action engine.');
+    $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';
   }
@@ -219,7 +236,7 @@
     $('#deviceCode').textContent=a.userCode?'Your sign-in code: '+a.userCode:'';
     setState($('#delegateAccountState'),oauth?(a.error||a.message||(a.signedIn?'Signed in on this Mac.':'Not signed in.')):(a.hasKey?'API key saved on this Mac.':'Add an API key to use this provider.'),a.error?'bad':(oauth?a.signedIn:a.hasKey)?'ok':'');
     if(codex)renderCodexAccount();if(local){const r=runtimeConnections[d.provider];setState($('#delegateAccountState'),r?(r.ok?r.message:r.error):'Check the agent connection below. It must be installed and configured on this Mac.',r?.ok?'ok':r?'bad':'');}
-    $('#delegateModelNote').textContent=local?(d.provider==='openclaw'?'OpenClaw’s gateway chooses the model from its own configuration.':'Use the agent’s configured model, or select a model advertised by its connection.')+' Actions must be enabled for this connection; its ACP bridge does not offer a tool-free mode.':codex?'One model for delegated reasoning and enabled actions in solo and Together. Account default uses GPT-5.6 Sol with ChatGPT sign-in or GPT-5.6 Luna with Codex API-key sign-in.':'OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.';
+    $('#delegateModelNote').textContent=local?(d.provider==='openclaw'?'OpenClaw’s gateway chooses the model from its own configuration.':'Use the agent’s configured model, or select a model advertised by its connection.')+' Actions must be enabled for this connection; its ACP bridge does not offer a tool-free mode.':codex?'This model is also used for actions when Codex is your action engine. Account default uses GPT-5.6 Sol with ChatGPT sign-in or GPT-5.6 Luna with Codex API-key sign-in.':'OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.';
     renderDelegateModels(local?runtimeConnections[d.provider]?.models||[]:codex?codexModelChoices:d.choices[d.provider]||[],d.model);
   }
   function renderAgentBindings(s){
@@ -243,7 +260,7 @@
   }
   function renderRuntime(s){
     const engine=localEngine(),local=Boolean(runtimeNames[engine]);$('#runtimeOptions').hidden=!local;if(!local)return;
-    const shared=localDelegate(s);$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on this Mac. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':engine==='hermes'?'Install Hermes with its ACP extra.':'Sign in with Grok Build using grok login.');
+    const shared=engine===s.effectiveReasoningEngine;$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on this Mac. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':engine==='hermes'?'Install Hermes with its ACP extra.':'Sign in with Grok Build using grok login.');
     if(document.activeElement!==$('#runtimePath'))$('#runtimePath').value=s.agentRuntimePaths?.[engine]||'';
     $('#runtimeModelRow').hidden=shared||engine==='openclaw';if(document.activeElement!==$('#runtimeModel'))$('#runtimeModel').value=s.agentRuntimeModels?.[engine]||'';
     $('#runtimeAccess').value=s.agentPermissions?.[engine]==='full'?'full':'workspace';
@@ -304,10 +321,10 @@
       let right = '';
       if (active && progress.phase === 'download') right = `<span>${progress.percent}%</span><button data-cancel="1" type="button">Cancel</button>`;
       else if (active && (progress.phase === 'verify' || progress.phase === 'extract')) right = `<span>${progress.phase === 'verify' ? 'Verifying…' : 'Unpacking…'}</span>`;
-      else if (t.present) right = `<span class="ok">Ready</span>${tier === 'base' && status.bundled ? '' : `<button data-remove="${tier}" type="button" ${busy ? 'disabled' : ''}>Remove</button>`}`;
+      else if (t.present) right = `<span class="ok">Ready</span>${(tier === 'base' && status.bundled || t.removable===false) ? '' : `<button data-remove="${tier}" type="button" ${busy ? 'disabled' : ''}>Remove</button>`}`;
       else if (t.available) right = `<button data-download="${tier}" type="button" ${busy ? 'disabled' : ''}>Download ${MB(t.bytes)}</button>`;
       else right = '<small>Not published</small>';
-      const note = active && progress.phase === 'error' ? `<small style="color:#ff5b4d">${progress.error}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
+      const note = active && progress.phase === 'error' ? `<small style="color:#ff5b4d">${progress.error}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
       rows.push(`<div class="tier"><div><div>${t.label}</div>${note}</div><div class="row" style="margin:0">${right}</div>${active && progress.phase !== 'error' ? `<div class="bar"><i style="width:${progress.percent}%"></i></div>` : ''}</div>`);
     }
     box.innerHTML = rows.join('');
@@ -328,6 +345,26 @@
     if (r.ok) { renderBackends(r.backends, SETTINGS.backendModel); setState($('#keyState'), `API key works. ${r.hasLive ? 'GPT-Live-1 is available on this account.' : 'GPT-Live-1 is not listed for this account yet.'}`, r.hasLive ? 'ok' : 'bad'); }
     else setState($('#keyState'), r.error, 'bad');
   }
+  const shortcutLabel=value=>value.replaceAll('CommandOrControl',navigator.platform.includes('Mac')?'⌘':'Ctrl + ').replaceAll('Command','⌘').replaceAll('Control','⌃').replaceAll('Alt','⌥').replaceAll('Shift','⇧').replaceAll('+','');
+  let recordingShortcut=null;
+  function renderShortcuts(){for(const b of document.querySelectorAll('[data-shortcut]'))if(b!==recordingShortcut)b.textContent=shortcutLabel(SETTINGS.shortcuts[b.dataset.shortcut]);}
+  function stopShortcutCapture(){if(!recordingShortcut)return;recordingShortcut=null;gla.shortcuts.capture(false);renderShortcuts();}
+  async function saveShortcuts(values){const r=await gla.shortcuts.set(values);if(r.ok){render(r.settings);setState($('#shortcutState'),'Shortcuts saved.','ok');}else setState($('#shortcutState'),r.error,'bad');}
+  for(const button of document.querySelectorAll('[data-shortcut]')){
+    button.onclick=()=>{stopShortcutCapture();recordingShortcut=button;gla.shortcuts.capture(true);button.textContent='Press your shortcut…';};
+    button.onblur=stopShortcutCapture;
+    button.onkeydown=event=>{
+      if(recordingShortcut!==button)return;
+      event.preventDefault();event.stopPropagation();
+      if(event.key==='Escape'){stopShortcutCapture();return;}
+      if(['Meta','Control','Alt','Shift'].includes(event.key))return;
+      const key=event.code.startsWith('Key')?event.code.slice(3):event.code.startsWith('Digit')?event.code.slice(5):event.code.replace('Arrow','');
+      const value=[event.metaKey?'Command':'',event.ctrlKey?'Control':'',event.altKey?'Alt':'',event.shiftKey?'Shift':'',key].filter(Boolean).join('+'),name=button.dataset.shortcut;
+      stopShortcutCapture();void saveShortcuts({...SETTINGS.shortcuts,[name]:value});
+    };
+  }
+  addEventListener('blur',stopShortcutCapture);
+  $('#resetShortcuts').onclick=()=>saveShortcuts({recover:'CommandOrControl+Shift+0',closeup:'CommandOrControl+Shift+9'});
   const save = patch => gla.setSettings(patch).then(render);
   $('#saveKey').onclick = async () => {
     const key = $('#key').value.trim(); if (!key) return;
@@ -340,7 +377,7 @@
   };
   $('#clearKey').onclick = async () => { await gla.clearApiKey(); render(await gla.getSettings()); };
   $('#refreshModels').onclick = loadModels;
-  $('#agentEngine').onchange=()=>save({agentEngine:$('#agentEngine').value});
+  $('#agentEngine').onchange=()=>{const value=$('#agentEngine').value;return save(value==='follow'?{agentFollowReasoning:true}:{agentFollowReasoning:false,agentEngine:value});};
   $('#agentAccess').onchange=()=>save({agentPermissions:{codex:$('#agentAccess').value}});
   $('#codexSaveModel').onclick=()=>{const model=modelValue('agentCodexModel');if(model&&!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model)){setState($('#codexStatus'),'Enter a valid model ID.','bad');return;}return save({agentCodexModel:model});};
   $('#refreshAgents').onclick=refreshAgents;

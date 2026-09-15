@@ -1,6 +1,6 @@
 # Local agent engines
 
-GPT-Live Avatar v0.2.10 can use Codex App Server, OpenClaw, Hermes or Grok Build for delegated reasoning and enabled actions. These are separate local runtimes. Installing the avatar app does not install them or configure their provider accounts.
+GPT-Live Avatar v0.2.11 can use Codex App Server, OpenClaw, Hermes or Grok Build for delegated reasoning and enabled actions. These are separate local runtimes. Installing the avatar app does not install them or configure their provider accounts.
 
 ## Choose a connection
 
@@ -10,11 +10,11 @@ GPT-Live Avatar v0.2.10 can use Codex App Server, OpenClaw, Hermes or Grok Build
 
 - **Grok Build:** Install Grok Build and complete its native `grok login`. Select Grok Build in Reasoning and check the connection. The adapter launches `grok --no-auto-update agent --no-leader stdio`, authenticates with its cached native login (or native `XAI_API_KEY` environment credential), and lists models advertised by the agent. It is the real agent runtime, not a direct xAI chat API relabelled as an agent. See [Grok headless scripting](https://docs.x.ai/build/cli/headless-scripting).
 
-Right-click **Delegate Reasoning Provider → provider → Use provider** to switch reasoning and enabled actions together. The current provider is marked with a check. Each submenu has its own saved permissions; selecting a permission does not switch providers. Missing installations are disabled. A saved custom executable can be configured in Settings.
+Right-click **Delegate Reasoning Provider → provider** to choose reasoning. **Action Engine & Permissions → provider** contains that engine’s permissions and the option to use it for actions. The active action engine is checked and named explicitly. Missing installations are disabled.
 
-When a runtime is selected for reasoning, enabled actions use the same runtime. To retain direct API/OAuth reasoning, choose the action engine separately under Agent actions. An unavailable selected runtime produces a setup error; the app does not silently substitute Codex or an API provider.
+**Follow reasoning agent** is on by default: OpenClaw reasoning uses OpenClaw actions, for example. Choose a different action engine to turn following off. It stays selected when you change reasoning later. Direct API/OAuth and managed reasoning have no native action engine, so following uses the saved external action-engine choice. When the two engines differ, their models and permissions stay independent. An unavailable selected engine reports setup is needed; there is no silent fallback.
 
-The built-in action engine, file tools and app-owned page extraction were removed in v0.2.10. Old `basic` engine selections migrate to Codex; an explicitly selected external reasoning engine takes precedence. If it is unavailable, the app reports setup is needed. No local file-tool fallback remains. Browser/computer use belongs entirely to the selected agent; configure those connections there. The starting folder is its working directory, not an app-enforced file boundary.
+The built-in action engine, file tools and app-owned page extraction were removed in v0.2.10. Old `basic` engine selections migrate to Codex; following uses a selected external reasoning engine. If it is unavailable, the app reports setup is needed. No local file-tool fallback remains. Browser/computer use belongs entirely to the selected agent; configure those connections there. The starting folder is its working directory, not an app-enforced file boundary.
 
 Voice and voice previews still use the OpenAI voice API key, and existing transcription usage is unchanged. Local runtimes use their own provider credentials and billing/allowance. GPT-Live Avatar neither copies nor embeds their OAuth tokens.
 

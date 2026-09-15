@@ -1,0 +1,34 @@
+'use strict';
+const {app,BrowserWindow,Menu}=require('electron'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),out=root+'/build/qa-shortcuts';
+fs.mkdirSync(out+'/profile/avatars',{recursive:true});app.setPath('userData',out+'/profile');
+for(const slug of ['tia','sarah'])if(!fs.existsSync(out+'/profile/avatars/'+slug))fs.symlinkSync(root+'/build/characters/'+slug,out+'/profile/avatars/'+slug);
+const restart=process.argv.includes('--restart');
+if(!restart)fs.writeFileSync(out+'/profile/config.json',JSON.stringify({avatar:'tia',quality:'friendly',agentEnabled:true,agentEngine:'codex',voice:'marin',reasoningMode:'delegate'}));
+let menu;const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const native=build.call(Menu,items);native.popup=options=>{menu=items;options?.callback?.();};return native;};
+const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));
+require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms)),run=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
+async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end){const result=await fn();if(result)return result;await wait(100);}throw Error('Timed out: '+label);}
+const access=async w=>run(w,'return (await gla.getSettings()).agentAccess');
+const permissionItems=()=>menu.find(i=>i.label==='Action Engine & Permissions').submenu.find(i=>i.submenu&&i.label.includes('Codex App Server')).submenu.filter(i=>['Ask for approval','Approve for me','Full access'].includes(i.label));
+const picker=async w=>run(w,"return document.querySelector('#agentAccess').value");
+app.whenReady().then(async()=>{try{
+ const solo=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'solo');await until(()=>run(solo,'return window.gla_avatar?.resources.ready'),'avatar');
+ const settings=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/settings.html')),'settings');await until(()=>run(settings,'return document.querySelector("#shortcutRecover").textContent'),'shortcuts');
+ const defaults={recover:'CommandOrControl+Shift+0',closeup:'CommandOrControl+Shift+9'};
+ assert.deepEqual(await run(settings,'return (await gla.getSettings()).shortcuts'),defaults);
+ await run(settings,"document.querySelector('#shortcutRecover').click();");
+ const {globalShortcut}=require('electron');await wait(100);assert(!globalShortcut.isRegistered(defaults.recover));
+ await run(settings,"document.querySelector('#shortcutRecover').dispatchEvent(new KeyboardEvent('keydown',{key:'4',code:'Digit4',metaKey:true,altKey:true,bubbles:true}));");
+ await until(()=>run(settings,"return document.querySelector('#shortcutState').textContent==='Shortcuts saved.'"),'saved');
+ assert.equal(await run(settings,'return (await gla.getSettings()).shortcuts.recover'),'Command+Alt+4');assert(globalShortcut.isRegistered('Command+Alt+4'));assert(!globalShortcut.isRegistered(defaults.recover));
+ assert.equal(JSON.parse(fs.readFileSync(out+'/profile/config.json')).shortcuts.recover,'Command+Alt+4');
+ const rejected=await run(settings,"return gla.shortcuts.set({recover:'Command+Shift+9',closeup:'CommandOrControl+Shift+9'})");assert.equal(rejected.ok,false);
+ await run(settings,"await document.querySelector('#resetShortcuts').onclick();");assert(globalShortcut.isRegistered(defaults.recover));
+ await run(solo,'return gla.group.open()');const group=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/group.html')),'group');await until(()=>run(group,'return window.gla_group&&!gla_group.state.loading&&gla_group.actors.size===2'),'cast');
+ await run(group,"await gla_group.actorMenuAction({slug:'sarah',action:'close-up'});");await wait(1500);
+ const face=await run(group,"const a=gla_group.actors.get('sarah');return {view:a.closeup,face:a.avatar.layout().faceBounds,w:a.avatar.width,h:a.avatar.height};");assert(face.view&&face.face[3]/face.view.h>.45);
+ fs.writeFileSync(out+'/group-closeup.png',(await group.webContents.capturePage()).toPNG());
+ group.webContents.send('gla:group:reset');await wait(400);assert(await run(group,"return [...gla_group.actors.values()].every(a=>!a.closeup)"));
+ assert.deepEqual(errors,[]);console.log('Actual shortcut recording, persistence, conflict rejection, default reset, group close-up and recovery passed.');
+}catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{app.exit(process.exitCode||0);}});

@@ -15,7 +15,8 @@ class ProtectedPackage {
    if(doc.version!==1||doc.chunkSize!==CHUNK||!Array.isArray(doc.files)||doc.files.length>20000||typeof doc.id!=='string')throw Error('Unsupported package.');
    const {mac,...signed}=doc,expected=crypto.createHmac('sha256',Buffer.from(key,'hex')).update(JSON.stringify(signed)).digest('hex');
    if(typeof mac!=='string'||mac.length!==64||!crypto.timingSafeEqual(Buffer.from(mac),Buffer.from(expected)))throw Error('Package header authentication failed.');
-   if(!doc.meta||!['base','balanced','best'].includes(doc.meta.tier)||!/^[-a-z0-9]+$/.test(doc.meta.slug)||typeof doc.meta.assetRevision!=='string')throw Error('Invalid package metadata.');
+   if(!doc.meta||!['base','balanced','best','motions'].includes(doc.meta.tier)||!/^[-a-z0-9]+$/.test(doc.meta.slug)||typeof doc.meta.assetRevision!=='string')throw Error('Invalid package metadata.');
+   if(doc.meta.tier==='motions'&&(!/^[-a-z0-9]+$/.test(doc.meta.motionRevision||'')||doc.files.some(e=>!e.name?.startsWith('runtime/motions/'))))throw Error('Invalid motion update.');
    this.key=Buffer.from(key,'hex');this.id=doc.id;this.meta=doc.meta;this.start=12+size;this.entries=new Map();let offset=0;
    for(const e of doc.files){
     if(!validName(e.name)||this.entries.has(e.name)||!Number.isSafeInteger(e.size)||e.size<0||e.size>512*1024*1024||e.offset!==offset)throw Error('Invalid package entry.');

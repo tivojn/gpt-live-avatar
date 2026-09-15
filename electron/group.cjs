@@ -57,13 +57,15 @@ function setupGroup(deps){
   await new Promise(resolve=>Menu.buildFromTemplate([
    {label:actor.name,enabled:false},
    {label:'Help with this…',enabled:deps.getConfig().agentEnabled,click:send('agent')},
+   deps.avatarReasoningMenu(),
    deps.avatarPermissionsMenu(),
    ...deps.avatarCatalogueMenu(request.catalogue,send),
    {type:'separator'},
    {label:'Follow cursor',type:'checkbox',checked:request.catalogue?.current?.followCursor==='true',click:send('follow-cursor')},
    {label:'Face the audience',click:send('face-audience')},
+   {label:'Avatar Close-up',accelerator:deps.shortcuts().closeup,registerAccelerator:false,click:send('close-up')},
    {label:'Restore this character’s size and position',click:send('recover')},
-   {label:'Bring Avatar Back',accelerator:'CmdOrCtrl+Shift+D',registerAccelerator:false,click:deps.requestAvatarRecovery},
+   {label:'Bring Avatar Back',accelerator:deps.shortcuts().recover,registerAccelerator:false,click:deps.requestAvatarRecovery},
    {type:'separator'},
    ...[['auto','Bubble Only on Incoming Messages'],['always','Bubble Always On'],['off','Bubble Off']].map(([mode,label])=>({label,type:'radio',checked:(request.bubbleMode||'auto')===mode,click:send('bubble:'+mode)})),
    {type:'separator'},{label:'Settings…',click:deps.openSettingsWindow},
@@ -72,6 +74,6 @@ function setupGroup(deps){
  }));
  ipcMain.handle('gla:group:close',guard(()=>{cancel();window.close();return {};}));
  ipcMain.on('gla:group:ignore-mouse',(event,ignore)=>{if(window&&!window.isDestroyed()&&event.sender===window.webContents)window.setIgnoreMouseEvents(Boolean(ignore),{forward:true});});
- return {open,settingsChanged(value){if(window&&!window.isDestroyed())window.webContents.send('gla:settings',value);},recover(){if(!window||window.isDestroyed())return false;window.setBounds(screen.getDisplayMatching(window.getBounds()).workArea);window.show();window.webContents.send('gla:group:reset');return true;},dispose(){closing=true;clearInterval(visibilityTimer);cancel();window?.destroy();window=null;}};
+ return {open,closeup(){if(!window||window.isDestroyed())return false;window.show();window.webContents.send('gla:group:menu-action',{action:'close-up'});return true;},settingsChanged(value){if(window&&!window.isDestroyed())window.webContents.send('gla:settings',value);},recover(){if(!window||window.isDestroyed())return false;window.setBounds(screen.getDisplayMatching(window.getBounds()).workArea);window.show();window.webContents.send('gla:group:reset');return true;},dispose(){closing=true;clearInterval(visibilityTimer);cancel();window?.destroy();window=null;}};
 }
 module.exports={setupGroup,conversationRequest};

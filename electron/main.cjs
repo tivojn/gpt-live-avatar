@@ -12,7 +12,7 @@ const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 const { AvatarAssets } = require('./assets.cjs');
 const { PERMISSION_CHOICES, validPermission, normalizePermission } = require('./agent-permissions.cjs');
-const { ENGINES, permissions, permissionPatch, installed:installedEngines, providerMenu } = require('./agent-engines.cjs');
+const { ENGINES, permissions, permissionPatch, installed:installedEngines, providerMenu, reasoningMenu } = require('./agent-engines.cjs');
 const { historyItems } = require('./live-config.cjs');
 const { DelegateAuth } = require('./delegate-auth.cjs');
 const { DelegateBackend, normalizeDelegate, selected, usesCodexServer, usesCodexActions, reasoningEngine, actionEngine, MODEL_CHOICES } = require('./delegate.cjs');
@@ -20,6 +20,8 @@ let delegateAuth, delegateBackend, groupManager, agentManager, appInfo;
 const appearanceDefaults = require('./default-appearance.json');
 const voiceDefaults = require('./default-voices.json');
 const placementDefault = require('./default-placement.json');
+const {DEFAULT_SHORTCUTS,AvatarShortcuts}=require('./shortcuts.cjs');
+let avatarShortcuts;
 
 const WEB = path.join(__dirname, '..', 'web');
 const DEFAULT_OPENCLAM_AVATAR = path.join(os.homedir(), 'Library', 'Application Support', 'OpenClam Studio', 'backend-data', 'avatars', 'tia');
@@ -41,6 +43,7 @@ const DEFAULTS = {
   quality: 'balanced',
   agentEnabled: true,
   agentEngine: 'codex',
+  agentFollowReasoning: true,
   agentAccess: 'full',
   agentCodexModel: '',
   agentRuntimePaths: {},
@@ -57,6 +60,7 @@ const DEFAULTS = {
   orbitYaw: 0,
   orbitPitch: 0,
   zoom: 1,
+  shortcuts: DEFAULT_SHORTCUTS,
   bubble: true,
   conversationSounds: true,
   bubbleMode: 'auto', // incoming replies, always visible, or hidden
@@ -114,7 +118,7 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+  return { ...config, shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function broadcastSettings() {
@@ -163,7 +167,8 @@ function avatarInfo(selection = config) {
     if (manifest.renderer !== '3d') { result.problem = 'This folder is not a 3D avatar package.'; return result; }
     result.name = String(manifest.name || 'Avatar');
     result.manifest = manifest;
-    const packageID = crypto.createHash('sha256').update(JSON.stringify({roots,revision:manifest.assetRevision,tiers:selection.avatarDir?[]:['base','balanced','best'].map(t=>assets.hasTier(selection.avatar,t))})).digest('hex').slice(0, 16);
+    let motionRevision='';try{motionRevision=JSON.parse(assets.read(file('runtime/motions/library.json'))).motionRevision||'';}catch{}
+    const packageID = crypto.createHash('sha256').update(JSON.stringify({roots,revision:manifest.assetRevision,motionRevision,tiers:selection.avatarDir?[]:['base','balanced','best'].map(t=>assets.hasTier(selection.avatar,t))})).digest('hex').slice(0, 16);
     packageRoots.set(packageID, roots);
     const baseURL = `/avatar-package/${packageID}/`;
     // Prefer the split "resident" model: it streams textures at the size the
@@ -327,7 +332,16 @@ function openSettingsWindow() {
   });
   settingsWindow.loadURL(`${serverOrigin}/settings.html`);
   settingsWindow.once('ready-to-show', () => settingsWindow.show());
-  settingsWindow.on('closed', () => { settingsWindow = null; });
+  settingsWindow.on('blur',()=>avatarShortcuts?.pause(false));
+  settingsWindow.on('closed', () => { avatarShortcuts?.pause(false);settingsWindow = null; });
+}
+
+function installApplicationMenu(){
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: app.name, submenu: [...appInfo.menu(), { type: 'separator' }, { label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
+    { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+    { label: 'View', submenu: [{ label: 'Bring Characters Together…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:avatarShortcuts?.values.recover||DEFAULT_SHORTCUTS.recover, registerAccelerator:false, click:requestAvatarRecovery }, {label:'Avatar Close-up',accelerator:avatarShortcuts?.values.closeup||DEFAULT_SHORTCUTS.closeup,registerAccelerator:false,click:requestAvatarCloseup}, { role: 'reload' }, ...(!app.isPackaged?[{role:'toggleDevTools'}]:[])] },
+  ]));
 }
 
 // ---------------------------------------------------------------- IPC
@@ -339,21 +353,27 @@ ipcMain.handle('gla:appearance:set', (_event, { slug, selection }={}) => {
   config.avatarLooks={...config.avatarLooks,[slug]:clean};saveConfig();return true;
 });
 ipcMain.handle('gla:settings:get', () => publicSettings());
+ipcMain.handle('gla:shortcuts:set',(event,values)=>{
+  if(event.sender!==settingsWindow?.webContents)return {ok:false,error:'Open Settings to change shortcuts.'};
+  try{config.shortcuts=avatarShortcuts.change(values);saveConfig();installApplicationMenu();broadcastSettings();return {ok:true,settings:publicSettings()};}catch(e){return {ok:false,error:e.message};}
+});
+ipcMain.on('gla:shortcuts:capture',(event,value)=>{if(event.sender===settingsWindow?.webContents)avatarShortcuts?.pause(value===true);});
 ipcMain.handle('gla:settings:set', (_event, patch) => updateSettings(patch));
 function updateSettings(patch) {
   if (!patch || typeof patch !== 'object') return publicSettings();
   const previousAvatar=config.avatar;
-  const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings]);
+  const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentFollowReasoning,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings]);
   if(typeof patch.conversationSounds==='boolean')config.conversationSounds=patch.conversationSounds;
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(ENGINES[patch.agentEngine])config.agentEngine=patch.agentEngine;
+  if(typeof patch.agentFollowReasoning==='boolean')config.agentFollowReasoning=patch.agentFollowReasoning;
   for(const key of ['agentRuntimePaths','agentRuntimeModels'])if(patch[key]&&typeof patch[key]==='object'){const values={...config[key]};for(const engine of ['openclaw','hermes','grok']){const v=patch[key][engine];if(typeof v==='string'&&(key==='agentRuntimePaths'?(v===''||path.isAbsolute(v)&&v.length<1024&& !/[\r\n\0]/.test(v)):/^[a-zA-Z0-9._:/-]{0,200}$/.test(v)))values[engine]=v;}config[key]=values;}
   if(patch.avatarAgentBindings&&typeof patch.avatarAgentBindings==='object'){const bindings={...config.avatarAgentBindings};for(const [slug,choice] of Object.entries(patch.avatarAgentBindings)){if(!/^[a-z0-9_-]{1,40}$/.test(slug)||!choice||typeof choice!=='object')continue;const row={...bindings[slug]};for(const engine of ['openclaw','hermes'])if(choice[engine]===''||require('./runtime-agents.cjs').validAgent(choice[engine]))row[engine]=choice[engine];bindings[slug]=row;}config.avatarAgentBindings=bindings;}
   if(validPermission(patch.agentAccess))config.agentPermissions=permissionPatch(config,{[actionEngine(config)]:patch.agentAccess});
   if(patch.agentPermissions&&typeof patch.agentPermissions==='object')config.agentPermissions=permissionPatch(config,patch.agentPermissions);
   if(typeof patch.agentCodexModel==='string'&&/^[a-zA-Z0-9._:-]{0,160}$/.test(patch.agentCodexModel))config.agentCodexModel=patch.agentCodexModel;
   Object.assign(config,normalizeDelegate(config,patch));
-  if(before!==JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings])) { delegateBackend?.cancelAll();agentManager?.cancelAll(); for(const p of ['openai','xai']) if(delegateAuth?.pending.has(p))delegateAuth.cancel(p); }
+  if(before!==JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentFollowReasoning,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings])) { delegateBackend?.cancelAll();agentManager?.cancelAll(); for(const p of ['openai','xai']) if(delegateAuth?.pending.has(p))delegateAuth.cancel(p); }
   if(patch.groupVoices&&typeof patch.groupVoices==='object')config.groupVoices=Object.fromEntries(Object.entries(patch.groupVoices).filter(([slug,v])=>/^[a-z0-9_-]{1,40}$/.test(slug)&&VOICES.includes(v)));
   const allowed = ['backendModel', 'voice', 'quality', 'avatar', 'avatarDir', 'personaName', 'persona', 'opacity', 'windowWidth', 'windowHeight', 'orbitYaw', 'orbitPitch', 'zoom', 'bubble', 'bubbleMode'];
   for (const key of allowed) if (key in patch) config[key] = patch[key];
@@ -456,6 +476,7 @@ function recoverAvatarWindow(){
   return {area,placement:placementDefault};
 }
 const requestAvatarRecovery=()=>{if(!groupManager?.recover())avatarWindow?.webContents.send('gla:menu-action','recover');};
+const requestAvatarCloseup=()=>{if(!groupManager?.closeup())avatarWindow?.webContents.send('gla:menu-action','close-up');};
 let expandedWindow=false;
 ipcMain.handle('gla:window:recover',recoverAvatarWindow);
 ipcMain.on('gla:window:move-by', (_event, { dx, dy }) => {
@@ -526,7 +547,8 @@ ipcMain.on('gla:voice:preview-state', (event, value) => {
 ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
 
 // ---------------------------------------------------------------- avatar menu and hang-up watchdog
-function avatarPermissionsMenu() { return providerMenu(config,{active:reasoningEngine(config),update:updateSettings,openSettings:openSettingsWindow}); }
+function avatarPermissionsMenu() { return providerMenu(config,{active:actionEngine(config),update:updateSettings,openSettings:openSettingsWindow}); }
+function avatarReasoningMenu() { return reasoningMenu(config,{active:reasoningEngine(config),update:updateSettings,openSettings:openSettingsWindow}); }
 function showAvatarMenu(state) {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   const send = id => () => { if (avatarWindow && !avatarWindow.isDestroyed()) avatarWindow.webContents.send('gla:menu-action', id); };
@@ -536,6 +558,7 @@ function showAvatarMenu(state) {
     { label: 'Mute Microphone', type: 'checkbox', checked: Boolean(state.muted), enabled: live === 'connected', click: send('mute') },
     { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
     { label: 'Help with this…', enabled:config.agentEnabled, click:send('agent') },
+    avatarReasoningMenu(),
     avatarPermissionsMenu(),
     { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
     { type: 'separator' },
@@ -557,7 +580,8 @@ function showAvatarMenu(state) {
     { label: 'Bubble Always On', type: 'radio', checked: state.bubbleMode === 'always', click: send('bubble:always') },
     { label: 'Bubble Off', type: 'radio', checked: state.bubbleMode === 'off', click: send('bubble:off') },
     { label: 'Settings…', accelerator: 'Cmd+,', click: () => openSettingsWindow() },
-    { label: 'Bring Avatar Back', accelerator:'CmdOrCtrl+Shift+D', registerAccelerator:false, click: requestAvatarRecovery },
+    { label: 'Bring Avatar Back', accelerator:avatarShortcuts?.values.recover||DEFAULT_SHORTCUTS.recover, registerAccelerator:false, click: requestAvatarRecovery },
+    {label:'Avatar Close-up',accelerator:avatarShortcuts?.values.closeup||DEFAULT_SHORTCUTS.closeup,registerAccelerator:false,click:requestAvatarCloseup},
     { type: 'separator' },
     ...appInfo.menu(),
     { type: 'separator' },
@@ -642,15 +666,11 @@ app.whenReady().then(async () => {
     const headers={...details.requestHeaders};if(own)headers['X-Gla-Asset-Key']=assetAccessKey;done({requestHeaders:headers});
   });
   agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();agentManager?.cancelAll();config.agentFolder=folder;saveConfig();broadcastSettings();}});
-  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, avatarPermissionsMenu, requestAvatarRecovery, appInfoMenu:()=>appInfo.menu(), openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: app.name, submenu: [...appInfo.menu(), { type: 'separator' }, { label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
-    { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: 'View', submenu: [{ label: 'Bring Characters Together…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:'CmdOrCtrl+Shift+D', click:requestAvatarRecovery }, { role: 'reload' }, ...(!app.isPackaged?[{role:'toggleDevTools'}]:[])] },
-  ]));
+  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, avatarPermissionsMenu, avatarReasoningMenu, requestAvatarRecovery, shortcuts:()=>avatarShortcuts?.values||DEFAULT_SHORTCUTS, appInfoMenu:()=>appInfo.menu(), openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
+  avatarShortcuts=new AvatarShortcuts(globalShortcut,{recover:requestAvatarRecovery,closeup:requestAvatarCloseup});
+  avatarShortcuts.start(config.shortcuts);
+  installApplicationMenu();
   createAvatarWindow();
-  globalShortcut.register('CommandOrControl+Shift+D',requestAvatarRecovery);
-  globalShortcut.register('CommandOrControl+Shift+0',requestAvatarRecovery);
   if (!hasApiKey() || !avatarInfo().ok) openSettingsWindow();
   app.on('activate', () => { if (!avatarWindow) createAvatarWindow(); });
 });

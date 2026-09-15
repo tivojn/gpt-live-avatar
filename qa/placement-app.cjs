@@ -10,7 +10,7 @@ async function until(fn,label){const end=Date.now()+90000;while(Date.now()<end){
 app.whenReady().then(async()=>{try{
  const w=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'window');
  const js=s=>w.webContents.executeJavaScript('(async()=>{'+s+'})()');
- await until(()=>js('return !!window.gla_avatar?.model&&gla_avatar.motion?.clips.size===62&&gla_avatar.resources.ready;'),'ready');
+ await until(()=>js('return !!window.gla_avatar?.model&&gla_avatar.motion?.clips.size>=62&&gla_avatar.resources.ready;'),'ready');
  for(const other of BrowserWindow.getAllWindows())if(other!==w)other.close();
  const choose=id=>w.webContents.send('gla:menu-action',id);
  const capture=async name=>fs.writeFileSync(path.join(output,name+'.png'),(await w.webContents.capturePage()).toPNG());
@@ -38,12 +38,24 @@ app.whenReady().then(async()=>{try{
  await js('gla_stage().anchor.x=-1e6;gla_stage().anchor.y=-1e6;');await wait(180);
  const visible=await js('return gla_visibleBox();');assert(visible&&visible.w>20&&visible.h>20,'Manual placement cannot lose the avatar');
  checks.push('Off-screen manual placement is constrained to a reachable head');
- choose('recover');await wait(500);
- const restored=await js('return {box:gla_visibleBox(),stage:gla_debug().stage,fit:gla_geometry().fit};');assert(restored.box&&restored.box.x>w.getSize()[0]*.75,'Recovery restores upper right');
+ choose('recover');
+ const restored=await until(async()=>{const v=await js('return {box:gla_visibleBox(),stage:gla_debug().stage,fit:gla_geometry().fit};');return v.box&&v.box.x>w.getSize()[0]*.75?v:false;},'Recovery restores upper right');await capture('recovery-check');
  const defaults=require('../electron/default-placement.json');assert(Math.abs(await js('return gla_avatar.layout().bounds[3]*gla_stage().scale;')-defaults.bodyHeight)<1,'Recovery restores captured size');
  const first=await js('return JSON.stringify(gla_stage().anchor);');choose('recover');await wait(300);assert.equal(await js('return JSON.stringify(gla_stage().anchor);'),first,'Recovery is repeatable');
  assert(globalShortcut.isRegistered('CommandOrControl+Shift+0'),'Recovery shortcut registered');
  assert(Menu.getApplicationMenu().items.find(i=>i.label==='View').submenu.items.some(i=>i.label==='Bring Avatar Back'),'Menu recovery available');
+ const viewMenu=Menu.getApplicationMenu().items.find(i=>i.label==='View').submenu;
+ assert.equal(viewMenu.items.find(i=>i.label==='Bring Avatar Back').accelerator,'CommandOrControl+Shift+0');
+ assert(globalShortcut.isRegistered('CommandOrControl+Shift+9'));
+ assert(!globalShortcut.isRegistered('CommandOrControl+Shift+D'));
+ choose('close-up');await wait(1200);
+ const close=await js('return {fit:gla_geometry().fit,face:gla_avatar.layout().faceBounds,height:innerHeight,width:innerWidth};');
+ assert(close.face[3]*close.fit.scale>close.height*.45,'Face fills the close-up');
+ const center={x:close.fit.x+(close.face[0]+close.face[2]/2)*close.fit.scale,y:close.fit.y+(close.face[1]+close.face[3]/2)*close.fit.scale};
+ assert(Math.abs(center.x-close.width/2)<close.width*.1,'Face centered');
+ await capture('face-closeup');choose('recover');await wait(400);
+ assert(Math.abs(await js('return gla_avatar.layout().bounds[3]*gla_stage().scale;')-defaults.bodyHeight)<1,'Normal size restored after close-up');
+ checks.push('Face-filling close-up and normal-size return use separate default shortcuts');
  await capture('restored-upper-right');checks.push('⌘⇧0 registered; menu restores captured upper-right size and location repeatedly');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({passed:true,checks,restored},null,2));console.log(JSON.stringify({passed:true,checks}));
 }catch(e){console.error(e);console.error(errors);process.exitCode=1;}app.exit(process.exitCode||0);});

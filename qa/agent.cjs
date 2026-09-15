@@ -1,8 +1,8 @@
 'use strict';
 const assert=require('node:assert/strict');
 const {TOOLS,latestUserRequest,createAvatarTools}=require('../electron/avatar-tools.cjs');
-const {permissions,permissionPatch,engineConfig,selectEngine,providerMenu}=require('../electron/agent-engines.cjs');
-const {actionEngine,normalizeDelegate}=require('../electron/delegate.cjs');
+const {permissions,permissionPatch,engineConfig,selectEngine,providerMenu,reasoningMenu}=require('../electron/agent-engines.cjs');
+const {actionEngine,reasoningEngine,runtimeConfig,normalizeDelegate}=require('../electron/delegate.cjs');
 (async()=>{
  assert.deepEqual(TOOLS.map(t=>t.name),['avatar_state','move_avatar','play_motion']);
  const actions=[],agent=createAvatarTools({avatarCommand:async(name,args)=>{actions.push({name,args});return {ok:true};}}),signal=new AbortController().signal;
@@ -19,9 +19,21 @@ const {actionEngine,normalizeDelegate}=require('../electron/delegate.cjs');
  assert.equal(actionEngine({agentEngine:'basic'}),'codex','Legacy built-in config migrates to Codex, never a hidden built-in fallback');
  const patches=[],available={codex:true,openclaw:false,hermes:true,grok:true};
  const menu=providerMenu(saved,{active:'hermes',available,update:p=>patches.push(p),openSettings(){}});
- assert.equal(menu.label,'Delegate Reasoning Provider');assert.match(menu.submenu[2].label,/✓ Hermes/);assert.equal(menu.submenu[1].submenu[0].enabled,false);
- menu.submenu[3].submenu[0].click();assert.equal(actionEngine(normalizeDelegate({},patches[0])),'grok');
- menu.submenu[2].submenu.find(x=>x.label==='Allow requests for this task').click();assert.deepEqual(patches[1],{agentPermissions:{hermes:'full'}});
- for(const engine of ['codex','openclaw','hermes','grok']){const config=normalizeDelegate({},selectEngine(engine));assert.equal(actionEngine(config),engine);}
+ assert.equal(menu.label,'Action Engine & Permissions');
+ const engineItem=name=>menu.submenu.find(x=>x.submenu&&x.label.includes(name));
+ assert.match(engineItem('Hermes').label,/✓ Hermes/);assert.equal(engineItem('OpenClaw').submenu[0].enabled,false);
+ engineItem('Grok Build').submenu[0].click();assert.deepEqual(patches[0],{agentEngine:'grok',agentFollowReasoning:false});
+ engineItem('Hermes').submenu.find(x=>x.label==='Allow requests for this task').click();assert.deepEqual(patches[1],{agentPermissions:{hermes:'full'}});
+ const engines=['codex','openclaw','hermes','grok'];
+ for(const reasoning of engines)for(const action of engines){
+  const config={...normalizeDelegate({},selectEngine(reasoning)),agentEngine:action,agentCodexModel:'action-model',agentRuntimeModels:{[action]:'action-model'}};
+  assert.equal(actionEngine(config),reasoning,'Default follows native reasoning');
+  config.agentFollowReasoning=false;assert.equal(actionEngine(config),action,'Explicit override is independent');assert.equal(reasoningEngine(config),reasoning);
+  const runtime=runtimeConfig(config,action);if(reasoning!==action)assert.equal(action==='codex'?runtime.agentCodexModel:runtime.agentRuntimeModels[action],'action-model','Do not replace action model with another provider’s reasoning model');
+  assert.equal(actionEngine({...config,...normalizeDelegate(config,selectEngine(reasoning))}),action,'Changing reasoning preserves action override');
+ }
+ const rm=reasoningMenu(saved,{active:'hermes',available,update:p=>patches.push(p),openSettings(){}});
+ assert(rm.submenu.every(x=>!x.submenu),'Reasoning menu does not contain action permissions');rm.submenu[0].click();assert(!('agentEngine' in patches.at(-1)));
+ for(const engine of engines){const config=normalizeDelegate({},selectEngine(engine));assert.equal(actionEngine(config),engine);}
  console.log('External-only action routing, independent permissions, legacy migration, provider menu, avatar-only bridge and cancellation passed.');
 })().catch(e=>{console.error(e);process.exitCode=1});

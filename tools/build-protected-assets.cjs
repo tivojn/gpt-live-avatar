@@ -4,22 +4,23 @@ const {MAGIC,CHUNK,MAX_HEADER,aad,ProtectedPackage}=require('../electron/protect
 const repo=path.resolve(__dirname,'..'),out=path.join(repo,'build/protected');
 const walk=p=>fs.readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(p,e.name)):e.isFile()?[path.join(p,e.name)]:[]);
 const hash=file=>new Promise((resolve,reject)=>{const h=crypto.createHash('sha256');fs.createReadStream(file).on('data',b=>h.update(b)).on('error',reject).on('end',()=>resolve(h.digest('hex')));});
-async function pack(source,slug,tier,secrets,output=out){
+async function pack(source,slug,tier,secrets,output=out,motionRevision=''){
  const manifest=JSON.parse(fs.readFileSync(path.join(source,'manifest.json'))),revision=manifest.assetRevision;
  if(!revision)throw Error('A current revision is required for '+slug);
- const id=slug+'-'+revision+'-'+tier,keyId='characters-2026-09',key=Buffer.from(secrets.keys[keyId],'hex'),items=[];
+ const id=slug+'-'+revision+'-'+tier+(motionRevision?'-'+motionRevision:''),keyId='characters-2026-09',key=Buffer.from(secrets.keys[keyId],'hex'),items=[];
  for(const file of walk(source).sort()){
   let name=path.relative(source,file).split(path.sep).join('/');
+  if(tier==='motions'&&!name.startsWith('runtime/motions/'))continue;
   if(!/^(runtime\/|appearance\/|manifest.json$|keyframe.png$|source-audit.json$)/.test(name))continue;
   const match=name.match(/^runtime\/resident\/image-\d+-(\d+)\./),size=match?Number(match[1]):0;
-  const target=size===4096?'best':size===2048?'balanced':'base';if(target!==tier)continue;
+  const target=size===4096?'best':size===2048?'balanced':'base';if(tier!=='motions'&&target!==tier)continue;
   if(name.startsWith('runtime/motions/')&&name.endsWith('.json')&&!name.endsWith('/library.json')&&fs.existsSync(file+'.deflate'))continue;
   let data;
   if(name.startsWith('runtime/motions/')&&name.endsWith('.json')&&!name.endsWith('/library.json')){data=zlib.deflateRawSync(fs.readFileSync(file),{level:9});name+='.deflate';}
   items.push({name,file,data,size:data?data.length:fs.statSync(file).size});
  }
  if(!items.length)return null;
- let offset=0;const doc={version:1,id,keyId,chunkSize:CHUNK,meta:{slug,tier,assetRevision:revision},files:items.map(e=>{const entry={name:e.name,offset,size:e.size};offset+=e.size+Math.max(1,Math.ceil(e.size/CHUNK))*28;return entry;})};
+ let offset=0;const doc={version:1,id,keyId,chunkSize:CHUNK,meta:{slug,tier,assetRevision:revision,...(motionRevision?{motionRevision}:{})},files:items.map(e=>{const entry={name:e.name,offset,size:e.size};offset+=e.size+Math.max(1,Math.ceil(e.size/CHUNK))*28;return entry;})};
  doc.mac=crypto.createHmac('sha256',key).update(JSON.stringify(doc)).digest('hex');
  const header=Buffer.from(JSON.stringify(doc));if(header.length>MAX_HEADER)throw Error('Package header too large');const prefix=Buffer.alloc(12);MAGIC.copy(prefix);prefix.writeUInt32LE(header.length,8);
  const file=path.join(output,id+'.gla'),fd=fs.openSync(file+'.tmp','w',0o600);try{

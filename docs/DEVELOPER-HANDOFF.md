@@ -8,8 +8,8 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated for **v0.2.10**, released September 15, 2026. The signed/notarized reference
-build is Apple Silicon only. [Release notes and checksums](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.10)
+Updated for **v0.2.11**, released September 15, 2026. The signed/notarized reference
+build is Apple Silicon only. [Release notes and checksums](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.11)
 identify the exact installer; no new DMG is needed for documentation-only updates.
 
 ## First successful run
@@ -18,7 +18,7 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Download the official signed installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.10/GPT-Live.Avatar-0.2.10-arm64.dmg
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.11/GPT-Live.Avatar-0.2.11-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Tia appears. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
@@ -67,14 +67,14 @@ ordinary Electron/HTML/JavaScript edits.
   Browser/computer tools need your own connected setup and macOS permissions.
 - Codex permissions default to Full access. You can choose Ask for approval or
   Approve for me in Settings or the avatar's right-click menu.
-- OpenClaw, Hermes and Grok Build are alternative reasoning/action engines in v0.2.10.
+- OpenClaw, Hermes and Grok Build are alternative reasoning/action engines in v0.2.11.
   Install and configure the chosen runtime with your own account; the avatar
   installer does not bundle it. Select its provider in Reasoning, enable
   actions, then choose native agents/profiles in **Agents for each character**.
   Missing runtimes are disabled. With direct API/OAuth reasoning, the action
   engine can be selected separately. See [AGENT-RUNTIMES.md](AGENT-RUNTIMES.md)
   for setup, Hermes OpenAI OAuth2, profile routing and native permission limits.
-- The old built-in file/browser action engine has been removed. Browser/computer tools and file permissions belong to the selected external runtime. Right-click **Delegate Reasoning Provider** to switch the engine and configure its separate permission choice.
+- The old built-in file/browser action engine has been removed. Browser/computer tools and file permissions belong to the selected external runtime. Right-click **Delegate Reasoning Provider** for reasoning. **Action Engine & Permissions** controls the effective action engine and its permissions. Following reasoning is the default; an explicit action-engine selection stays independent.
 - Native agents, Hermes profiles and account sign-ins are not shipped in this
   repo or DMG. The owner's locally configured Hermes `tia` profile is an example,
   not an account your clone inherits. Ordinary visual feature work needs none
@@ -179,3 +179,9 @@ Useful entry points: `electron/main.cjs` (desktop windows/settings),
 (permissions), `electron/runtime-agents.cjs` / `electron/acp-agent.cjs`
 (OpenClaw/Hermes/Grok tasks and native agent assignments), `electron/app-info.cjs` (version and
 updates), and `web/agent-progress.js` (overhead task updates).
+
+## Changes in 0.2.11
+
+- Settings → Keyboard shortcuts records custom combinations. Defaults: **⌘⇧0 Bring Avatar Back**, **⌘⇧9 Avatar Close-up**. Together uses the last clicked character; recovery restores the group. Conflicts preserve the previous shortcuts.
+- 54 Meshy presets were baked with source amplitude and initial body orientation, including three additions: Backflip, 360 Power Spin Jump and All Night Dance. The library now contains 65 clips per character. No mesh, skin, material or wardrobe data changed.
+- Updated motions ship in encrypted `motions.gla` overlays. The signed catalogue’s optional `motionUpdate` field keeps old model/texture packages available. Fresh avatar downloads fetch the overlay; the Tia starter includes it. See [motion audit](MOTION-AUDIT.md) and [protected assets](PROTECTED-ASSETS.md).

@@ -20,7 +20,7 @@ app.whenReady().then(async()=>{try{
  // Native menu, legacy migration and listening visuals without opening audio.
  await run(solo,'await gla.showMenu({})');
  const provider=templates.flatMap(t=>t).find(x=>x.label==='Delegate Reasoning Provider');assert(provider);assert.equal(provider.submenu.filter(x=>x.submenu).length,4);
- assert(templates.flatMap(t=>t).some(x=>x.label==='Bring Avatar Back'&&x.accelerator==='CmdOrCtrl+Shift+D'));
+ assert(templates.flatMap(t=>t).some(x=>x.label==='Bring Avatar Back'&&x.accelerator==='CommandOrControl+Shift+0'));
  assert.equal(await run(settings,"return Boolean(document.querySelector('#agentBrowser'))"),false);
  assert.equal(await run(settings,"return [...document.querySelector('#agentEngine').options].some(o=>o.value==='basic')"),false);
  await run(settings,"document.querySelector('#agentEngine').closest('section').scrollIntoView({block:'start'})");await wait(250);fs.writeFileSync(out+'/external-settings.png',(await settings.webContents.capturePage()).toPNG());

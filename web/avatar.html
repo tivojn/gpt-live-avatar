@@ -86,6 +86,7 @@
 <dialog id="steerDialog"><form method="dialog"><label for="steerMessage">Send a message</label><input id="steerMessage" autocomplete="off"><button value="cancel">Cancel</button> <button value="send">Send</button></form></dialog>
 <script type="module" src="/avatar3d.js"></script>
 <script type="module">
+import {closeupFit} from '/avatar-closeup.js';
 import { installAgentUI } from './agent-client.js';
 import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
@@ -261,7 +262,7 @@ function paint(now) {
       avatar.prepareMotionFrame(now, reduce);
       fit = { scale, x: stage.anchor.x - stage.workArea.x - (bx + bw / 2) * scale, y: stage.anchor.y - stage.workArea.y - (by + bh) * scale };
     }
-    if (avatar.keepMotionInViewport) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
+    if (avatar.keepMotionInViewport&&!stage.closeup) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
     if(stage.manual)fit=keepManualVisible(fit,surface,layout);
   } else {
     if (userOrbitDirty) { avatar.setOrbit(userOrbit); userOrbitDirty = false; }
@@ -739,6 +740,7 @@ gla.onMenuAction(id => {
   }
   else if (id === 'stay') void performAction('stay');
   else if (id === 'recover') void recoverPlacement();
+  else if (id === 'close-up') void closeupPlacement();
   else if (id === 'settings') gla.openSettings();
   else if (id === 'quit') { live.stop('quit'); gla.quit(); }
   else if (id.startsWith('end:')) live.stop(id.slice(4));
@@ -788,6 +790,15 @@ function keepManualVisible(fit,surface,layout){
     x:Math.max(surface.x+margin-headX*fit.scale,Math.min(surface.x+surface.width-margin-headX*fit.scale,fit.x)),
     y:Math.max(surface.y+12-headY*fit.scale,Math.min(surface.y+surface.height-Math.min(120,fh*fit.scale)-headY*fit.scale,fit.y))};
 }
+async function closeupPlacement(){
+  if(!avatar||!ready)return;
+  await recoverPlacement();
+  userOrbit={yaw:0,pitch:0};avatar.setOrbit(userOrbit);
+  const fit=closeupFit(avatar.layout(),{x:0,y:60,width:innerWidth,height:innerHeight-80},avatar.crownProjection());
+  const [bx,by,bw,bh]=avatar.layout().bounds;
+  stage.closeup=true;stage.scale=fit.scale;stage.anchor={x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale,y:stage.workArea.y+fit.y+(by+bh)*fit.scale};
+  await refreshClip();lastFrame=0;paint(performance.now());wake();
+}
 async function recoverPlacement(){
   endGesture();clearTimeout(resizeTimer);if(pinchFrame)cancelAnimationFrame(pinchFrame);pinchFrame=0;pendingScale=1;pinching=false;
   if(stageBusy)await stageBusy;
@@ -813,7 +824,7 @@ function flushDrag(){
   }else gla.window.moveBy(dx,dy);
 }
 function rememberPlacement(){
-  if(!stage||!frameGeometry)return;
+  if(!stage||stage.closeup||!frameGeometry)return;
   const {fit,layout,pad}=frameGeometry,[bx,by,bw,bh]=layout.bounds;
   const width=Math.max(MIN_WINDOW_WIDTH,Math.ceil((bw+pad*2)*fit.scale));
   const content=(bh+pad*2)*fit.scale;
@@ -929,7 +940,7 @@ const applySettings = next => {
     })();
     if (live.state === 'connected') live.appendInstructions(`The on-screen avatar is now ${settings.personaName}. Use this name from now on. Available motions: ${(settings.avatar?.clipLabels || []).join(', ')}.`);
   } else if (!avatar && settings.avatar?.ok && !ready && !loadingAvatar) void loadAvatar();
-  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel||previous.agentEnabled!==settings.agentEnabled||previous.agentEngine!==settings.agentEngine||previous.agentAccess!==settings.agentAccess||previous.agentCodexModel!==settings.agentCodexModel||JSON.stringify([previous.agentRuntimePaths,previous.agentRuntimeModels,previous.avatarAgentBindings])!==JSON.stringify([settings.agentRuntimePaths,settings.agentRuntimeModels,settings.avatarAgentBindings]);
+  const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel||previous.agentEnabled!==settings.agentEnabled||previous.agentEngine!==settings.agentEngine||previous.agentFollowReasoning!==settings.agentFollowReasoning||previous.agentAccess!==settings.agentAccess||previous.agentCodexModel!==settings.agentCodexModel||JSON.stringify([previous.agentRuntimePaths,previous.agentRuntimeModels,previous.avatarAgentBindings])!==JSON.stringify([settings.agentRuntimePaths,settings.agentRuntimeModels,settings.avatarAgentBindings]);
   if (previous.voice !== settings.voice || changedReasoning) {
     delegate.cancel();
     preview.stop(); clearTimeout(applySettings.voiceTimer);

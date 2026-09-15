@@ -1,4 +1,6 @@
 import '/avatar3d.js';
+import {closeupView} from '/avatar-closeup.js';
+let selectedActor='',closeupPanelState=null;
 import {installAgentUI} from '/agent-client.js';
 import { frameDue, renderPixelBudget, textureBudget } from '/avatar-render-budget.js';
 import * as THREE from '/vendor/three/three.module.js';
@@ -61,8 +63,16 @@ function position(actor){
  const h=Math.round(Math.min(1400,actor.h*devicePixelRatio,Math.sqrt(budget*actor.h/actor.w))),w=Math.round(h*actor.w/actor.h);
  if(actor.renderW!==w||actor.renderH!==h){actor.avatar.resize(w,h);actor.renderW=w;actor.renderH=h;}
 }
-function recoverActor(actor){const cell=innerWidth/actors.size,i=[...actors.keys()].indexOf(actor.slug),h=Math.min(innerHeight*.68,740),w=Math.min(cell+90,h*.9);Object.assign(actor,{w,h,x:cell*(i+.5)-w/2,y:innerHeight-h-24});position(actor);}
-function arrange(){for(const actor of actors.values())recoverActor(actor);}
+function recoverActor(actor){actor.closeup=null;actor.el.style.zIndex='';const cell=innerWidth/actors.size,i=[...actors.keys()].indexOf(actor.slug),h=Math.min(innerHeight*.68,740),w=Math.min(cell+90,h*.9);Object.assign(actor,{w,h,x:cell*(i+.5)-w/2,y:innerHeight-h-24});position(actor);}
+function closeupActor(actor){
+ if(closeupPanelState===null)closeupPanelState=$('.panel').classList.contains('minimized');
+ panel.setMinimized(true);
+ for(const other of actors.values())if(other.closeup&&other!==actor)recoverActor(other);
+ actor.avatar.motion?.stop();actor.userOrbit={yaw:0,pitch:0};actor.yaw=0;actor.avatar.setOrbit(actor.userOrbit);
+ Object.assign(actor,{w:Math.min(innerWidth,innerHeight*.95),h:innerHeight-110,x:Math.max(0,(innerWidth-Math.min(innerWidth,innerHeight*.95))/2),y:80});
+ position(actor);actor.closeup=closeupView(actor.avatar);actor.el.style.zIndex='3';actor.lastFrame=0;
+}
+function arrange(){for(const actor of actors.values())recoverActor(actor);if(closeupPanelState!==null){panel.setMinimized(closeupPanelState);closeupPanelState=null;}}
 function setBubble(actor,text){actor.message=text;if(text&&actor.activity&&!actor.activity.active)actor.activity=null;refreshBubble(actor);}
 function refreshBubble(actor){
  const activity=actor.activity&&performance.now()<actor.activity.until?actor.activity:null;
@@ -136,7 +146,7 @@ function animate(now){requestAnimationFrame(animate);if(document.visibilityState
   actor.yaw+= (targetYaw-actor.yaw)*(1-Math.exp(-actorDt*2.8));if(Math.abs(actor.yaw-(actor.renderYaw??999))>.001||pitch!==actor.renderPitch){a.setOrbit({yaw:actor.yaw,pitch});actor.renderYaw=actor.yaw;actor.renderPitch=pitch;}
   let lookTarget;if(!audience){lookTarget=a.camera.position.clone();lookTarget.x+=direction*1.5;}
   const cursor=a.options.enabled('followCursor'),gaze=cursor&&hoverPoint?{x:Math.max(-1,Math.min(1,(hoverPoint.x-actor.x-actor.w/2)/(actor.w/2))),y:Math.max(-1,Math.min(1,-(hoverPoint.y-actor.y-actor.h/2)/(actor.h/2)))}:{x:0,y:0};
-  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?signal.viseme:'sil',visemeWeights:talking?signal.visemeWeights:{},lipSyncSource:signal.lipSyncSource,intensity:talking?signal.relative:0,speaking:talking,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:{}});
+  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?signal.viseme:'sil',visemeWeights:talking?signal.visemeWeights:{},lipSyncSource:signal.lipSyncSource,intensity:talking?signal.relative:0,speaking:talking,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:{}},actor.closeup);
   refreshBubble(actor);
   if(now-actor.maskAt>80){actor.hitMask.update(a.canvas);actor.maskAt=now;}
  }
@@ -168,7 +178,7 @@ async function actOnSpeech(text){
  if(body){a.motion?.stop();a.options.select({...a.options.selection,body,hands:'',leftHand:'',rightHand:''});actor.playedAction=action;}
 }
 
-addEventListener('pointerdown',event=>{const el=actorAt(event);if(!el||event.button!==0)return;const actor=actors.get(el.dataset.slug);drag={id:event.pointerId,actor,x:event.clientX,y:event.clientY,startX:actor.x,startY:actor.y};el.setPointerCapture(event.pointerId);el.classList.add('dragging');api.setIgnoreMouse(false);ignore=false;});
+addEventListener('pointerdown',event=>{const el=actorAt(event);if(!el||event.button!==0)return;const actor=actors.get(el.dataset.slug);selectedActor=actor.slug;drag={id:event.pointerId,actor,x:event.clientX,y:event.clientY,startX:actor.x,startY:actor.y};el.setPointerCapture(event.pointerId);el.classList.add('dragging');api.setIgnoreMouse(false);ignore=false;});
 addEventListener('pointermove',event=>{hoverPoint={x:event.clientX,y:event.clientY};if(drag){if(event.pointerId!==drag.id)return;drag.actor.x=drag.startX+event.clientX-drag.x;drag.actor.y=drag.startY+event.clientY-drag.y;position(drag.actor);return;}syncMouse();});
 function release(event){if(!drag||event?.pointerId!==undefined&&event.pointerId!==drag.id)return;const {actor,id}=drag;drag=null;actor.el.classList.remove('dragging');if(actor.el.hasPointerCapture(id))actor.el.releasePointerCapture(id);}
 addEventListener('pointerup',release);addEventListener('pointercancel',release);addEventListener('blur',release);
@@ -176,7 +186,7 @@ let wheelActor=null,wheelTimer=0,gestureSize=null,menuOpen=false;
 function resizeActor(actor,factor){const oldW=actor.w,oldH=actor.h;actor.w*=factor;actor.h*=factor;actor.x-=(actor.w-oldW)/2;actor.y-=(actor.h-oldH)/2;position(actor);}
 addEventListener('wheel',event=>{
  const actor=wheelActor||actors.get(actorAt(event)?.dataset.slug);if(!actor)return;event.preventDefault();
- wheelActor=actor;api.setIgnoreMouse(false);ignore=false;clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{wheelActor=null;syncMouse();},180);
+ selectedActor=actor.slug;wheelActor=actor;api.setIgnoreMouse(false);ignore=false;clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{wheelActor=null;syncMouse();},180);
  const unit=event.deltaMode===1?16:event.deltaMode===2?innerHeight:1;
  if(event.ctrlKey){if(!gestureSize)resizeActor(actor,Math.exp(-Math.max(-90,Math.min(90,event.deltaY*unit))*.0075));}
  else {const orbit=actor.userOrbit||{yaw:actor.yaw,pitch:0};actor.userOrbit={yaw:orbit.yaw+Math.max(-120,Math.min(120,event.deltaX*unit))*.006,pitch:Math.max(-1.3,Math.min(1.3,orbit.pitch-Math.max(-120,Math.min(120,event.deltaY*unit))*.006))};actor.yaw=actor.userOrbit.yaw;}
@@ -191,11 +201,12 @@ function actorCatalogue(actor){
  return {...o.catalogue(),clips:[...(actor.avatar.motion?.clips.values()||[])].map(c=>({id:c.id,label:c.label||c.id,category:c.category||'Motions'})),poses:[...o.poses.values()].filter(p=>p.group==='body').map(p=>({id:p.id,label:p.label||p.id})),current:{...sel,pose:sel.body||'',outfit:sel.outfit||o.data.defaultOutfit||'',prop:sel.prop||'',accessory:sel.accessory||o.data.defaultAccessory||'',lighting:sel.lighting||actor.avatar.appearance.defaultLighting}};
 }
 addEventListener('contextmenu',async event=>{
- event.preventDefault();const actor=actors.get(actorAt(event)?.dataset.slug);if(!actor)return;release();menuOpen=true;api.setIgnoreMouse(false);ignore=false;
+ event.preventDefault();const actor=actors.get(actorAt(event)?.dataset.slug);if(!actor)return;selectedActor=actor.slug;release();menuOpen=true;api.setIgnoreMouse(false);ignore=false;
  try{await api.showMenu({slug:actor.slug,catalogue:actorCatalogue(actor),bubbleMode:actor.bubbleMode||'auto'});}finally{menuOpen=false;syncMouse();}
 });
 async function actorMenuAction({slug,action}){
- const actor=actors.get(slug);if(!actor)return;const a=actor.avatar,o=a.options;
+ const actor=actors.get(slug||selectedActor||catalogue?.selected)||actors.values().next().value;if(!actor)return;selectedActor=actor.slug;const a=actor.avatar,o=a.options;
+ if(action==='close-up'){closeupActor(actor);return;}
  if(action==='agent'){helpCharacter=slug;agentUI.open(catalogue);return;}
  if(action==='recover'){recoverActor(actor);return;}
  if(action==='face-audience'){actor.userOrbit=null;actor.yaw=0;return;}
@@ -235,4 +246,4 @@ let hiddenTimer;addEventListener('visibilitychange',()=>{clearTimeout(hiddenTime
 api.onReset(arrange);api.onStop(()=>stop('Conversation ended because the group was hidden.'));addEventListener('resize',arrange);addEventListener('beforeunload',()=>{stop();for(const a of actors.values())a.avatar.dispose();actors.clear();});addEventListener('keydown',event=>{if(event.key==='Escape')stop();});
 (async()=>{try{catalogue=await api.catalogue();if(!catalogue.ok)throw Error(catalogue.error);const preferred=[catalogue.selected,...catalogue.avatars.map(x=>x.slug)].filter((x,i,arr)=>arr.indexOf(x)===i).slice(0,2);catalogue.avatars.forEach((info,i)=>{const row=document.createElement('label');row.className='choice';const check=document.createElement('input');check.type='checkbox';check.value=info.slug;check.checked=preferred.includes(info.slug);check.onchange=()=>{if(selected().length>5){check.checked=false;return;}void loadCast();};const voices=document.createElement('select');voices.dataset.voice=info.slug;voices.setAttribute('aria-label',info.name+' voice');for(const v of catalogue.voices){const option=document.createElement('option');option.value=v;option.textContent=v;voices.append(option);}voices.value=catalogue.groupVoices?.[info.slug]||({tia:'marin',sarah:'gleam',iselda:'quartz','ming-mei':'willow',seraphim:'bossa'}[info.slug])||'marin';voices.onchange=()=>{void gla.setSettings({groupVoices:{...catalogue.groupVoices,[info.slug]:voices.value}}).then(next=>{catalogue.groupVoices=next.groupVoices;});};row.append(check,document.createTextNode(info.name),voices);$('#cast').append(row);});await loadCast();requestAnimationFrame(animate);}catch(e){status(e.message,true);}})();
 // Read-only diagnostics are useful for installation verification.
-window.gla_group={actors,voice,microphone,liveGroup,actorAt,actorCatalogue,actorMenuAction,actOnSpeech,start,stop,arrange,loadCast,get state(){return {running,loading,speaker,listener,history:[...history],generation:runGeneration,waitingHuman,wantsTurn,human:{...human},currentTurn,totalTurns};}};
+window.gla_group={closeupActor,actors,voice,microphone,liveGroup,actorAt,actorCatalogue,actorMenuAction,actOnSpeech,start,stop,arrange,loadCast,get state(){return {running,loading,speaker,listener,history:[...history],generation:runGeneration,waitingHuman,wantsTurn,human:{...human},currentTurn,totalTurns};}};

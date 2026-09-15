@@ -1,13 +1,13 @@
 {
-  "version": "0.2.10",
+  "version": "0.2.11",
   "date": "2026-09-15",
-  "title": "External agents and breathing listening indicator",
-  "description": "Delegate reasoning and actions to Codex App Server, OpenClaw, Hermes or Grok Build.",
+  "title": "Face close-ups and faithful motions",
+  "description": "Customizable avatar shortcuts, Meshy motion corrections and independent action permissions.",
   "highlights": [
-    "Removed the built-in file and browser action engine. External agents own tools, accounts and permissions.",
-    "Choose a delegate provider and its separate permissions from the right-click menu.",
-    "Grok Build uses its native sign-in and agent tools.",
-    "A soft breathing microphone indicator shows when the avatar is listening.",
-    "Bring Avatar Back shows Cmd+Shift+D; Cmd+Shift+0 also continues to work."
+    "Cmd+Shift+9 frames the avatar’s face. Cmd+Shift+0 restores normal size and placement. Customize both in Settings.",
+    "Action Engine & Permissions follows the reasoning agent by default, with an optional separate action engine.",
+    "Restored original body movement in Meshy presets, including Bubble Dance and Boxing Warm-up, without changing character geometry.",
+    "Added Backflip, 360 Power Spin Jump and All Night Dance for all five characters.",
+    "Encrypted motion updates reuse existing model and texture downloads."
   ]
 }

@@ -930,7 +930,7 @@ class Avatar3D {
         if(state.stableFitContent){
           // Facial morph radii used to zoom the entire actor on each syllable.
           // Keep a stable envelope, growing only for genuinely wider poses or props.
-          const key=JSON.stringify([this.width,this.height,this.options.selection]);
+          const key=JSON.stringify([this.width,this.height,this.options.selection,this.motion?.active?.id||'rest']);
           const old=this.stableContentView?.key===key?this.stableContentView.view:null;
           if(old){const l=Math.min(old.x,view.x),t=Math.min(old.y,view.y),r=Math.max(old.x+old.w,view.x+view.w),b=Math.max(old.y+old.h,view.y+view.h),s=Math.max((r-l)/this.width,(b-t)/this.height);view={...view,x:(l+r-this.width*s)/2,y:(t+b-this.height*s)/2,w:this.width*s,h:this.height*s};}
           this.stableContentView={key,view};
