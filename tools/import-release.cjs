@@ -14,15 +14,22 @@ async function importRelease(bundle,repo=path.resolve(__dirname,'..')){
  const index=JSON.parse(envelope.payload),entry=index.avatars?.tia?.mac?.base;
  if(index.version!==2||entry?.format!=='gla-pack-v1'||!Number.isSafeInteger(entry.bytes)||!/^[a-f0-9]{64}$/.test(entry.sha256||''))throw Error('Unsupported encrypted Tia catalogue.');
  if((await fsp.stat(starter)).size!==entry.bytes||await hash(starter)!==entry.sha256)throw Error('Encrypted Tia checksum did not match the signed catalogue.');
+ const starters=[{file:starter,name:'base.gla',bytes:entry.bytes}];
+ const motion=index.avatars.tia.motionUpdate?.package;
+ if(motion){
+  const file=path.join(resources,'avatars/tia/motions.gla');
+  if(motion.format!=='gla-pack-v1'||!Number.isSafeInteger(motion.bytes)||!/^[a-f0-9]{64}$/.test(motion.sha256||'')||!fs.existsSync(file)||(await fsp.stat(file)).size!==motion.bytes||await hash(file)!==motion.sha256)throw Error('Encrypted Tia motion checksum did not match the signed catalogue.');
+  starters.push({file,name:'motions.gla',bytes:motion.bytes});
+ }
  const copies=[
   [runtimeFile,path.join(repo,'build/protected/assets-runtime.json')],
   [indexFile,path.join(repo,'build/protected/index.json')],
-  [starter,path.join(repo,'build/protected/starter/tia/base.gla')],
+  ...starters.map(s=>[s.file,path.join(repo,'build/protected/starter/tia',s.name)]),
  ];
- const development=path.join(repo,'build/assets/bundle/tia/base.gla');
+ const developments=starters.map(s=>[s.file,path.join(repo,'build/assets/bundle/tia',s.name)]);
  // Validate every existing destination before changing anything. Maintainer
  // resources and an independently authored package must not be overwritten.
- for(const [source,destination] of [...copies,[starter,development]])if(fs.existsSync(destination)&&await hash(source)!==await hash(destination))throw Error('Different resources already exist at '+path.relative(repo,destination)+'. Use a fresh clone, or back up and move that existing resource first.');
+ for(const [source,destination] of [...copies,...developments])if(fs.existsSync(destination)&&await hash(source)!==await hash(destination))throw Error('Different resources already exist at '+path.relative(repo,destination)+'. Use a fresh clone, or back up and move that existing resource first.');
  for(const [source,destination] of copies){
   if(fs.existsSync(destination))continue;
   await fsp.mkdir(path.dirname(destination),{recursive:true});
@@ -31,8 +38,8 @@ async function importRelease(bundle,repo=path.resolve(__dirname,'..')){
  }
  // The development server reads build/assets/bundle; packaging reads starter.
  // A hard link shares encrypted bytes without duplicating the large package.
- if(!fs.existsSync(development)){await fsp.mkdir(path.dirname(development),{recursive:true});await fsp.link(copies[2][1],development);}
- return {starterBytes:entry.bytes,characters:Object.keys(index.avatars).length};
+ for(const s of starters){const development=path.join(repo,'build/assets/bundle/tia',s.name);if(!fs.existsSync(development)){await fsp.mkdir(path.dirname(development),{recursive:true});await fsp.link(path.join(repo,'build/protected/starter/tia',s.name),development);}}
+ return {starterBytes:starters.reduce((n,s)=>n+s.bytes,0),characters:Object.keys(index.avatars).length};
 }
 if(require.main===module){const bundle=process.argv[2]||'/Applications/GPT-Live Avatar.app';importRelease(bundle).then(result=>console.log('Imported verified client resources and encrypted Tia ('+Math.round(result.starterBytes/1048576)+' MiB). '+result.characters+' characters are in the catalogue. No personal settings or server secrets were copied.\nNext: npm run start:isolated')).catch(error=>{console.error(error.message);process.exitCode=1;});}
 module.exports={importRelease};
