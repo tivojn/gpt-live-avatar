@@ -73,7 +73,7 @@
 <canvas id="stage"></canvas>
 <!-- Speech and task progress share the same overhead bubble. -->
 <div id="bubble" class="hidden">
-  <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span><button type="button" class="icon" id="composerClose" hidden title="Close typing controls" aria-label="Close typing controls"><svg viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
+  <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Avatar</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span><button type="button" class="icon" id="composerClose" hidden title="Close typing controls" aria-label="Close typing controls"><svg viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
   <div id="taskUpdate" hidden role="status" aria-live="polite"></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
   <p id="composerTip" hidden>Ask about files or a webpage. Tap the mic or double-click my head to talk.</p>
@@ -262,7 +262,7 @@ async function loadAvatar() {
   } catch {}
   userOrbit = { yaw: Number(settings.orbitYaw) || 0, pitch: Number(settings.orbitPitch) || 0 }; avatar.setOrbit(userOrbit);
   if (avatar.options) { companion = new CompanionController(); companion.reactions = true; avatar.companion = companion; }
-  $('#name').textContent = settings.personaName || info.name || 'Tia';
+  $('#name').textContent = settings.personaName || info.name || settings.defaultAvatar?.name || 'Avatar';
   setStatus(settings.hasKey ? 'Ready. Double-click my head to talk.' : 'Add your OpenAI key in Settings.');
   wake();
 }
@@ -628,7 +628,7 @@ Object.defineProperty(window, 'gla_avatar', { get: () => avatar }); // debug han
 live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
 live.addEventListener('error', ({ detail }) => eventLog.push([performance.now() | 0, 'error:' + detail.message]));
 let assistantTurn = ''; let usage = null;
-const ENDED_REASONS = { user: 'Conversation ended.', close_requested: 'Conversation ended.', hidden: 'Ended: Tia was hidden for 15 seconds.', silence: 'Ended after 5 minutes without you speaking.', quit: 'Conversation ended.', unload: 'Conversation ended.' };
+const ENDED_REASONS = { user: 'Conversation ended.', close_requested: 'Conversation ended.', hidden: 'Ended: the avatar was hidden for 15 seconds.', silence: 'Ended after 5 minutes without you speaking.', quit: 'Conversation ended.', unload: 'Conversation ended.' };
 live.addEventListener('state', ({ detail }) => {
   const s = detail.state;
   conversationSounds.transition(s,{...detail,resumed:s==='connecting'&&live.resumed||detail.resumed});
@@ -981,7 +981,7 @@ const applySettings = next => {
   const previous = settings; settings = next;
   stageEl.style.opacity = String(settings.opacity ?? 1);
   syncBubble();
-  $('#name').textContent = settings.personaName || 'Tia';
+  $('#name').textContent = settings.personaName || settings.avatar?.name || settings.defaultAvatar?.name || 'Avatar';
   if (avatar && previous.quality !== settings.quality) applyQuality();
   const changedAvatar = previous.avatarDir !== settings.avatarDir || previous.avatar?.dir !== settings.avatar?.dir || previous.avatar?.slug !== settings.avatar?.slug || previous.avatar?.modelURL !== settings.avatar?.modelURL;
   if (changedAvatar) {
@@ -1009,7 +1009,7 @@ const applySettings = next => {
     if (live.state !== 'idle') applySettings.voiceTimer = setTimeout(() => { if (live.state !== 'idle') { toast(changedReasoning?'Applying reasoning settings and reconnecting…':'Switching voice and reconnecting…'); void live.restart(settings.voice); } }, 200);
   }
   const fallback = settings.avatar && settings.avatar.fallbackFor;
-  if (fallback && fallback !== (previous.avatar && previous.avatar.fallbackFor)) toast(`${fallback} is not downloaded yet, so Tia is shown. Download it under Settings › Avatar.`, 8000);
+  if (fallback && fallback !== (previous.avatar && previous.avatar.fallbackFor)) toast(`${fallback} is not downloaded yet, so ${settings.avatar.name || settings.defaultAvatar?.name || 'the starter avatar'} is shown. Download it under Settings › Avatar.`, 8000);
 };
 gla.onSettings(applySettings);
 gla.onAvatarSuspended(value=>{

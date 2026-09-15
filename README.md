@@ -1,8 +1,9 @@
 # GPT-Live Avatar
 
 [Download the signed and notarized Mac installer](https://github.com/tivojn/gpt-live-avatar/releases/latest).
-Open the DMG, copy GPT-Live Avatar to Applications, and launch it. Encrypted Tia
-is included; the first launch needs internet for a brief unlock.
+Open the DMG, copy GPT-Live Avatar to Applications, and launch it. Encrypted Sarah
+is included; the first launch needs internet for a brief unlock. Sarah is the
+default avatar, wearing **Tie top, chain pants & sandals** without the coat or a prop.
 
 ## Getting started from a clone
 
@@ -24,8 +25,9 @@ already included in the release. These remain ignored by Git. No Cloudflare
 login or owner API keys are required. Use your own voice and Codex accounts.
 
 The Mac release uses protected downloads from a private Cloudflare R2 bucket.
-The installer includes an encrypted Tia base package and the signed catalogue.
-First launch briefly connects to unlock Tia; subsequent launches work offline.
+The v0.2.15 installer includes Sarah’s existing encrypted base and matching motion
+package, plus the signed catalogue. First launch briefly connects to unlock Sarah;
+subsequent launches work offline. This starter change uses the existing R2 packages.
 Choose other characters in **Settings → Avatar**, download their base packages, then
 optionally add Balanced (2K) or Best (4K) textures. All five current characters
 retain their wardrobe, colors, props, expressions and motion libraries.
@@ -102,7 +104,7 @@ Pipeline (`tools/`):
 
 Mac: after configuring the verified R2 gateway and private release files, run
 `npm run pack` (app folder) or `npm run dmg` (installer). Both include encrypted
-Tia, the signed catalogue and app connection information. Raw models and
+Sarah with her matching motion overlay, the signed catalogue and app connection information. Raw models and
 content keys are never bundled.
 Notarization: put an App Store Connect API key (Developer role) at
 `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` and create
@@ -119,7 +121,7 @@ Avatar and voice selection, voice previews, reliable bubble modes and Tia's orig
 
 ## Handoff for other hosts (EnConvo)
 
-See [the EnConvo integration handoff](docs/ENCONVO-HANDOFF.md) for the v0.2.12
+See [the EnConvo integration handoff](docs/ENCONVO-HANDOFF.md) for the v0.2.15
 component map, current audio-to-viseme pipeline, protected R2 setup, proposed
 host adapter and staged acceptance checks. EnConvo keeps its own credentials,
 voice/delegate sessions, reasoning and agentic tools; this repository supplies

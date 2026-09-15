@@ -4,14 +4,14 @@
 the intelligence, credentials, voice conversation, tools and permissions.**
 
 For the EnConvo developer and their AI coding assistant. Updated September 16,
-2026 for GPT-Live Avatar **v0.2.14**. Use its tag for a reproducible source
+2026 for GPT-Live Avatar **v0.2.15**. Use its tag for a reproducible source
 reference. Check the matching release page for signed installer availability
 and checksums, and record the exact source commit you integrate.
 
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.14
-- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.14/GPT-Live.Avatar-0.2.14-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.14/SHA256SUMS-0.2.14.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.15
+- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.15/GPT-Live.Avatar-0.2.15-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.15/SHA256SUMS-0.2.15.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
@@ -25,10 +25,10 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### Integration reference in the v0.2.14 source
+### Integration reference in the v0.2.15 source
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
-  overhead speech/task updates, protected downloads and the encrypted Tia
+  overhead speech/task updates, protected downloads and the encrypted Sarah
   starter are available as the integration reference.
 - Standalone reasoning and enabled actions can use Codex App Server, OpenClaw
   Hermes or Grok Build. OpenClaw agents and Hermes profiles can be assigned separately to
@@ -41,7 +41,7 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-Use `SHA256SUMS-0.2.14.txt` from the matching release to verify its downloaded
+Use `SHA256SUMS-0.2.15.txt` from the matching release to verify its downloaded
 installer rather than checksums from an older release.
 
 ## 1. Scope and ownership
@@ -141,11 +141,11 @@ npm test
 npm run start:isolated
 ```
 
-`import-release` verifies the shipped catalogue and encrypted Tia checksum.
+`import-release` verifies the shipped catalogue and encrypted Sarah checksum.
 It imports only the release's `assets-runtime.json`, `assets-index.json`,
-`tia/base.gla` and the signed catalogue's optional `tia/motions.gla` into ignored
+`sarah/base.gla` and the signed catalogue's optional `sarah/motions.gla` into ignored
 `build/` paths. It copies no personal account or
-settings. First unlock needs internet; displaying/manipulating Tia needs no
+settings. First unlock needs internet; displaying/manipulating Sarah needs no
 voice key. Other characters download in Settings → Avatar.
 
 `start:isolated` uses `build/dev-profile`, leaving the installed app profile
@@ -153,8 +153,9 @@ alone. Use the developer's own account if testing standalone voice. The EnConvo
 integration should use the developer's normal EnConvo credential setup.
 
 The earlier v0.2.12 reference DMG is about 1.05 GB because encrypted Tia,
-wardrobe and motions are included. Verify the final v0.2.13 artifact size from
-its published release rather than assuming it is unchanged. EnConvo can use this starter pattern; a cloud-only package needs
+wardrobe and motions are included. The current v0.2.15 reference includes Sarah
+instead; check its matching release for the installer size and checksums.
+EnConvo can use this starter pattern; a cloud-only package needs
 a first-run download UI before a character can appear.
 
 Do not begin by re-exporting Blender models. Current protected packages contain
@@ -490,8 +491,9 @@ More behavior: [GROUP-CONVERSATIONS.md](GROUP-CONVERSATIONS.md).
 ## 9. Controls, defaults and visual fidelity
 
 - Seed from `default-appearance.json`, the owner's later manually selected
-  looks. Do not recreate defaults from old screenshots/outfit requests. Tia's
-  body is `Ps012.stand` (Standing 6); all characters default to no prop. Cursor
+  looks. Sarah is the initial avatar in v0.2.15, using `casual` — **Tie top,
+  chain pants & sandals**, without the coat. Tia's body remains `Ps012.stand`
+  (Standing 6); all characters default to no prop. Cursor
   following is off. Preserve later user edits.
 - Audience eye contact applies at rest/talking; a held prop preserves authored
   aim. NaturalAttention already handles irregular blinks/subtle eye motion;
@@ -542,7 +544,8 @@ Required resources and implementation:
 2. Imported `build/protected/assets-runtime.json`: catalogue public key and
    shipped download credential; keep out of source control.
 3. Imported signed `build/protected/index.json`: packages, revisions, sizes and
-   checksums; starter at `build/protected/starter/tia/base.gla`.
+   checksums; starter at `build/protected/starter/sarah/base.gla`, with its matching
+   `sarah/motions.gla` overlay.
 4. `AvatarAssets` in `electron/assets.cjs`: verification, unlock, download,
    cancellation, revision-aware resolution and resource reads.
 5. `ProtectedPackage` in `electron/protected-assets.cjs`: encrypted archive
@@ -624,7 +627,7 @@ memory. One screenshot cannot establish a GPU budget or smooth motion.
 
 ### A. One silent character in EnConvo
 
-Protected asset access and Tia render without a new voice/account UI. Check
+Protected asset access and Sarah render without a new voice/account UI. Check
 skin/hair/eyes, wardrobe, expressions, props, drag/pinch/rotation, gap
 click-through, close-up and Cmd+Shift+0. Compare captures with the reference
 using matching appearance, camera and quality.
@@ -801,3 +804,17 @@ redirect rejection, cancellation and signed per-part/whole-package checksums.
 The fullscreen Ask dialog is removed. `web/agent-client.js` now owns only task routing, per-character progress, cancellation and inline questions. The composers live in the existing overhead bubbles in `web/avatar.html` and `web/group.js`. Reuse those surfaces for EnConvo input and route their requests to EnConvo’s own agent system; do not create an extra modal window. Group typed requests share conversation history and verified results while retaining the chosen character.
 
 `electron/agent-folder.cjs` supplies the `~/Downloads` working-folder default and a one-time migration of the former Desktop default. `web/path-display.js` shortens the current user’s home path for display without changing execution paths. This update uses the same protected v0.2.13 avatar catalogue; no new model download is needed.
+
+
+### 0.2.15 Sarah starter default
+
+The reference installer and fresh profile now start with Sarah in **Tie top,
+chain pants & sandals** (`casual`), without a coat or prop. Reuse
+`electron/default-appearance.json` for her remaining pose, color and accessory
+choices, and preserve later user edits. Tia remains a downloadable character.
+
+Sarah’s included base is the existing 579,546,579-byte protected archive,
+accompanied by its 53,459,437-byte signed motion overlay. This changes installer
+contents and defaults only; the protected R2 catalogue, asset revisions and
+hosted packages are unchanged. Keep the earlier v0.2.13 asset fixes and
+v0.2.14 overhead-input behavior when integrating this release.

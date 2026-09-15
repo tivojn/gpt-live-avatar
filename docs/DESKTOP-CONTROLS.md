@@ -68,7 +68,7 @@ The portrait renderer combines compatible hair sections for transparency orderin
 
 ## Personal default appearances
 
-`electron/default-appearance.json` captures the user's selected colors, outfits and accessories for all five avatars. Every character starts with no prop. Tia starts in Standing 6; the other initial poses retain the captured choices. **Restore default look** restores that avatar's captured look. **Original color** in each color submenu selects the source asset's base texture.
+`electron/default-appearance.json` captures the user's selected colors, outfits and accessories for all five avatars. Fresh installs select Sarah in **Tie top, chain pants & sandals** (`casual`), without the coat. Every character starts with no prop. Tia starts in Standing 6; the other initial poses retain the captured choices. **Restore default look** restores that avatar's captured look. **Original color** in each color submenu selects the source asset's base texture.
 
 Current choices are stored per avatar in the main configuration file. They therefore survive a full restart even though the local server gets a different port. Existing local-storage values can migrate when available; this installation also restores the latest recovered settings from the previous app profile.
 

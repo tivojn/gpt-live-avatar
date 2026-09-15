@@ -1,9 +1,14 @@
 # Protected character delivery
 
 The Mac app uses a private Cloudflare R2 Standard bucket and a narrow Worker
-endpoint. The installer includes encrypted Tia with her appearance controls and
-motions, so first launch needs only a brief online unlock. Tia then works offline.
+endpoint. The v0.2.15 installer includes encrypted Sarah with her appearance
+controls and motions, so first launch needs only a brief online unlock. Sarah
+then works offline.
 Other characters and larger texture tiers download from R2.
+
+The Sarah starter reuses the existing 579,546,579-byte base and 53,459,437-byte
+matching motion overlay. Choosing Sarah as the default adds no new R2 packages
+and does not change the signed catalogue or asset revisions.
 
 GitHub hosts source and the installer; purchased character files are
 not source-code dependencies and must not be uploaded to public releases as
@@ -84,7 +89,7 @@ Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
    `tia`, `sarah`, `iselda`, `ming-mei` and `seraphim`. These stay outside git.
 2. Run `npm run build-protected-assets`. It preserves the private release key
    file, builds the three tiers, round-trips every file against its source,
-   signs the catalogue, links encrypted Tia into `build/protected/starter`, and
+   signs the catalogue, links encrypted Sarah into `build/protected/starter/sarah`, and
    emits `build/protected/inventory.json`. Back up
    `private-build.json` privately; losing it loses future signing continuity.
    Never upload that file or `assets-runtime.json` to the asset bucket.
@@ -113,7 +118,7 @@ Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
 7. Run `npm run dmg`. The release guard refuses missing HTTPS configuration or
    private content/signing keys in the installer resources. Verify Apple
    signing, notarization and the absence of raw model files and content keys.
-   Confirm bundled encrypted Tia unlocks without downloading her base. Install with
+   Confirm bundled encrypted Sarah unlocks without downloading her base. Install with
    existing settings preserved, and repeat a real download from the installer.
 8. Publish the new DMG and source. Only after the new release downloads work,
    remove the old public `assets-v1` model/ZIP files and any old installers that
@@ -129,7 +134,7 @@ never deletes their original licensed files.
 
 `node tools/build-motion-update.cjs REVISION` packages the complete motion library for each character into an encrypted `motions.gla`. It retains the existing model/texture archives and adds `motionUpdate: {revision, package}` outside the catalogue’s `mac` tiers. Earlier apps ignore that optional field and keep their existing downloads. The uploader includes both the old parts and new motion parts, checks the account-wide 10 GB cap before uploading, and the gateway serves only that verified inventory.
 
-A motion overlay must match the base `assetRevision`; its authenticated header has `tier: motions` and `motionRevision`. It may contain only `runtime/motions/` files. The signed download revision and SHA-256 must match before atomic installation. It does not replace the manifest, meshes, wardrobe or textures. New avatar downloads also fetch the current motion overlay. The encrypted Tia starter includes it; existing installations can use **Motion update** in Settings.
+A motion overlay must match the base `assetRevision`; its authenticated header has `tier: motions` and `motionRevision`. It may contain only `runtime/motions/` files. The signed download revision and SHA-256 must match before atomic installation. It does not replace the manifest, meshes, wardrobe or textures. New avatar downloads also fetch the current motion overlay. The current encrypted Sarah starter includes it; existing installations can use **Motion update** in Settings.
 
 The Electron asset client uses Chromium `net.fetch` for HTTP/2-capable
 transfers. Authorization, catalogue and part requests disable HTTP caching;

@@ -7,7 +7,7 @@ class AcpAgent{
  client(config,callbacks={}){return this.clientFactory({engine:this.engine,executable:config.agentRuntimePaths?.[this.engine]||'',...callbacks});}
  async resolveAgent(config,character){const saved=assignedAgent(this.engine,config,character);const inventory=await this.discover(this.engine,config);if(!inventory.installed||inventory.error)throw Error(inventory.error||'Agent runtime is unavailable.');const chosen=saved?inventory.agents.find(a=>a.id===saved):inventory.agents.find(a=>a.isDefault)||inventory.agents[0];if(!chosen)throw Error('The selected agent no longer exists. Refresh agents and choose one in Settings.');return chosen.id;}
  async status(config={}){
-  const agent=await this.resolveAgent(config,config.personaName||config.avatar||'Tia');
+  const agent=await this.resolveAgent(config,config.personaName||config.avatar||require('./default-avatar.json').name);
   const client=this.client(config,{agent});try{const info=await client.start();const session=await client.request('session/new',{cwd:config.agentFolder||require('node:os').homedir(),mcpServers:[],...(this.engine==='openclaw'?{_meta:{sessionKey:'agent:'+agent+':gpt-live-avatar:'+require('node:crypto').randomUUID()}}:{})});
    if(info.agentCapabilities?.sessionCapabilities?.close)await client.request('session/close',{sessionId:session.sessionId}).catch(()=>{});
    return {engine:this.engine,agent,connected:true,version:info.agentInfo?.version||'',models:(session.models?.availableModels||[]).map(m=>m.modelId),currentModel:session.models?.currentModelId||'',modelSelection:Boolean(session.models),message:`${NAMES[this.engine]} connected. Uses its own configured account, tools and permissions. Test connection to verify the model can reply.`};

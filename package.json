@@ -1,7 +1,7 @@
 {
   "name": "gpt-live-avatar",
-  "version": "0.2.14",
-  "description": "Tia, a full-duplex desk avatar on OpenAI GPT-Live-1",
+  "version": "0.2.15",
+  "description": "GPT-Live Avatar, a full-duplex desktop companion on OpenAI GPT-Live-1",
   "author": "Adam Cohen",
   "license": "MIT",
   "private": true,
@@ -66,12 +66,12 @@
         "to": "assets-runtime.json"
       },
       {
-        "from": "build/protected/starter/tia/base.gla",
-        "to": "avatars/tia/base.gla"
+        "from": "build/protected/starter/sarah/base.gla",
+        "to": "avatars/sarah/base.gla"
       },
       {
-        "from": "build/protected/starter/tia/motions.gla",
-        "to": "avatars/tia/motions.gla"
+        "from": "build/protected/starter/sarah/motions.gla",
+        "to": "avatars/sarah/motions.gla"
       }
     ],
     "dmg": {

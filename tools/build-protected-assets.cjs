@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs'),fsp=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),zlib=require('node:zlib');
 const {MAGIC,CHUNK,MAX_HEADER,aad,ProtectedPackage}=require('../electron/protected-assets.cjs');
+const {loadDefaultAvatar}=require('./verify-release.cjs');
 const repo=path.resolve(__dirname,'..'),out=path.join(repo,'build/protected');
 const walk=p=>fs.readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(p,e.name)):e.isFile()?[path.join(p,e.name)]:[]);
 const hash=file=>new Promise((resolve,reject)=>{const h=crypto.createHash('sha256');fs.createReadStream(file).on('data',b=>h.update(b)).on('error',reject).on('end',()=>resolve(h.digest('hex')));});
@@ -38,16 +39,17 @@ async function pack(source,slug,tier,secrets,output=out,motionRevision=''){
  return {file:path.basename(file),bytes,sha256:await hash(file),format:'gla-pack-v1',entries:items.length,parts};
 }
 async function main(){
+ const starterAvatar=loadDefaultAvatar(repo),slugs=['tia','sarah','iselda','ming-mei','seraphim'];if(!slugs.includes(starterAvatar.slug))throw Error('Default avatar has no build source: '+starterAvatar.slug);
  fs.mkdirSync(out,{recursive:true,mode:0o700});const secretFile=path.join(out,'private-build.json');let secrets;
  if(fs.existsSync(secretFile))secrets=JSON.parse(fs.readFileSync(secretFile));else{const pair=crypto.generateKeyPairSync('ed25519');secrets={keys:{'characters-2026-09':crypto.randomBytes(32).toString('hex')},downloadToken:crypto.randomBytes(32).toString('base64url'),publicKey:pair.publicKey.export({type:'spki',format:'pem'}),privateKey:pair.privateKey.export({type:'pkcs8',format:'pem'})};fs.writeFileSync(secretFile,JSON.stringify(secrets),{mode:0o600});}
  const index={version:2,release:'2026-09-14-v1',avatars:{}};
- for(const slug of ['tia','sarah','iselda','ming-mei','seraphim']){const source=fs.realpathSync(path.join(repo,'build/characters',slug)),manifest=JSON.parse(fs.readFileSync(path.join(source,'manifest.json'))),mac={};for(const tier of ['base','balanced','best']){const p=await pack(source,slug,tier,secrets);if(p)mac[tier]=p;console.log(slug,tier,p?.bytes||0);}index.avatars[slug]={name:manifest.name,assetRevision:manifest.assetRevision,bundledMac:false,mac};}
+ for(const slug of slugs){const source=fs.realpathSync(path.join(repo,'build/characters',slug)),manifest=JSON.parse(fs.readFileSync(path.join(source,'manifest.json'))),mac={};for(const tier of ['base','balanced','best']){const p=await pack(source,slug,tier,secrets);if(p)mac[tier]=p;console.log(slug,tier,p?.bytes||0);}index.avatars[slug]={name:manifest.name,assetRevision:manifest.assetRevision,bundledMac:slug===starterAvatar.slug,mac};}
  const bytes=Object.values(index.avatars).flatMap(a=>Object.values(a.mac)).reduce((n,p)=>n+p.bytes,0);if(bytes+2*1024*1024>10_000_000_000)throw Error('Protected release exceeds the 10 GB cap.');
  const payload=JSON.stringify(index),envelope={payload,signature:crypto.sign(null,Buffer.from(payload),secrets.privateKey).toString('base64')};fs.writeFileSync(path.join(out,'index.json'),JSON.stringify(envelope));
  fs.writeFileSync(path.join(out,'assets-runtime.json'),JSON.stringify({downloadToken:secrets.downloadToken,publicKey:secrets.publicKey}),{mode:0o600});
  const objects=Object.values(index.avatars).flatMap(a=>Object.values(a.mac)).flatMap(p=>p.parts);objects.push({file:'index.json',bytes:fs.statSync(path.join(out,'index.json')).size,sha256:await hash(path.join(out,'index.json'))});
  fs.writeFileSync(path.join(out,'inventory.json'),JSON.stringify({files:objects.length,bytes:bytes+fs.statSync(path.join(out,'index.json')).size,objects,index},null,2));
- const starter=path.join(out,'starter/tia');fs.mkdirSync(starter,{recursive:true});fs.rmSync(path.join(starter,'base.gla'),{force:true});fs.linkSync(path.join(out,index.avatars.tia.mac.base.file),path.join(starter,'base.gla'));
+ const starter=path.join(out,'starter',starterAvatar.slug);fs.mkdirSync(starter,{recursive:true});fs.rmSync(path.join(starter,'base.gla'),{force:true});fs.linkSync(path.join(out,index.avatars[starterAvatar.slug].mac.base.file),path.join(starter,'base.gla'));
  console.log('Verified encrypted release:',bytes,'bytes. Private build keys are excluded from git and uploads.');
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});

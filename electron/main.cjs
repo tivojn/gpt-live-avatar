@@ -1,5 +1,5 @@
 'use strict';
-// GPT-Live Avatar: a desk avatar (Tia) on OpenAI GPT-Live-1.
+// GPT-Live Avatar: a desk companion on OpenAI GPT-Live-1.
 // The main process owns the API key and session creation; the renderer owns
 // WebRTC, the 3D avatar and the overhead bubble.
 const { app, BrowserWindow, ipcMain, safeStorage, net, dialog, shell, screen, session: electronSession, Menu, systemPreferences, globalShortcut } = require('electron');
@@ -18,13 +18,14 @@ const { DelegateAuth } = require('./delegate-auth.cjs');
 const { DelegateBackend, normalizeDelegate, selected, usesCodexServer, usesCodexActions, reasoningEngine, actionEngine, MODEL_CHOICES } = require('./delegate.cjs');
 let delegateAuth, delegateBackend, groupManager, agentManager, appInfo;
 const appearanceDefaults = require('./default-appearance.json');
+const defaultAvatar = require('./default-avatar.json');
 const voiceDefaults = require('./default-voices.json');
 const placementDefault = require('./default-placement.json');
 const {DEFAULT_SHORTCUTS,AvatarShortcuts}=require('./shortcuts.cjs');
 let avatarShortcuts;
 
 const WEB = path.join(__dirname, '..', 'web');
-const DEFAULT_OPENCLAM_AVATAR = path.join(os.homedir(), 'Library', 'Application Support', 'OpenClam Studio', 'backend-data', 'avatars', 'tia');
+const DEFAULT_OPENCLAM_AVATAR = path.join(os.homedir(), 'Library', 'Application Support', 'OpenClam Studio', 'backend-data', 'avatars', defaultAvatar.slug);
 // Bundled avatar packages (resource-friendly tier) and the shipped catalogue.
 const BUNDLED_AVATARS = app.isPackaged ? path.join(process.resourcesPath, 'avatars') : path.join(__dirname, '..', 'build', 'assets', 'bundle');
 const BUNDLED_INDEX = app.isPackaged ? path.join(process.resourcesPath, 'assets-index.json') : path.join(__dirname, '..', 'build', 'protected', 'index.json');
@@ -38,7 +39,7 @@ const QUALITIES = ['friendly', 'balanced', 'best'];
 
 const DEFAULTS = {
   backendModel: DEFAULT_BACKEND_MODEL,
-  voice: 'marin',
+  voice: defaultAvatar.voice,
   groupVoices: voiceDefaults,
   quality: 'balanced',
   agentEnabled: true,
@@ -50,10 +51,10 @@ const DEFAULTS = {
   agentRuntimeModels: {},
   avatarAgentBindings: {},
   agentFolder: path.join(os.homedir(), 'Downloads'),
-  avatar: 'tia',
+  avatar: defaultAvatar.slug,
   avatarDir: '',
-  personaName: 'Tia',
-  persona: 'You are Tia, a warm, playful desk companion who loves to move.',
+  personaName: defaultAvatar.name,
+  persona: defaultAvatar.persona,
   opacity: 1,
   windowWidth: placementDefault.windowWidth,
   windowHeight: placementDefault.windowHeight,
@@ -82,6 +83,13 @@ function loadConfig() {
   try {
     const raw = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
     config = { ...DEFAULTS, ...(raw && typeof raw === 'object' ? raw : {}) };
+    // A saved character keeps her identity even if an older profile omitted it.
+    if (Object.hasOwn(voiceDefaults, raw?.avatar)) {
+      const name = raw.avatar.split('-').map(part => part[0].toUpperCase() + part.slice(1)).join('-');
+      if (!raw.personaName) config.personaName = name;
+      if (!raw.persona) config.persona = DEFAULTS.persona.replace(DEFAULTS.personaName, name);
+      if (!raw.voice) config.voice = raw.groupVoices?.[raw.avatar] || voiceDefaults[raw.avatar];
+    }
     if (!raw.bubbleMode && raw.bubble === false) config.bubbleMode = 'off';
   } catch { config = { ...DEFAULTS }; }
   Object.assign(config, normalizeDelegate(config));
@@ -104,9 +112,9 @@ function avatarRoots(selection = config) {
   avatarFallback = '';
   if (selection.avatarDir) return [selection.avatarDir];
   let roots = assets ? assets.roots(selection.avatar) : [];
-  if (!roots.length && selection.avatar !== 'tia' && assets) {
-    // Chosen avatar not downloaded yet: show the bundled Tia and say so.
-    roots = assets.roots('tia'); if (roots.length) avatarFallback = selection.avatar;
+  if (!roots.length && selection.avatar !== defaultAvatar.slug && assets) {
+    // Chosen avatar not downloaded yet: show the bundled starter and say so.
+    roots = assets.roots(defaultAvatar.slug); if (roots.length) avatarFallback = selection.avatar;
   }
   if (!roots.length && fs.existsSync(path.join(DEFAULT_OPENCLAM_AVATAR, 'manifest.json'))) return [DEFAULT_OPENCLAM_AVATAR];
   return roots;
@@ -120,7 +128,7 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+  return { ...config, defaultAvatar, userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function broadcastSettings() {
@@ -160,7 +168,7 @@ function backendCandidates(ids) {
 function avatarInfo(selection = config) {
   const roots = avatarRoots(selection);
   const file = rel => assets?.resolve(roots, rel);
-  const result = { dir: roots[0] || '', roots, slug: selection.avatarDir ? '' : (avatarFallback ? 'tia' : selection.avatar), fallbackFor: avatarFallback, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
+  const result = { dir: roots[0] || '', roots, slug: selection.avatarDir ? '' : (avatarFallback ? defaultAvatar.slug : selection.avatar), fallbackFor: avatarFallback, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
   if (!roots.length) { result.problem = assets?.locked(selection.avatar) ? 'This character is included. Connect to the internet and click Unlock in Settings once; then it will work offline.' : selection.avatarDir ? 'No avatar folder selected.' : 'This avatar is not installed yet. Download it in Settings.'; return result; }
   try {
     const manifestPath = file('manifest.json');

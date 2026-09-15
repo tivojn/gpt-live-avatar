@@ -8,8 +8,8 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 16, 2026 for **v0.2.14**. Use the matching
-[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.14)
+Updated September 16, 2026 for **v0.2.15**. Use the matching
+[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.15)
 to confirm Apple Silicon installer availability and checksums. Use the release
 tag and matching checksums for a reproducible reference.
 
@@ -19,10 +19,10 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Confirm availability on the matching release page, then download the official
-   signed v0.2.14 installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.14/GPT-Live.Avatar-0.2.14-arm64.dmg
+   signed v0.2.15 installer:
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.15/GPT-Live.Avatar-0.2.15-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
-   confirm Tia appears. This is also the reference app for comparing changes.
+   confirm Sarah appears in her tie top, chain pants and sandals, without a coat. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
 
 ```bash
@@ -35,19 +35,19 @@ npm test
 npm run start:isolated
 ```
 
-`import-release` verifies the signed catalogue and Tia's full SHA-256 checksum.
+`import-release` verifies the signed catalogue and Sarah's full SHA-256 checksum.
 It imports only these **already shipped** resources:
 
 | From the installed app's Contents/Resources | In the clone |
 | --- | --- |
 | assets-runtime.json | build/protected/assets-runtime.json |
 | assets-index.json | build/protected/index.json |
-| avatars/tia/base.gla | build/protected/starter/tia/base.gla |
-| avatars/tia/motions.gla, when present in the signed catalogue | build/protected/starter/tia/motions.gla |
+| avatars/sarah/base.gla | build/protected/starter/sarah/base.gla |
+| avatars/sarah/motions.gla, when present in the signed catalogue | build/protected/starter/sarah/motions.gla |
 
 It also links the encrypted starter and its declared motion overlay into
-`build/assets/bundle/tia` so the
-unpackaged development app can display Tia. Files stay encrypted and ignored by
+`build/assets/bundle/sarah` so the
+unpackaged development app can display Sarah. Files stay encrypted and ignored by
 Git. The command is safe to rerun with identical resources and refuses to
 replace different ones. For a different release, use a fresh clone or back up
 and move conflicting imported files before importing again.
@@ -60,7 +60,7 @@ ordinary Electron/HTML/JavaScript edits.
 
 ## Accounts and additional characters
 
-- Tia is included; her first unlock needs internet. No voice key is needed just
+- Sarah is included; her first unlock needs internet. No voice key is needed just
   to display or manipulate her. Download other characters in Settings → Avatar.
 - Voice and Together talk need **your own OpenAI API key with GPT-Live access**.
   OpenAI account sign-in for reasoning does not replace the voice key.
@@ -167,7 +167,7 @@ configuration separate from the app-update destination.
 
 1. `npm test` passes. It uses generated fixtures; no original Blender files,
    API key or live microphone is needed.
-2. Start with a fresh `--user-data-dir` and confirm bundled Tia unlocks and
+2. Start with a fresh `--user-data-dir` and confirm bundled Sarah unlocks and
    renders. Check Settings opens without a voice key. Do not delete your normal
    app profile to simulate a new user.
 3. In the development/test profile, download a second character and verify it
@@ -292,3 +292,17 @@ simulation.
 The fullscreen Ask dialog is removed. `web/agent-client.js` now owns only task routing, per-character progress, cancellation and inline questions. The composers live in the existing overhead bubbles in `web/avatar.html` and `web/group.js`. Reuse those surfaces for EnConvo input and route their requests to EnConvo’s own agent system; do not create an extra modal window. Group typed requests share conversation history and verified results while retaining the chosen character.
 
 `electron/agent-folder.cjs` supplies the `~/Downloads` working-folder default and a one-time migration of the former Desktop default. `web/path-display.js` shortens the current user’s home path for display without changing execution paths. This update uses the same protected v0.2.13 avatar catalogue; no new model download is needed.
+
+
+### 0.2.15 Sarah starter default
+
+Fresh profiles select Sarah. Her default outfit is **Tie top, chain pants &
+sandals** (`casual`), with no coat or prop. `electron/default-appearance.json`
+retains her selected pose, colors and accessories; **Restore default look**
+applies that look. Later user appearance choices remain separate from defaults.
+
+The installer embeds Sarah’s existing 579,546,579-byte encrypted base and
+53,459,437-byte matching motion overlay. The R2 catalogue and hosted packages
+are unchanged; no asset repack or new upload is needed. Tia remains available
+from Settings → Avatar. Earlier release sections above describe their original
+Tia starter and remain as history.

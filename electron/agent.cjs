@@ -3,6 +3,7 @@ const {ipcMain,BrowserWindow,dialog}=require('electron');
 const path=require('node:path'),crypto=require('node:crypto');
 const {createAvatarTools,latestUserRequest}=require('./avatar-tools.cjs');
 const {engineConfig}=require('./agent-engines.cjs');
+const defaultAvatar=require('./default-avatar.json');
 const {reasoningEngine,actionEngine,runtimeConfig}=require('./delegate.cjs');
 function setupAgent(deps){
  const pending=new Map(),completed=new Map(),questions=new Map();let recent=[];
@@ -31,7 +32,7 @@ function setupAgent(deps){
   const config=deps.getConfig();if(!config.agentEnabled)throw Error('Enable agent actions in Settings first.');
   if(typeof id!=='string'||!/^[\w-]{1,160}$/.test(id))throw Error('Invalid agent request.');
   if(!Array.isArray(history))throw Error('A user request is required.');const latest=latestUserRequest(history);if(!latest||latest.length>6000)throw Error('Use a request of up to 6,000 characters.');
-  const speaker=typeof character==='string'?character.slice(0,60):config.personaName||'Tia';
+  const speaker=typeof character==='string'?character.slice(0,60):config.personaName||defaultAvatar.name;
   const update=value=>progress(sender,{...value,id,character:speaker});
   const key=sender.id+':'+speaker+':'+(String(turnId||id).slice(0,160))+':'+crypto.createHash('sha256').update(latest).digest('hex');
   if(completed.has(key))return completed.get(key);
@@ -54,7 +55,7 @@ function setupAgent(deps){
  ipcMain.on('gla:agent:action-result',(e,{id,result}={})=>{const p=pending.get(id);if(!p||p.sender!==e.sender||!allowed(e))return;if(!result||typeof result!=='object')return;p.finish(null,result);});
  ipcMain.on('gla:agent:question-answer',(e,{id,answers}={})=>{const p=questions.get(id);if(!p||p.sender!==e.sender||!allowed(e)||!answers||typeof answers!=='object')return;const clean={};for(const [key,value]of Object.entries(answers).slice(0,8))if(Array.isArray(value?.answers))clean[key]={answers:value.answers.filter(x=>typeof x==='string').slice(0,8).map(x=>x.slice(0,6000))};p.finish(clean);});
  async function reason(owner,id,config,history,instructions){
-  const character=config.personaName||'Tia';
+  const character=config.personaName||defaultAvatar.name;
   const update=value=>{const sender=require('electron').webContents.fromId(owner);if(sender)progress(sender,{...value,id,character});};
   update({state:'thinking'});
   try{const engine=reasoningEngine(config)||'codex';const result=await (engine==='codex'?codex:runtimes[engine]).answer(owner,id,engineConfig(runtimeConfig(config),engine),history,latestUserRequest(history),character,null,()=>{},update,{reasoningOnly:true,instructions});update({state:'complete',text:result.text});return result;}

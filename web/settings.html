@@ -38,7 +38,7 @@
 <body>
 <main>
   <h1>GPT-Live Avatar</h1>
-  <p class="sub">Tia talks with OpenAI GPT-Live-1 directly from this Mac. Your key stays encrypted on this Mac.</p>
+  <p class="sub">Your avatar talks with OpenAI GPT-Live-1 directly from this Mac. Your key stays encrypted on this Mac.</p>
 
   <section>
     <h2>Voice connection · OpenAI</h2>
@@ -176,7 +176,7 @@
 
   <section>
     <h2>Tips</h2>
-    <p class="note">Drag Tia to move her. Scroll or pinch to resize. Option-drag or two-finger swipe to rotate. Double-click her to start or end a conversation; the bubble has the same controls. Say "do a kung fu punch", "sit down", "wave" or "dance" and she follows your words.</p>
+    <p class="note">Drag the avatar to move her. Scroll or pinch to resize. Option-drag or two-finger swipe to rotate. Double-click her to start or end a conversation; the bubble has the same controls. Say "do a kung fu punch", "sit down", "wave" or "dance" and she follows your words.</p>
   </section>
 </main>
 <script type="module">
@@ -208,7 +208,7 @@
     $('#opacity').value = Math.round((settings.opacity || 1) * 100); $('#opacityOut').value = $('#opacity').value + '%';
     $('#bubbleMode').value = settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
     const a = settings.avatar || {};
-    setState($('#avatarState'), a.fallbackFor ? `${a.fallbackFor} is not downloaded yet; showing Tia. Download the avatar package below.` : a.ok ? `${a.name}: ${a.clips} motions${a.modelBytes ? `, model ${(a.modelBytes / 1048576).toFixed(0)} MB` : ''}.` : (a.problem || 'No avatar.'), a.ok && !a.fallbackFor ? 'ok' : 'bad');
+    setState($('#avatarState'), a.fallbackFor ? `${a.fallbackFor} is not downloaded yet; showing ${a.name || settings.defaultAvatar?.name || 'the starter avatar'}. Download the avatar package below.` : a.ok ? `${a.name}: ${a.clips} motions${a.modelBytes ? `, model ${(a.modelBytes / 1048576).toFixed(0)} MB` : ''}.` : (a.problem || 'No avatar.'), a.ok && !a.fallbackFor ? 'ok' : 'bad');
     setState($('#keyState'), settings.hasKey ? 'API key stored on this Mac.' : 'No API key yet. Paste one and validate.', settings.hasKey ? 'ok' : 'bad');
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
@@ -418,7 +418,7 @@
     const result = voicePreview.state !== 'idle' ? await gla.stopVoicePreview() : await gla.previewVoice(voiceDraft);
     if (!result.ok) setState($('#voiceState'), result.error, 'bad');
   };
-  $('#personaName').onchange = () => save({ personaName: $('#personaName').value.trim() || 'Tia' });
+  $('#personaName').onchange = () => save({ personaName: $('#personaName').value.trim() || SETTINGS.avatar?.name || SETTINGS.defaultAvatar?.name || 'Avatar' });
   $('#persona').onchange = () => save({ persona: $('#persona').value.trim() });
   $('#chooseAvatar').onclick = async () => { await gla.chooseAvatarFolder(); render(await gla.getSettings()); };
   for (const input of document.querySelectorAll('#quality input')) input.onchange = () => save({ quality: input.value });
