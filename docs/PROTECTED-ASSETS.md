@@ -55,6 +55,13 @@ verifies every remote SHA-256 checksum. It never uploads the duplicate complete
 archives, private build files or raw sources. Unknown inventory, pagination or
 storage classes fail closed.
 
+For maintainer verification, an existing bucket-scoped Object Read only S3
+credential is used only when its account and bucket match exactly; otherwise
+a missing credential falls back to the Cloudflare API. Interrupted downloads
+retry with a fresh SHA-256 calculation, while size or hash mismatches stop the
+upload. Run `node qa/upload-r2.cjs` for the local transport regression. These
+maintainer retries do not change the public Worker’s single-read behavior.
+
 This is an enforced upload-workflow cap, not a native R2 account quota. Keep
 other writers and uploads away from the avatar bucket and reserve the remaining
 R2 free allowance in its storage account. Manual
