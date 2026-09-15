@@ -1,13 +1,13 @@
 'use strict';
 const {readJSON}=require('./delegate-auth.cjs');
-const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','openclaw:local_runtime':'','hermes:local_runtime':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
-const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build'],openclaw:[],hermes:[]};
+const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','openclaw:local_runtime':'','hermes:local_runtime':'','grok:local_runtime':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
+const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build'],openclaw:[],hermes:[],grok:[]};
 const validModel=m=>typeof m==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(m);
 function normalizeDelegate(config,patch={}){
   const mode=['managed','delegate'].includes(patch.reasoningMode)?patch.reasoningMode:(['managed','delegate'].includes(config.reasoningMode)?config.reasoningMode:'managed');
-  const provider=['openai','xai','openclaw','hermes'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai','openclaw','hermes'].includes(config.delegateProvider)?config.delegateProvider:'openai');
+  const provider=['openai','xai','openclaw','hermes','grok'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai','openclaw','hermes','grok'].includes(config.delegateProvider)?config.delegateProvider:'openai');
   let auth=['api_key','oauth2','codex_app_server','local_runtime'].includes(patch.delegateAuth)?patch.delegateAuth:(['api_key','oauth2','codex_app_server','local_runtime'].includes(config.delegateAuth)?config.delegateAuth:'api_key');
-  if(['openclaw','hermes'].includes(provider))auth='local_runtime';
+  if(['openclaw','hermes','grok'].includes(provider))auth='local_runtime';
   else if(auth==='local_runtime'||provider!=='openai'&&auth==='codex_app_server')auth='api_key';
   const models={...DEFAULT_MODELS};for(const key of Object.keys(models))if(validModel(config.delegateModels?.[key]))models[key]=config.delegateModels[key];
   if(validModel(patch.delegateModel)||['codex_app_server','local_runtime'].includes(auth)&&patch.delegateModel==='')models[provider+':'+auth]=patch.delegateModel;
@@ -16,7 +16,7 @@ function normalizeDelegate(config,patch={}){
 function selected(config){const c=normalizeDelegate(config);return {provider:c.delegateProvider,auth:c.delegateAuth,model:c.delegateModels[c.delegateProvider+':'+c.delegateAuth]};}
 function usesCodexServer(config){return config.reasoningMode==='delegate'&&selected(config).auth==='codex_app_server';}
 function reasoningEngine(config){const d=selected(config);return config.reasoningMode==='delegate'?(d.auth==='codex_app_server'?'codex':d.auth==='local_runtime'?d.provider:null):null;}
-function actionEngine(config){return reasoningEngine(config)||(['codex','openclaw','hermes'].includes(config.agentEngine)?config.agentEngine:'basic');}
+function actionEngine(config){return reasoningEngine(config)||(['codex','openclaw','hermes','grok'].includes(config.agentEngine)?config.agentEngine:'codex');}
 function usesCodexActions(config){return actionEngine(config)==='codex';}
 function runtimeConfig(config){const engine=reasoningEngine(config);return engine==='codex'?codexConfig(config):engine?{...config,agentRuntimeModels:{...config.agentRuntimeModels,[engine]:selected(config).model}}:config;}
 function codexConfig(config){return usesCodexServer(config)?{...config,agentCodexModel:selected(config).model}:config;}
@@ -56,18 +56,18 @@ class DelegateBackend {
   constructor({auth,fetchImpl=fetch,codex=null}){this.auth=auth;this.fetch=fetchImpl;this.codex=codex;this.requests=new Map();}
   cancel(owner,id){this.codex?.cancel(owner,id);for(const [key,r] of this.requests)if(r.owner===owner&&(!id||r.id===id)){r.abort.abort();this.requests.delete(key);}}
   cancelAll(){this.codex?.cancelAll();for(const r of this.requests.values())r.abort.abort();this.requests.clear();}
-  async answer(owner,id,config,history,instructions,agent=null){
+  async answer(owner,id,config,history,instructions){
     if(typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(id))throw Error('Invalid delegation request.');
-    const context=messages(history,agent?6000:2400);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
+    const context=messages(history,2400);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
     if(reasoningEngine(config)){if(!this.codex)throw Error('The agent runtime is not connected.');return this.codex.answer(owner,id,runtimeConfig(config),history,instructions);}
     this.cancel(owner);const abort=new AbortController(),request={owner,id,abort},key=owner+':'+id;this.requests.set(key,request);
     try{
       const {provider,auth,model}=selected(config),credential=await this.auth.bearer(provider,auth);
       if(abort.signal.aborted)throw Error('Request cancelled.');
-      const signal=AbortSignal.any([abort.signal,AbortSignal.timeout(agent?150000:90000)]);
+      const signal=AbortSignal.any([abort.signal,AbortSignal.timeout(90000)]);
       const headers={'Authorization':`Bearer ${credential.access}`,'Content-Type':'application/json','Accept':'text/event-stream'};
       let url,body;
-      const brief=String(instructions||'').slice(0,6000)+(agent?'\nUse the supplied tools for requested actions. Do not claim success before a successful tool result. Give a concise final answer describing actual results; never reveal private reasoning.':'\nAnswer the latest user question from the conversation. Give only the final result, in at most 70 words. Do not describe private reasoning. You have no external tools in this request; do not claim to have searched or changed anything.');
+      const brief=String(instructions||'').slice(0,6000)+'\nAnswer the latest user question from the conversation. Give only the final result, in at most 70 words. Do not describe private reasoning. You have no external tools in this request; do not claim to have searched or changed anything.';
       if(provider==='openai'){
         url=auth==='oauth2'?'https://chatgpt.com/backend-api/codex/responses':'https://api.openai.com/v1/responses';
         body={model,instructions:brief,input:context.map(m=>({role:m.role,content:[{type:m.role==='assistant'?'output_text':'input_text',text:m.content}]})),reasoning:{effort:'low'},store:false,stream:true};
@@ -78,7 +78,6 @@ class DelegateBackend {
         body={model:auth==='oauth2'?'grok-build':model,messages:[{role:'system',content:brief},...context],max_completion_tokens:1400,stream:true};
         if(auth==='oauth2')Object.assign(headers,{'X-XAI-Token-Auth':'xai-grok-cli','x-grok-client-version':'1.0.4','x-grok-client-identifier':'grok-shell','x-authenticateresponse':'authenticate-response','x-grok-client-mode':'interactive','User-Agent':'grok-shell/1.0.4 (macos; aarch64)','x-grok-model-override':model});
       }
-      if(agent)return await require('./agent-model.cjs').runAgent({fetchImpl:this.fetch,url,headers,body,signal,agent,provider,model});
       let response;try{response=await this.fetch(url,{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal});}catch{throw Error(abort.signal.aborted?'Request cancelled.':'Could not reach the selected model. Please try again.');}
       if(!response.ok){await response.body?.cancel();throw Error(providerError(response.status));}
       const text=await streamText(response);if(abort.signal.aborted)throw Error('Request cancelled.');

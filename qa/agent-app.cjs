@@ -3,12 +3,17 @@ const {app,BrowserWindow,safeStorage}=require('electron'),fs=require('fs'),path=
 const repo=path.resolve(__dirname,'..'),out=repo+'/build/qa-agent-app';fs.mkdirSync(out+'/files',{recursive:true});app.setPath('userData',out+'/profile');fs.mkdirSync(app.getPath('userData')+'/avatars',{recursive:true});
 fs.writeFileSync(app.getPath('userData')+'/config.json',JSON.stringify({avatar:'tia',quality:'friendly',agentEnabled:true,agentFolder:out+'/files'}));for(const slug of ['tia','sarah']){const link=app.getPath('userData')+'/avatars/'+slug;if(!fs.existsSync(link))fs.symlinkSync(repo+'/build/characters/'+slug,link);}for(const file of ['tia.txt','group.txt'])fs.rmSync(out+'/files/'+file,{force:true});
 app.whenReady().then(()=>fs.writeFileSync(app.getPath('userData')+'/openai-key.bin',safeStorage.encryptString('sk-qa-placeholder')));
-const actualFetch=global.fetch,network=[],errors=[];let testCase='solo';
-global.fetch=async(url,opts)=>{if(!String(url).startsWith('https://api.openai.com/v1/responses'))return actualFetch(url,opts);const b=JSON.parse(opts.body);network.push({toolNames:b.tools?.map(t=>t.name)});const done=b.input.filter(x=>x.type==='function_call_output');let output,text='';
- if(!done.length)output=[{type:'function_call',name:'move_avatar',arguments:JSON.stringify({character:'Tia',destination:'upper-right'}),call_id:'move',id:'fc-move'}];
- else if(done.length===1){const result=JSON.parse(done[0].output);assert.equal(result.ok,true,JSON.stringify(result));assert(result.reached);output=[{type:'function_call',name:'create_text_file',arguments:JSON.stringify({file:testCase==='solo'?'tia.txt':'group.txt',text:'Created by the tested agent.'}),call_id:'file',id:'fc-file'}];}
- else {assert(JSON.parse(done[1].output).created);output=[];text='I moved to the upper-right corner and created the test file in the selected folder.';}
- return new Response('data: '+JSON.stringify({type:'response.output_text.delta',delta:text})+'\n\ndata: '+JSON.stringify({type:'response.completed',response:{output}})+'\n\n');};
+// Model execution is stubbed here; real native runtime requests are exercised by runtime-app.cjs.
+const network=[],errors=[];let testCase='solo';
+require('../electron/codex-agent.cjs').CodexAgent.prototype.answer=async function(owner,id,config,history,request,character,tools,onReceipt){
+ network.push({engine:'codex',tools:tools.tools.map(t=>t.name)});
+ assert(!tools.tools.some(t=>/file|page|shell/.test(t.name)));
+ const moved=await tools.execute('move_avatar',{character:'Tia',destination:'upper-right'},new AbortController().signal);
+ assert(moved.ok&&moved.reached,JSON.stringify(moved));
+ const file=out+'/files/'+(testCase==='solo'?'tia.txt':'group.txt');fs.writeFileSync(file,'Created by the tested agent.');
+ const receipts=[{tool:'move_avatar',ok:true},{tool:'fileChange',ok:true,path:file}];receipts.forEach(r=>onReceipt?.(r));
+ return {engine:'codex',character,text:'I moved to the upper-right corner and created the test file.',receipts};
+};
 app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms));async function until(fn,label){const end=Date.now()+100000;while(Date.now()<end){try{const r=await fn();if(r)return r;}catch{}await wait(100);}throw Error('Timed out '+label);}
 app.whenReady().then(async()=>{try{
  const solo=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'window'),js=code=>solo.webContents.executeJavaScript('(async()=>{'+code+'})()');await until(()=>js('return window.gla_avatar?.resources?.ready'),'avatar');

@@ -167,7 +167,7 @@ export class LiveGroup {
   let result;try{result=await this.api.reply({id,speaker:p.slug,participants:this.cast.map(c=>c.slug),topic:this.topic,mode:this.mode,human:this.human,history,humanRequest:p.acceptUser?p.lastHumanText:'',turnId:p.lastHumanId});}catch(e){result={ok:false,error:e.message};}
   if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;p.delegating=false;p.agentHandledText=p.lastHumanText;p.agentDue=0;this.awaitingHuman=false;this.finishLine(p);p.heard=false;p.openAt=p.lastText=p.lastAudio=performance.now();this.advanceAt=0;
   const text=result.ok?result.text:'The tool request could not be completed. Report this actual error briefly: '+String(result.error||'No result was returned.').slice(0,500);p.agentResult=text;p.acceptUser=false;for(const entry of result.sharedActions||[])this.actionResult(entry);
-  p.client.appendInstructions('Floor OPEN for '+p.name+'. Your backend has completed the human request. Speak its verified result now, then wait for the human. Do not claim a lack of tools or repeat the action.');
+  p.client.appendInstructions('Floor OPEN for '+p.name+'. '+(result.ok?'Your agent returned a result. Explain that result accurately, including any limitations.':'Your agent request failed. Explain the error; do not claim the task succeeded.')+' Then wait for the human. Do not repeat the action.');
   for(const chunk of commentaryChunks(text))p.client.appendCommentary(chunk,application?null:id);
  }
  interrupt(now){
@@ -200,7 +200,7 @@ export class LiveGroup {
    const target=this.target(p.lastHumanText);if(target!==p.slug){p.agentDue=0;this.open(target,false,{text:p.lastHumanText,id:p.lastHumanId});return;}
    p.agentDue=0;
    if(this.agentEnabled&&p.agentHandledText!==p.lastHumanText&&needsAgent(p.lastHumanText)){
-    p.client.appendInstructions('The application is executing the real human request using its local agent tools. Wait for its verified result before claiming success or lack of access.');
+    p.client.appendInstructions('The application is executing the real human request through the selected external agent. Wait for its verified result before claiming success or lack of access.');
     void this.delegate(p,'human-'+p.lastHumanId.replace(/[^a-z0-9_-]/gi,'').slice(-80),true);return;
    }
    this.awaitingHuman=false;p.openAt=now;p.lastText=p.lastAudio=now;

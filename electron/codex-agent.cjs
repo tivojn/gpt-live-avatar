@@ -1,6 +1,6 @@
 'use strict';
 const {CodexClient}=require('./codex-client.cjs');
-const {TOOLS}=require('./agent-tools.cjs');
+const {TOOLS}=require('./avatar-tools.cjs');
 const {codexPermissions}=require('./agent-permissions.cjs');
 const ownTools=TOOLS.filter(t=>['avatar_state','move_avatar','play_motion'].includes(t.name));
 const dynamicTools=ownTools.map(t=>({type:'function',name:t.name,description:t.description,inputSchema:t.parameters}));

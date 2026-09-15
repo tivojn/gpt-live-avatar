@@ -4,14 +4,12 @@
 the intelligence, credentials, voice conversation, tools and permissions.**
 
 For the EnConvo developer and their AI coding assistant. Updated September 15,
-2026 against the published GPT-Live Avatar **v0.2.9**, application source commit
-[`b6dd188`](https://github.com/tivojn/gpt-live-avatar/commit/b6dd188d296a3233431d1bd6ee51a0e3124ff04f).
-Later documentation-only commits do not change that installer.
-
+2026 for GPT-Live Avatar **v0.2.10**. Use the tagged release for a reproducible
+application source reference.
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.9
-- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.9/GPT-Live.Avatar-0.2.9-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.9/SHA256SUMS-0.2.9.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.10
+- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.10/GPT-Live.Avatar-0.2.10-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.10/SHA256SUMS-0.2.10.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
@@ -24,13 +22,13 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### What is ready in v0.2.9
+### What is ready in v0.2.10
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
   overhead speech/task updates, protected downloads and the encrypted Tia
   starter are available as the integration reference.
 - Standalone reasoning and enabled actions can use Codex App Server, OpenClaw
-  or Hermes. OpenClaw agents and Hermes profiles can be assigned separately to
+  Hermes or Grok Build. OpenClaw agents and Hermes profiles can be assigned separately to
   each character. Missing runtimes are marked unavailable; a failed selected
   runtime does not silently fall back to another provider.
 - Right-click menus include About and Check for Updates, with the installed
@@ -40,11 +38,8 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-The v0.2.9 DMG is **1,047,191,904 bytes** (about 1.05 GB). Its SHA-256 is:
-
-```text
-c2d09bcdc289f577c89dbf62fd01c2a1bb63b48a415b49707511e4fe6b5f383c
-```
+The release includes `SHA256SUMS-0.2.10.txt`; use it to verify the downloaded
+installer rather than checksums from an older release.
 
 ## 1. Scope and ownership
 
@@ -70,9 +65,10 @@ Keep `characterId`, `agentId`, `voiceId`, `conversationId` and `turnId` separate
 even if initially mapped 1:1. A visual avatar does not automatically require a
 new agent/session. Changing an outfit must not reconnect voice or reasoning.
 
-The standalone app has a Live client, direct provider delegation, a small
-built-in action engine, and Codex App Server/OpenClaw/Hermes integrations because
-it needs its own backend. **Do not run these alongside EnConvo's own system.
+The standalone app has a Live client, direct provider reasoning, and native
+Codex App Server/OpenClaw/Hermes/Grok Build adapters. Its old built-in action
+engine and file/browser tools have been removed; it only exposes visual avatar
+controls to the selected external runtime. **Do not run these alongside EnConvo's own system.
 None of those runtimes is a required dependency for this integration.**
 
 ### Agent assignment in the reference app
@@ -173,7 +169,7 @@ Paths are relative to this repository. Follow transitive imports: copying only
 | Deformation corrections | [web/avatar3d-volume.js](../web/avatar3d-volume.js), [web/avatar3d-clearance.js](../web/avatar3d-clearance.js), [web/avatar3d-garment-fit.js](../web/avatar3d-garment-fit.js) | Joint volume and authored/character-specific clearance; keep with rig metadata. |
 | Motions/stage | [web/avatar3d-motion.js](../web/avatar3d-motion.js), [web/avatar3d-companion.js](../web/avatar3d-companion.js) | Clips, reactions, `CompanionController`, `AvatarStudioStage`. |
 | Eye behavior | [web/avatar3d-attention.js](../web/avatar3d-attention.js) | Irregular blinks and subtle binocular eye movement; already called by renderer. |
-| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.9, not the removed RMS/spectral classifier. |
+| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.10, not the removed RMS/spectral classifier. |
 | Connection sounds | [web/conversation-sounds.js](../web/conversation-sounds.js) | Synthesized connecting/ready/end cues; no samples or remote service. |
 | Task bubbles | [web/agent-progress.js](../web/agent-progress.js), [web/bubble-policy.js](../web/bubble-policy.js) | Public status, stale-event handling and Auto/Always/Off. |
 | Drawing/hit tests | [web/avatar-render-budget.js](../web/avatar-render-budget.js), [web/avatar-hit-mask.js](../web/avatar-hit-mask.js) | Pixel/texture budgets, frame pacing, cached alpha mask. |
@@ -669,22 +665,18 @@ installed voice credential and real provider sessions, incurring normal usage.
 Use only the developer's account. Normal `npm test` requires no original
 Blender files or live microphone.
 
-### What was verified for the published v0.2.9 reference
+### Verification scope
 
-- The full `npm test` suite passed, including runtime routing/permissions and
-  release checking. Packaged content checks verified the encrypted starter and
-  excluded raw models and private keys.
-- Real OpenClaw 2026.9.4 and Hermes 0.21.3 requests exercised reasoning,
-  test-file creation/readback, solo/Together agent/profile routing, public task
-  updates and Sarah's boxing-warmup command. These runtime checks opened no
-  microphone or voice sessions; they are not a new full voice-quality test.
-- A packaged app with a fresh avatar profile unlocked/rendered Tia without a
-  voice key and completed a Hermes reasoning request using the separately
-  configured native runtime. Missing-runtime settings and version/update UI
-  were also checked.
-- The app and DMG were signed, notarized and stapled. Installation on the
-  development Mac retained existing user settings. GitHub's uploaded DMG
-  digest matches the checksum at the start of this handoff.
+The `npm test` suite checks engine routing, separate permissions, cancellation,
+shared task receipts and the visual-only tool bridge. `qa/runtime-app.cjs --live`
+exercises real native reasoning, file creation/readback and Sarah's motion in
+solo/Together through OpenClaw, Hermes and Grok Build. It also checks the new
+listening animation and Settings/About screens without opening a microphone.
+See the release notes for the checks completed for the published installer.
+
+Earlier v0.2.9 acceptance also covered a packaged fresh-profile Tia unlock/render
+and native Hermes reasoning. This is not a new full voice-quality or EnConvo
+integration test.
 
 These are reference-app checks. EnConvo integration, another developer's
 credentials and M2/16 GB performance still need their own acceptance tests.
@@ -693,11 +685,11 @@ credentials and M2/16 GB performance still need their own acceptance tests.
 
 > Read docs/ENCONVO-HANDOFF.md and inspect EnConvo's existing agent, credential,
 > voice, delegation and extension interfaces. Implement milestone A, then B,
-> before group work. Reuse v0.2.9's complete renderer dependency tree, real
+> before group work. Reuse v0.2.10's complete renderer dependency tree, real
 > audio-to-viseme pipeline and protected asset loader. EnConvo owns provider
 > credentials, reasoning, tools, microphone and conversation state. Build a
 > narrow adapter; do not instantiate the standalone app's Codex, OpenClaw,
-> Hermes, direct-OAuth or built-in agent backends, or duplicate its voice
+> Hermes, Grok Build or direct-OAuth backends, or duplicate its voice
 > session. Map avatars to EnConvo's own agent IDs. Identify the real
 > audio format and playback clock, validate APIs in code, preserve R2 protection
 > and original character proportions, and test inside EnConvo before claiming

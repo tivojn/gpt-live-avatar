@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 (async()=>{
  const repo=path.resolve(__dirname,'..'),bundle=process.argv[2]||path.join(repo,'dist/mac-arm64/GPT-Live Avatar.app'),resources=path.join(bundle,'Contents/Resources'),file=path.join(resources,'app.asar'),list=asar.listPackage(file);
  assert(!list.some(n=>/\.(glb|gltf|blend|gla)$/i.test(n)),'No raw models in source archive');
+ for(const name of ['agent-tools.cjs','agent-model.cjs','agent-browser.cjs','agent-web.cjs'])assert(!list.some(n=>n.endsWith('/'+name)),'Removed built-in agent code must not ship: '+name);
  const runtime=JSON.parse(fs.readFileSync(path.join(resources,'assets-runtime.json')));assert(!runtime.keys&&!runtime.privateKey);
  assert.equal(JSON.parse(asar.extractFile(file,'package.json')).version,require('../package.json').version);
  function files(p){return fs.readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(path.join(p,e.name)):[path.join(p,e.name)]);}

@@ -65,11 +65,11 @@
   <section>
     <h2>Reasoning</h2>
     <label for="reasoningMode">Mode</label>
-    <select id="reasoningMode"><option value="managed">Built-in reasoning</option><option value="delegate">Delegate mode</option></select>
+    <select id="reasoningMode"><option value="managed">GPT-Live reasoning</option><option value="delegate">Delegate mode</option></select>
     <p class="note">Delegate mode sends harder questions to your selected provider. Changing modes during a conversation briefly reconnects and keeps recent context.</p>
     <div id="delegateOptions" hidden>
       <label for="delegateProvider">Provider</label>
-      <select id="delegateProvider"><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="openclaw">OpenClaw · local agent</option><option value="hermes">Hermes · local agent</option></select>
+      <select id="delegateProvider"><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="openclaw">OpenClaw · local agent</option><option value="hermes">Hermes · local agent</option><option value="grok">Grok Build · local agent</option></select>
       <label for="delegateAuth">Authentication</label>
       <select id="delegateAuth"><option value="api_key">API key</option><option value="oauth2">Account sign-in · OAuth2</option><option value="codex_app_server">Codex App Server</option></select>
       <div id="delegateCodex" hidden>
@@ -99,10 +99,10 @@
   </section>
 
   <section>
-    <h2>Actions and page context</h2>
+    <h2>Agent actions</h2>
     <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
-    <p class="note">Works in solo and Together. The addressed character carries out the task and shares verified results with the group.</p>
-    <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="basic">Built-in · simple file and page tasks</option><option value="codex">Codex · code, shell, files and connected tools</option><option value="openclaw">OpenClaw · configured tools and account</option><option value="hermes">Hermes · configured tools and account</option></select>
+    <p class="note">Works in solo and Together. Your selected agent handles tasks using its own account, tools and permissions. The addressed character shows progress and shares verified results with the group.</p>
+    <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="codex">Codex · code, shell, files and connected tools</option><option value="openclaw">OpenClaw · configured tools and account</option><option value="hermes">Hermes · configured tools and account</option><option value="grok">Grok Build · configured tools and account</option></select>
     <p id="sharedCodexEngine" class="note" hidden>Uses the Codex App Server connection and model selected under Reasoning above.</p>
     <div id="codexOptions" hidden>
       <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools and their app permissions. Availability depends on your Codex setup. Voice still uses your voice API key.</p>
@@ -110,7 +110,7 @@
       <div id="legacyCodexModel"><label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel">Save model</button></div>
       <label for="agentAccess">Codex permissions</label><select id="agentAccess" aria-describedby="agentAccessDescription"></select>
       <p class="note" id="agentAccessDescription" aria-live="polite"></p>
-      <p class="note">Applies to every character in solo and Together. Full access is the default for new installs. macOS and connected apps keep their own permission prompts. Changing this setting stops any current task; completed actions remain.</p>
+      <p class="note">Saved separately for Codex; applies to characters using it in solo and Together. Full access is the default for new installs. macOS and connected apps keep their own permission prompts. Changing this setting stops any current task; completed actions remain.</p>
     </div>
     <div id="runtimeOptions" hidden>
       <p id="runtimeNote" class="note"></p>
@@ -119,11 +119,10 @@
       <div id="runtimeModelRow"><label for="runtimeModel">Model override (optional)</label><div class="row"><input id="runtimeModel" type="text" placeholder="Use the agent’s configured model"><button id="runtimeSaveModel">Save model</button></div></div>
       <div class="row"><button id="runtimeCheck">Check agent connection</button><span id="runtimeState" role="status"></span></div>
       <label for="runtimeAccess">When the agent requests approval</label><select id="runtimeAccess"><option value="workspace">Ask me</option><option value="full">Allow for this task</option></select>
-      <p class="note">The agent’s own permissions still apply. This is not a sandbox or Codex automatic review. Allows are per request, never saved to the agent’s permanent allowlist. Changing the connection stops current tasks.</p>
+      <p class="note">Saved separately for this provider. The agent’s own permissions still apply. This is not a sandbox or Codex automatic review. Allows are per request, never saved to the agent’s permanent allowlist. Changing the connection stops current tasks.</p>
     </div>
-    <label>File folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
-    <label for="agentBrowser">Browser when the avatar is in front</label><select id="agentBrowser"><option value="chrome">Chrome</option><option value="safari">Safari</option><option value="edge">Edge</option><option value="brave">Brave</option></select>
-    <p class="note">An active supported browser takes priority. Reading needs macOS Automation permission and the browser’s “Allow JavaScript from Apple Events” option. The avatar reads the page only when requested.</p>
+    <label>Agent starting folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
+    <p class="note">This is a starting location, not a file-access boundary. File access, browser use and computer control follow the selected agent’s own setup and permissions. Configure browser/computer connections in that agent.</p>
   </section>
 
   <section>
@@ -172,7 +171,7 @@
   const $ = s => document.querySelector(s);
   let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' }, codexModelChoices = [], codexConnection = null;
   let agentInventory=null;
-  const runtimeConnections={}, runtimeNames={openclaw:'OpenClaw',hermes:'Hermes'};
+  const runtimeConnections={}, runtimeNames={openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build'};
   const localDelegate=s=>s.reasoningMode==='delegate'&&s.delegate.auth==='local_runtime';
   const localEngine=()=>SETTINGS.reasoningMode==='delegate'&&SETTINGS.delegate.auth==='codex_app_server'?'codex':localDelegate(SETTINGS)?SETTINGS.delegate.provider:SETTINGS.agentEngine;
   const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
@@ -198,29 +197,29 @@
     renderBackends(settings.recommendedBackends, settings.backendModel);
     renderDelegate(settings);
     const sharedCodex=settings.reasoningMode==='delegate'&&settings.delegate.auth==='codex_app_server';
-    const sharedRuntime=localDelegate(settings);const engine=sharedCodex?'codex':sharedRuntime?settings.delegate.provider:settings.agentEngine||'basic';
-    $('#agentEngine').value=engine;$('#agentEngine').disabled=sharedCodex||sharedRuntime;$('#sharedCodexEngine').hidden=!sharedCodex&&!sharedRuntime;$('#sharedCodexEngine').textContent=sharedRuntime?'Uses the '+runtimeNames[engine]+' connection selected under Reasoning above.':'Uses the Codex App Server connection and model selected under Reasoning above.';$('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
+    const sharedRuntime=localDelegate(settings);const engine=sharedCodex?'codex':sharedRuntime?settings.delegate.provider:settings.agentEngine||'codex';
+    for(const option of $('#agentEngine').options)option.disabled=settings.installedEngines?.[option.value]===false;$('#agentEngine').value=engine;$('#agentEngine').disabled=sharedCodex||sharedRuntime;$('#sharedCodexEngine').hidden=!sharedCodex&&!sharedRuntime;$('#sharedCodexEngine').textContent=sharedRuntime?'Uses the '+runtimeNames[engine]+' connection selected under Reasoning above.':'Uses the Codex App Server connection and model selected under Reasoning above.';$('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
-    $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';$('#agentBrowser').value=settings.agentBrowser||'chrome';
+    $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';
   }
   function renderPermissions(settings) {
     const choices=settings.agentPermissionChoices||[], picker=$('#agentAccess');
     picker.replaceChildren(...choices.map(choice=>new Option(choice.label,choice.value)));
-    picker.value=settings.agentAccess||'full';
+    picker.value=settings.agentPermissions?.codex||'full';
     $('#agentAccessDescription').textContent=choices.find(choice=>choice.value===picker.value)?.description||'';
   }
   function renderDelegate(s) {
     const d=s.delegate,local=d.auth==='local_runtime',a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',codex=d.auth==='codex_app_server',waiting=['starting','waiting'].includes(a.state);
     $('#reasoningMode').value=s.reasoningMode;$('#delegateOptions').hidden=s.reasoningMode!=='delegate';$('#managedBackend').hidden=s.reasoningMode==='delegate';
-    $('#delegateProvider').value=d.provider;
+    $('#delegateProvider').value=d.provider;for(const option of $('#delegateProvider').options)if(runtimeNames[option.value])option.disabled=s.installedEngines?.[option.value]===false;
     $('#delegateAuth').replaceChildren(new Option('API key','api_key'),new Option('Account sign-in · OAuth2','oauth2'),...(d.provider==='openai'?[new Option('Codex App Server','codex_app_server')]:[]));if(local)$('#delegateAuth').replaceChildren(new Option('Existing agent connection','local_runtime'));$('#delegateAuth').disabled=local;$('#delegateAuth').value=d.auth;$('#delegateCodex').hidden=!codex;$('#delegateRuntime').hidden=!local;$('#delegateModelControls').hidden=local&&d.provider==='openclaw';
     $('#openaiDelegateKey').hidden=codex||oauth||d.provider!=='openai';$('#xaiDelegateKey').hidden=codex||oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
     $('#signIn').textContent=d.provider==='openai'?'Sign in with OpenAI':'Sign in with xAI';$('#signIn').disabled=waiting;$('#cancelSignIn').hidden=!waiting;$('#signOut').disabled=!a.signedIn;
-    $('#signInNote').textContent=d.provider==='openai'?'Opens the OpenAI browser sign-in flow used by OpenClaw.':'Uses the xAI device-code flow used by OpenClam, compatible with Grok Build.';
+    $('#signInNote').textContent=d.provider==='openai'?'Opens the OpenAI browser sign-in flow used by OpenClaw.':'Uses xAI account sign-in for direct reasoning. Grok Build uses its own separate native sign-in.';
     $('#deviceCode').textContent=a.userCode?'Your sign-in code: '+a.userCode:'';
     setState($('#delegateAccountState'),oauth?(a.error||a.message||(a.signedIn?'Signed in on this Mac.':'Not signed in.')):(a.hasKey?'API key saved on this Mac.':'Add an API key to use this provider.'),a.error?'bad':(oauth?a.signedIn:a.hasKey)?'ok':'');
     if(codex)renderCodexAccount();if(local){const r=runtimeConnections[d.provider];setState($('#delegateAccountState'),r?(r.ok?r.message:r.error):'Check the agent connection below. It must be installed and configured on this Mac.',r?.ok?'ok':r?'bad':'');}
-    $('#delegateModelNote').textContent=local?(d.provider==='openclaw'?'OpenClaw’s gateway chooses the model from its own configuration.':'Use the configured Hermes model, or select a model advertised by your Hermes connection.')+' Actions must be enabled for this connection; its ACP bridge does not offer a tool-free mode.':codex?'One model for delegated reasoning and enabled actions in solo and Together. Account default uses GPT-5.6 Sol with ChatGPT sign-in or GPT-5.6 Luna with Codex API-key sign-in.':'OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.';
+    $('#delegateModelNote').textContent=local?(d.provider==='openclaw'?'OpenClaw’s gateway chooses the model from its own configuration.':'Use the agent’s configured model, or select a model advertised by its connection.')+' Actions must be enabled for this connection; its ACP bridge does not offer a tool-free mode.':codex?'One model for delegated reasoning and enabled actions in solo and Together. Account default uses GPT-5.6 Sol with ChatGPT sign-in or GPT-5.6 Luna with Codex API-key sign-in.':'OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.';
     renderDelegateModels(local?runtimeConnections[d.provider]?.models||[]:codex?codexModelChoices:d.choices[d.provider]||[],d.model);
   }
   function renderAgentBindings(s){
@@ -244,10 +243,10 @@
   }
   function renderRuntime(s){
     const engine=localEngine(),local=Boolean(runtimeNames[engine]);$('#runtimeOptions').hidden=!local;if(!local)return;
-    const shared=localDelegate(s);$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on this Mac. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':'Install Hermes with its ACP extra.');
+    const shared=localDelegate(s);$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on this Mac. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':engine==='hermes'?'Install Hermes with its ACP extra.':'Sign in with Grok Build using grok login.');
     if(document.activeElement!==$('#runtimePath'))$('#runtimePath').value=s.agentRuntimePaths?.[engine]||'';
     $('#runtimeModelRow').hidden=shared||engine==='openclaw';if(document.activeElement!==$('#runtimeModel'))$('#runtimeModel').value=s.agentRuntimeModels?.[engine]||'';
-    $('#runtimeAccess').value=s.agentAccess==='full'?'full':'workspace';
+    $('#runtimeAccess').value=s.agentPermissions?.[engine]==='full'?'full':'workspace';
     const r=runtimeConnections[engine];setState($('#runtimeState'),r?(r.ok?r.message:r.error):'Not checked yet.',r?.ok?'ok':r?'bad':'');
   }
   async function checkRuntime(engine=localEngine()){
@@ -342,17 +341,16 @@
   $('#clearKey').onclick = async () => { await gla.clearApiKey(); render(await gla.getSettings()); };
   $('#refreshModels').onclick = loadModels;
   $('#agentEngine').onchange=()=>save({agentEngine:$('#agentEngine').value});
-  $('#agentAccess').onchange=()=>save({agentAccess:$('#agentAccess').value});
+  $('#agentAccess').onchange=()=>save({agentPermissions:{codex:$('#agentAccess').value}});
   $('#codexSaveModel').onclick=()=>{const model=modelValue('agentCodexModel');if(model&&!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(model)){setState($('#codexStatus'),'Enter a valid model ID.','bad');return;}return save({agentCodexModel:model});};
   $('#refreshAgents').onclick=refreshAgents;
   $('#runtimeCheck').onclick=()=>checkRuntime();$('#delegateRuntimeCheck').onclick=()=>checkRuntime(SETTINGS.delegate.provider);
-  $('#runtimeAccess').onchange=()=>save({agentAccess:$('#runtimeAccess').value});
+  $('#runtimeAccess').onchange=()=>save({agentPermissions:{[localEngine()]:$('#runtimeAccess').value}});
   $('#runtimeSavePath').onclick=async()=>{const engine=localEngine(),value=$('#runtimePath').value.trim();if(value&&!value.startsWith('/')){setState($('#runtimeState'),'Use the full path to the executable, without command arguments.','bad');return;}delete runtimeConnections[engine];await save({agentRuntimePaths:{[engine]:value}});await refreshAgents();};
   $('#runtimeSaveModel').onclick=()=>save({agentRuntimeModels:{[localEngine()]:$('#runtimeModel').value.trim()}});
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
   $('#agentEnabled').onchange=()=>save({agentEnabled:$('#agentEnabled').checked});
-  $('#agentBrowser').onchange=()=>save({agentBrowser:$('#agentBrowser').value});
   $('#agentChooseFolder').onclick=async()=>{await gla.agent.chooseFolder();render(await gla.getSettings());};
   $('#reasoningMode').onchange=()=>save({reasoningMode:$('#reasoningMode').value});
   $('#delegateProvider').onchange=()=>save({delegateProvider:$('#delegateProvider').value});

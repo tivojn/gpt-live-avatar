@@ -1,6 +1,6 @@
 # Local agent engines
 
-GPT-Live Avatar v0.2.9 can use Codex App Server, OpenClaw or Hermes for delegated reasoning and enabled actions. These are separate local runtimes. Installing the avatar app does not install them or configure their provider accounts.
+GPT-Live Avatar v0.2.10 can use Codex App Server, OpenClaw, Hermes or Grok Build for delegated reasoning and enabled actions. These are separate local runtimes. Installing the avatar app does not install them or configure their provider accounts.
 
 ## Choose a connection
 
@@ -8,7 +8,13 @@ GPT-Live Avatar v0.2.9 can use Codex App Server, OpenClaw or Hermes for delegate
 - **OpenClaw:** Settings → Reasoning → Delegate mode → OpenClaw. Install/configure OpenClaw and keep its gateway running. Verify `openclaw agents list --json` and `openclaw acp --help` locally. The gateway controls each agent’s model.
 - **Hermes:** Settings → Reasoning → Delegate mode → Hermes. Install Hermes with ACP support and verify `hermes acp --check`. Configure its provider with `hermes model` or its native configuration tools. The app lists the models advertised by ACP; a listed model still requires an eligible configured account.
 
-When a runtime is selected for reasoning, enabled actions use the same runtime. To retain direct API/OAuth reasoning, choose the action engine separately under Actions and page context. An unavailable selected runtime produces a setup error; the app does not silently substitute Codex or an API provider.
+- **Grok Build:** Install Grok Build and complete its native `grok login`. Select Grok Build in Reasoning and check the connection. The adapter launches `grok --no-auto-update agent --no-leader stdio`, authenticates with its cached native login (or native `XAI_API_KEY` environment credential), and lists models advertised by the agent. It is the real agent runtime, not a direct xAI chat API relabelled as an agent. See [Grok headless scripting](https://docs.x.ai/build/cli/headless-scripting).
+
+Right-click **Delegate Reasoning Provider → provider → Use provider** to switch reasoning and enabled actions together. The current provider is marked with a check. Each submenu has its own saved permissions; selecting a permission does not switch providers. Missing installations are disabled. A saved custom executable can be configured in Settings.
+
+When a runtime is selected for reasoning, enabled actions use the same runtime. To retain direct API/OAuth reasoning, choose the action engine separately under Agent actions. An unavailable selected runtime produces a setup error; the app does not silently substitute Codex or an API provider.
+
+The built-in action engine, file tools and app-owned page extraction were removed in v0.2.10. Old `basic` engine selections migrate to Codex; an explicitly selected external reasoning engine takes precedence. If it is unavailable, the app reports setup is needed. No local file-tool fallback remains. Browser/computer use belongs entirely to the selected agent; configure those connections there. The starting folder is its working directory, not an app-enforced file boundary.
 
 Voice and voice previews still use the OpenAI voice API key, and existing transcription usage is unchanged. Local runtimes use their own provider credentials and billing/allowance. GPT-Live Avatar neither copies nor embeds their OAuth tokens.
 
@@ -33,11 +39,11 @@ Complete the browser sign-in started by Hermes. In Hermes v0.21.3, a fresh named
 
 ## Tools, permissions and task updates
 
-Both adapters use ACP over a private child process’s stdin/stdout. They stream public progress and verified tool results to the addressed avatar’s overhead bubble. Private thought events are ignored. Solo and Together share the same backend; Together passes the addressed character plus the shared conversation and completed-action receipts.
+The ACP adapters use ACP over a private child process’s stdin/stdout. They stream public progress and verified tool results to the addressed avatar’s overhead bubble. Private thought events are ignored. Solo and Together share the same backend; Together passes the addressed character plus the shared conversation and completed-action receipts.
 
-Code, shell and general file work use the runtime’s own tools. Avatar movement, animation and current-page extraction use a short-lived loopback endpoint restricted to the existing app tool allowlist. The runtime accesses it with its native terminal tool. It has a random per-task secret, rejects browser-origin requests, expires at completion/cancellation, and is never a public server. An agent needs a working terminal tool to invoke these avatar-specific controls. This is used because the installed OpenClaw ACP bridge does not accept per-session MCP servers.
+Code, shell and general file work use the runtime’s own tools. Avatar movement and animation use a short-lived loopback endpoint restricted to the three visual tools: `avatar_state`, `move_avatar`, and `play_motion`. The runtime accesses it with its native terminal tool. It has a random per-task secret, rejects browser-origin requests, expires at completion/cancellation, and is never a public server. An agent needs a working terminal tool to invoke these avatar-specific controls. This is used because the installed OpenClaw ACP bridge does not accept per-session MCP servers.
 
-The runtime retains its own security configuration. The app can either ask when ACP requests approval or allow a request once for the current task; it never installs a permanent allowlist entry. Codex automatic review/sandbox semantics are not claimed for these other runtimes. Native OS permissions and external app prompts may still appear. The installed OpenClaw/Hermes bridges do not expose a tool-free mode, so actions must be enabled to use them; use Codex or an API connection for reasoning with actions disabled.
+The runtime retains its own security configuration. The app can either ask when ACP requests approval or allow a request once for the current task; it never installs a permanent allowlist entry. Codex automatic review/sandbox semantics are not claimed for these other runtimes. Native OS permissions and external app prompts may still appear. The installed OpenClaw/Hermes/Grok bridges do not expose a tool-free mode, so actions must be enabled to use them; use Codex or an API connection for reasoning with actions disabled.
 
 Tasks use isolated sessions, a ten-minute request timeout, explicit cancellation and bounded protocol messages. Cancellation cannot undo already completed external work. Global runtime settings, gateway permissions and default agents are not modified by choosing an avatar assignment.
 
@@ -49,6 +55,6 @@ Tasks use isolated sessions, a ten-minute request timeout, explicit cancellation
 ./node_modules/.bin/electron qa/runtime-app.cjs --live
 ```
 
-This uses a disposable app profile, local avatar assets under `build/characters`, and files under `build/qa-runtime-app/files`. It makes real model/tool requests through Hermes and OpenClaw and checks solo/Together profile routing, file creation/readback, Sarah’s avatar motion receipt and Settings/About screens. It does not open the microphone or create voice sessions. The local test fixture expects OpenClaw `main` and Hermes `default`/`tia`; adapt those IDs for another machine.
+This uses a disposable app profile, local avatar assets under `build/characters`, and files under `build/qa-runtime-app/files`. It makes real model/tool requests through Hermes, OpenClaw and Grok Build and checks solo/Together profile routing, file creation/readback, Sarah’s avatar motion receipt and Settings/About screens. It does not open the microphone or create voice sessions. The local test fixture expects OpenClaw `main` and Hermes `default`/`tia`; adapt those IDs for another machine.
 
-Validated with OpenClaw 2026.9.4 and Hermes 0.21.3. Browser/computer capabilities depend on the chosen runtime’s installed tools and accounts; connecting ACP does not grant every Codex capability automatically.
+Validated with OpenClaw 2026.9.4, Hermes 0.21.3 and Grok Build 1.0.5. Browser/computer capabilities depend on the chosen runtime’s installed tools and accounts; connecting ACP does not grant every Codex capability automatically.

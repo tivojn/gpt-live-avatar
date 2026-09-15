@@ -8,7 +8,7 @@ Keep **Let avatars carry out my requests** enabled for tools. With actions off,
 questions use a restricted reasoning-only Codex thread. The connection test
 also uses reasoning only. Voice still needs the app's OpenAI API key.
 
-The separate **Actions and page context → Action engine → Codex** option remains
+The separate **Agent actions → Action engine → Codex** option remains
 available when using another reasoning connection. Its independent model choice
 is preserved when switching to and from Codex App Server. Existing authentication,
 model, permission and appearance preferences are not changed by this update.
@@ -26,7 +26,7 @@ GPT‑6 Astra, with a custom model option. Account availability is checked by
 Codex itself. The desktop engine is preferred over older standalone CLI
 installations; GLA_CODEX_PATH can explicitly select a different executable.
 
-Choose **Codex permissions** in Settings or any character’s right-click menu:
+Choose **Codex permissions** in Settings or right-click **Delegate Reasoning Provider → Codex App Server**. This choice is saved independently of the other agents:
 
 - **Ask for approval**: work in the selected folder; ask for additional access.
 - **Approve for me**: use Codex’s own risk reviewer for additional access requests.

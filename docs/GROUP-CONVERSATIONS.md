@@ -16,7 +16,7 @@ Live voices use the configured voice API key. Reasoning requests use the reasoni
 
 ## Shared context and addressed requests
 
-Say **“Hi Tia, create shared.txt in the selected folder.”** Then **“Hi Sarah, delete that file.”** Sarah receives the verified filename and result from Tia's tools. Built-in file removal moves an explicitly requested individual file to the Mac's Trash. The selected folder applies to all characters. The built-in engine does not remove folders or symbolic links; Codex has broader file and command capabilities controlled by its access setting and approvals.
+Say **“Hi Tia, create shared.txt in the selected folder.”** Then **“Hi Sarah, delete that file.”** Sarah receives the verified filename and result from Tia's tools. File operations use the selected external agent’s tools and permissions. The avatar app has no built-in file or browser action engine. Shared tool receipts let another character refer to completed work; a failed task must be reported as a failure.
 
 All participants receive the shared dialogue and verified action results. Only the character you address answers or acts; she waits for your next contribution. Name someone else to switch, or say **“Everyone, continue the conversation”** to resume the roundtable. The action history survives speaker changes and longer conversations within the open Together window. Closing the window starts a fresh shared context.
 

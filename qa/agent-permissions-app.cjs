@@ -10,6 +10,7 @@ const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('consol
 require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms)),run=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
 async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end){const result=await fn();if(result)return result;await wait(100);}throw Error('Timed out: '+label);}
 const access=async w=>run(w,'return (await gla.getSettings()).agentAccess');
+const permissionItems=()=>menu.find(i=>i.label==='Delegate Reasoning Provider').submenu.find(i=>i.label.includes('Codex App Server')).submenu.filter(i=>['Ask for approval','Approve for me','Full access'].includes(i.label));
 const picker=async w=>run(w,"return document.querySelector('#agentAccess').value");
 app.whenReady().then(async()=>{try{
  const solo=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'solo');await until(()=>run(solo,'return window.gla_avatar?.resources.ready'),'avatar');
@@ -17,16 +18,25 @@ app.whenReady().then(async()=>{try{
  if(restart){assert.equal(await access(solo),'auto_review');assert.equal(await picker(settings),'auto_review');console.log('Saved permission survives restart.');return;}
  assert.equal(await access(solo),'full','New profile defaults to Full access');
  assert.deepEqual(await run(settings,"return [...document.querySelector('#agentAccess').options].map(o=>o.text)"),['Ask for approval','Approve for me','Full access']);
- const openSolo=async()=>{menu=null;await run(solo,'await gla.showMenu({})');return menu.find(i=>i.label==='Codex permissions').submenu;};
+ const openSolo=async()=>{menu=null;await run(solo,'await gla.showMenu({})');return permissionItems();};
  for(const mode of ['workspace','auto_review','full']){
   await run(settings,`const p=document.querySelector('#agentAccess');p.value=${JSON.stringify(mode)};await p.onchange();`);
   assert.equal(await access(solo),mode);const choices=await openSolo();assert.equal(choices.filter(c=>c.checked).length,1);assert.equal(choices.find(c=>c.checked).label,mode==='workspace'?'Ask for approval':mode==='auto_review'?'Approve for me':'Full access');
  }
  (await openSolo()).find(c=>c.label==='Ask for approval').click();await until(async()=>await picker(settings)==='workspace','menu updates settings');
  await run(solo,'await gla.group.open()');const group=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/group.html')),'Together');await until(()=>run(group,'return window.gla_group&&!gla_group.state.loading'),'cast');
- await run(group,"await gla.group.showMenu({slug:'sarah'})");let choices=menu.find(i=>i.label==='Codex permissions').submenu;assert.equal(choices.find(c=>c.checked).label,'Ask for approval');choices.find(c=>c.label==='Approve for me').click();
+ await run(group,"await gla.group.showMenu({slug:'sarah'})");let choices=permissionItems();assert.equal(choices.find(c=>c.checked).label,'Ask for approval');choices.find(c=>c.label==='Approve for me').click();
  await until(async()=>await picker(settings)==='auto_review','Together selection updates settings');assert.equal(await access(solo),'auto_review');assert.equal(await access(group),'auto_review');
  await run(group,"await gla.setSettings({agentAccess:'bogus'})");assert.equal(await access(solo),'auto_review','Invalid patch cannot increase access');
+ // Selecting another provider's permissions must not switch providers or alter Codex.
+ const providers=menu.find(i=>i.label==='Delegate Reasoning Provider').submenu;
+ providers.find(i=>i.label.includes('Hermes')).submenu.find(i=>i.label==='Ask when the agent requests approval').click();
+ await until(async()=>await run(solo,"return (await gla.getSettings()).agentPermissions.hermes==='workspace'"),'separate Hermes setting');
+ assert.equal(await access(solo),'auto_review');
+ providers.find(i=>i.label.includes('Hermes')).submenu[0].click();
+ await until(async()=>await run(solo,"return (await gla.getSettings()).delegate.provider==='hermes'"),'switch to Hermes');assert.equal(await access(solo),'workspace');
+ providers.find(i=>i.label.includes('Codex App Server')).submenu[0].click();
+ await until(async()=>await run(solo,"return (await gla.getSettings()).delegate.auth==='codex_app_server'"),'switch back to Codex');assert.equal(await access(solo),'auto_review');
  assert.equal(fs.readFileSync(out+'/profile/config.json','utf8').includes('auto_review'),true);
  await run(settings,"document.querySelector('#agentAccess').scrollIntoView({block:'center'})");await wait(300);fs.writeFileSync(out+'/permissions-settings.png',(await settings.webContents.capturePage()).toPNG());
  assert.deepEqual(errors,[]);fs.writeFileSync(out+'/report.json',JSON.stringify({passed:true,choices:choices.map(c=>c.label),saved:await access(solo),errors},null,2));console.log('Default, Settings, solo/Together menus, cross-window updates and persistence passed.');

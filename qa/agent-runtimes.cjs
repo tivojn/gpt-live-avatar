@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const {AcpAgent}=require('../electron/acp-agent.cjs');
 const {findRuntime}=require('../electron/acp-client.cjs');
 const {hermesProfiles,assignedAgent}=require('../electron/runtime-agents.cjs');
-const {createAgentTools}=require('../electron/agent-tools.cjs');
+const {createAvatarTools}=require('../electron/avatar-tools.cjs');
 const {runtimeTools}=require('../electron/runtime-tools.cjs');
 const {normalizeDelegate,reasoningEngine,actionEngine,DelegateBackend,selected}=require('../electron/delegate.cjs');
 const tick=()=>new Promise(r=>setImmediate(r));
@@ -31,7 +31,7 @@ class Client{
   assert.deepEqual(hermesProfiles(profiles).map(a=>[a.id,a.isDefault]),[['default',false],['tia',true]]);
   assert.equal(assignedAgent('hermes',{avatarAgentBindings:{'ming-mei':{hermes:'tia'}}},'Ming-Mei'),'tia');
  }finally{fs.rmSync(profiles,{recursive:true,force:true});}
- for(const engine of ['hermes','openclaw']){
+ for(const engine of ['hermes','openclaw','grok']){
   let client,approvals=0;const progress=[],receipts=[];
   const a=new AcpAgent({engine,discover:async()=>({installed:true,agents:[{id:'default',isDefault:true},{id:'tia'}]}),clientFactory:o=>client=new Client(o),approve:async()=>{approvals++;return false;}});
   const cfg={agentEnabled:true,agentAccess:'workspace',agentFolder:os.tmpdir(),agentRuntimeModels:{[engine]:'provider:model/v2'},avatarAgentBindings:{sarah:{[engine]:'tia'}}};
@@ -53,7 +53,7 @@ class Client{
   await assert.rejects(client.onRequest('session/request_permission',{sessionId:'s1',options:[]}),/Unavailable/);
   await assert.rejects(a.answer(1,'missing',{...cfg,avatarAgentBindings:{sarah:{[engine]:'deleted'}}},[],'hello','Sarah'),/no longer exists/);assert.equal(a.jobs.size,0);assert(client.closed);
  }
- const requested=createAgentTools({config:{agentFolder:os.tmpdir()},request:'Sarah, play your boxing warmup.',avatarCommand:async()=>({ok:true})});assert.equal((await requested.execute('play_motion',{character:'Sarah',motion:'boxing-warmup'},new AbortController().signal)).ok,true);
+ const requested=createAvatarTools({config:{agentFolder:os.tmpdir()},request:'Sarah, play your boxing warmup.',avatarCommand:async()=>({ok:true})});assert.equal((await requested.execute('play_motion',{character:'Sarah',motion:'boxing-warmup'},new AbortController().signal)).ok,true);
  const abort=new AbortController(),executed=[],tool={tools:[{name:'play_motion'}],execute:async(name,args)=>{executed.push(args);return {ok:true};}};
  const bridge=await runtimeTools(tool,abort.signal);const url=bridge.instructions.match(/HTTP POST (http:\/\/\S+)/)[1];
  assert.equal((await fetch(url,{method:'POST',body:'{}'})).status,403);

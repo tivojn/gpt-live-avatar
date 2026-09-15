@@ -14,6 +14,7 @@ function hermesProfiles(root=hermesRoot()){
 async function discoverAgents(engine,config={},exec=promisify(execFile)){
  let command;try{command=findRuntime(engine,config.agentRuntimePaths?.[engine]||'');}catch(error){return {installed:false,agents:[],error:error.message};}
  try{
+  if(engine==='grok')return {installed:true,agents:[{id:'default',name:'Grok Build',isDefault:true}],kind:'runtime'};
   if(engine==='hermes')return {installed:true,agents:hermesProfiles(),kind:'profile'};
   const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;env.PATH=[path.dirname(command.file),'/opt/homebrew/bin','/usr/local/bin','/usr/bin','/bin',env.PATH||''].join(path.delimiter);
   const {stdout}=await exec(command.file,['agents','list','--json'],{env,timeout:20000,maxBuffer:1024*1024});

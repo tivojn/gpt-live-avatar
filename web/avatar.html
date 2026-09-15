@@ -14,11 +14,11 @@
   #bubble.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(-6px); }
   #bubble .head { display: flex; align-items: center; gap: 8px; }
   #bubble .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a7a82; flex: 0 0 auto; }
-  #bubble .dot.connecting { background: #f5b942; animation: pulse 1s infinite; } #bubble .dot.live { background: #4cd964; } #bubble .dot.speaking { background: #4cd964; box-shadow: 0 0 0 4px rgba(76,217,100,.25); } #bubble .dot.error { background: #ff5b4d; }
+  #bubble .dot.connecting { background: #f5b942; animation: pulse 1s infinite; } #bubble .dot.live { background: #29aa94; animation: listening-dot 3.4s ease-in-out infinite; } #bubble .dot.speaking { background: #4cd964; box-shadow: 0 0 0 4px rgba(76,217,100,.25); } #bubble .dot.error { background: #ff5b4d; }
   @keyframes pulse { 50% { opacity: .35; } }
-  #bubble .meter { display: inline-flex; align-items: center; gap: 2px; height: 14px; width: 26px; flex: 0 0 auto; }
-  #bubble .meter i { display: block; width: 3px; height: 3px; border-radius: 2px; background: var(--bubble-dim); transition: height .06s linear, background .2s; }
-  #bubble .meter.user i { background: #3b82f6; } #bubble .meter.ai i { background: #34c759; }
+  :is(#bubble, #listen) .meter { display: inline-flex; align-items: center; gap: 2px; height: 14px; width: 26px; flex: 0 0 auto; }
+  :is(#bubble, #listen) .meter i { display: block; width: 3px; height: 3px; border-radius: 2px; background: var(--bubble-dim); transition: height .06s linear, background .2s; }
+  :is(#bubble, #listen) .meter.user i { background: #3b82f6; } :is(#bubble, #listen) .meter.ai i { background: #34c759; }
   #bubble .name { font-weight: 600; } #bubble .status { color: var(--bubble-dim); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   #bubble .lines { margin: 6px 0 2px; max-height: 96px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
   #bubble .line { font-size: 12.5px; line-height: 1.35; padding: 5px 8px; border-radius: 9px; background: var(--bubble-assistant); }
@@ -42,10 +42,22 @@
   #bubble input::placeholder { color: var(--bubble-dim); }
   #bubble input:focus { border-color: rgba(127,181,255,.8); }
   /* Listening pill: shown whenever a conversation is on and the bubble is hidden. */
-  #listen { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px 4px 7px; border-radius: 14px; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); font-size: 11px; pointer-events: auto; transition: opacity .18s; }
-  #listen.hidden { opacity: 0; pointer-events: none; } #listen svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
-  #listen .meter { width: 20px; height: 12px; } #listen .meter i { width: 3px; }
-  #listen.muted:not(.hidden) { opacity: .6; }
+  #listen { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px 6px 7px; border-radius: 24px; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); box-shadow: 0 4px 18px rgba(0,0,0,.12); backdrop-filter: blur(14px); font-size: 12px; font-weight: 500; pointer-events: auto; transition: opacity .18s; }
+  #listen.hidden { opacity: 0; pointer-events: none; }
+  #listen .listen-orb { position: relative; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #168574; background: rgba(41,170,148,.12); flex: 0 0 auto; }
+  #listen .listen-orb::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(41,170,148,.18); opacity: 0; }
+  #listen.listening .listen-orb::before { animation: listening-breath 3.4s ease-in-out infinite; }
+  #listen svg { position: relative; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  #listen .meter { width: 22px; height: 14px; gap: 2px; }
+  #listen .meter i { width: 3px; background: #29aa94; opacity: .7; }
+  #listen.muted .listen-orb { color: var(--bubble-dim); background: var(--bubble-chip); }
+  #listen.muted .meter i { background: var(--bubble-dim); }
+  #listen.muted:not(.hidden) { opacity: .75; }
+  @keyframes listening-breath { 0%,100% { transform: scale(.84); opacity: .2; } 50% { transform: scale(1.4); opacity: .65; } }
+  @keyframes listening-dot { 0%,100% { box-shadow: 0 0 0 2px rgba(41,170,148,.08); } 50% { box-shadow: 0 0 0 5px rgba(41,170,148,.2); } }
+  #listen.hidden .listen-orb::before, #bubble.hidden .dot { animation-play-state: paused; }
+  @media (prefers-color-scheme: dark) { #listen .listen-orb { color: #66dbc8; } }
+  @media (prefers-reduced-motion: reduce) { #listen.listening .listen-orb::before, #bubble .dot { animation: none; } }
   #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--bubble-bg); color: var(--bubble-text); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
   #steerDialog { width: min(310px, 85vw); box-sizing: border-box; border: 1px solid var(--bubble-line); border-radius: 14px; padding: 14px; background: var(--bubble-bg); color: var(--bubble-text); }
@@ -69,7 +81,7 @@
     <button class="icon end" id="endBtn" title="End conversation"><svg viewBox="0 0 20 20"><path d="M3 11.5c4-3.5 10-3.5 14 0l-2.2 2.4-2.6-1.4v-2c-1.4-.5-3-.5-4.4 0v2l-2.6 1.4z" fill="currentColor" stroke="none"/></svg></button>
   </div>
 </div>
-<div id="listen" class="hidden"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><span class="meter" id="listenMeter"><i></i><i></i><i></i><i></i><i></i></span><span id="listenText">Listening</span></div>
+<div id="listen" class="hidden" role="button" tabindex="0" aria-label="Show conversation"><span class="listen-orb" aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg></span><span class="meter" id="listenMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span id="listenText">Listening</span></div>
 <div id="toast"></div>
 <dialog id="steerDialog"><form method="dialog"><label for="steerMessage">Send a message</label><input id="steerMessage" autocomplete="off"><button value="cancel">Cancel</button> <button value="send">Send</button></form></dialog>
 <script type="module" src="/avatar3d.js"></script>
@@ -87,6 +99,8 @@ import { CompanionController, AvatarStudioStage, isSpatialAction } from '/avatar
 const $ = s => document.querySelector(s);
 const stageEl = $('#stage'); const context = stageEl.getContext('2d', { alpha: true });
 const bubble = $('#bubble');
+$('#listen').onclick=()=>showBubble();
+$('#listen').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showBubble();}};
 let settings = await gla.getSettings();
 let avatar = null; let companion = null; let ready = false; let renderRequest = 0; let lastFrame = 0;
 let reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -611,7 +625,7 @@ setInterval(() => {
 }, 1000);
 addEventListener('pagehide', () => live.stop('unload'));
 addEventListener('beforeunload', () => live.stop('unload'));
-setInterval(() => { if(live.state==='connected'){conversationStatus.dot=speaking?'speaking':'live';paintStatus();} },250);
+setInterval(() => { if(live.state==='connected'){conversationStatus.dot=speaking?'speaking':live.muted?'':'live';paintStatus();} },250);
 // Five bars flash with whoever is talking: blue for you, green for her.
 const meterBars = [...document.querySelectorAll('#meter i'), ...document.querySelectorAll('#listenMeter i')];
 const meterShape = [.45, .8, 1, .8, .45];
@@ -621,7 +635,7 @@ const paintMeter = () => {
   const level = Math.max(her, you * 1.2), who = her >= you ? 'ai' : you > .05 ? 'user' : '';
   $('#meter').className = 'meter ' + (level > .05 ? who : ''); $('#listenMeter').className = 'meter ' + (level > .05 ? who : '');
   const pill = $('#listen'), showPill = live.state === 'connected' && bubble.classList.contains('hidden');
-  pill.classList.toggle('hidden', !showPill); pill.classList.toggle('muted', live.muted);
+  pill.classList.toggle('hidden', !showPill); pill.tabIndex=showPill?0:-1; pill.setAttribute('aria-hidden',String(!showPill)); pill.classList.toggle('muted', live.muted); pill.classList.toggle('listening', showPill && !live.muted && her <= .05);
   $('#listenText').textContent = live.muted ? 'Muted' : her > .05 ? 'Speaking' : 'Listening';
   const wobble = performance.now() / 90;
   meterBars.forEach((bar, i) => { const h = level > .05 ? 3 + 11 * Math.min(1, level) * meterShape[i % 5] * (.75 + .25 * Math.abs(Math.sin(wobble + i))) : 3; bar.style.height = h + 'px'; });
