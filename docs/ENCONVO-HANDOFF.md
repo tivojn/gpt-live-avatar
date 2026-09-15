@@ -621,3 +621,7 @@ Blender files or live microphone.
 > and original character proportions, and test inside EnConvo before claiming
 > completion. Treat proposed events/tools as interfaces to implement, not an
 > existing SDK. Report host assumptions, hardware measurements and limitations.
+
+## Addendum: v0.2.9 local runtimes
+
+The standalone app now also supports OpenClaw and Hermes, including per-character native-agent/profile choices. See [AGENT-RUNTIMES.md](AGENT-RUNTIMES.md). These adapters are optional reference integrations: EnConvo should continue to use its own credentials, reasoning and action system as described above. `electron/acp-client.cjs`, `acp-agent.cjs`, `runtime-agents.cjs` and `runtime-tools.cjs` belong to the standalone runtime layer and are not renderer dependencies.

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'">
+<title>About GPT-Live Avatar</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7f8fc;color:#252737;font:14px/1.55 -apple-system,BlinkMacSystemFont,sans-serif}main{padding:27px 28px 22px;max-width:680px;margin:auto}h1{font-size:27px;line-height:1.2;letter-spacing:-.7px;margin:0 0 6px}h2{font-size:16px;margin:0 0 8px}.brand{color:#707585;font-size:12px;margin:0 0 18px}.version{display:inline-block;border:1px solid #e0e2ed;border-radius:20px;padding:4px 11px;background:white;font-weight:600}.meta{font-size:12px;color:#707585;margin-left:8px}#description{margin:16px 0 20px;color:#555b6b}.card{padding:17px 19px;background:white;border:1px solid #e2e4ed;border-radius:16px;margin:14px 0}.title{color:#626879;font-size:13px;margin:0 0 10px}ul{margin:0;padding-left:18px}li+li{margin-top:7px}button{font:inherit;border:1px solid #d9dce8;border-radius:9px;background:white;color:#353b50;padding:8px 12px;cursor:pointer}button.primary{background:#383e61;border-color:#383e61;color:white}button:disabled{cursor:default;opacity:.55}button:focus-visible{outline:3px solid #8ba7ff;outline-offset:2px}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}#status{margin:0;font-weight:600}#status[data-state=error]{color:#a43642}#status[data-state=available]{color:#23734b}#update-detail{margin:6px 0 0;font-size:13px;color:#626879}#release-notes{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;max-height:200px;overflow:auto;margin:10px 0 0}details{margin-top:12px}summary{cursor:pointer;font-size:13px;color:#41496a}footer{display:flex;justify-content:space-between;align-items:center;color:#777d8c;font-size:12px;margin-top:18px}footer button{border:0;background:none;padding:3px;color:#535d88}#action-error{font-size:12px;color:#a43642}body [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1>GPT-Live Avatar</h1>
+  <p class="brand">Powered by EnConvo</p>
+  <span class="version" id="version">Loading version…</span><span class="meta" id="architecture"></span>
+  <p id="description"></p>
+  <section class="card" aria-labelledby="new-heading">
+    <h2 id="new-heading">What’s new in this version</h2>
+    <p class="title" id="release-title"></p>
+    <ul id="highlights"></ul>
+  </section>
+  <section class="card" aria-label="App updates">
+    <p id="status" role="status" aria-live="polite">Check for a newer version</p>
+    <p id="update-detail">Updates come from the official GitHub releases.</p>
+    <details id="notes-section" hidden><summary>Latest release notes</summary><div id="release-notes"></div></details>
+    <div class="actions">
+      <button id="check" class="primary">Check for Updates</button>
+      <button id="download" class="primary" hidden>Download Update</button>
+      <button id="release">Open Releases</button>
+    </div>
+    <p id="action-error" role="alert" hidden></p>
+  </section>
+  <footer><span id="date"></span><button id="repository">View on GitHub ↗</button></footer>
+</main>
+<script src="/app-info.js"></script>
+</body>
+</html>

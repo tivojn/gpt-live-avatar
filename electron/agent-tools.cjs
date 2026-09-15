@@ -29,7 +29,7 @@ function capabilities(request){
   trash: /\b(delete|remove|trash|discard)\b|删除|删掉|移到.{0,4}(废纸篓|回收站)/i.test(t)&&/\b(file|document|it|that|this)\b|\.[a-z0-9]{1,8}\b|文件|文档|它|这个|那个/i.test(t),
   read: /\b(read|open|look|inspect|summari[sz]e|analyse|analyze|review|list|find|folder|file|document)\b|读取|打开|看看|分析|总结|文件|目录|列出/i.test(t),
   page: /\b(page|web|webpage|website|article|news|browser|this|reading|screen)\b|网页|页面|新闻|浏览器|这个|这篇|屏幕/i.test(t),
-  motion:/\b(go|move|walk|run|come|dance|wave|perform|do|punch|kung|show|demonstrate|corner|center|centre)\b|走|过来|移动|跳舞|挥手|表演|演示|功夫|角落|中央/i.test(t),
+  motion:/\b(go|move|walk|run|come|dance|wave|perform|play|do|punch|kung|show|demonstrate|corner|center|centre)\b|走|过来|移动|跳舞|挥手|表演|演示|功夫|角落|中央/i.test(t),
  };
 }
 function latestUserRequest(history){

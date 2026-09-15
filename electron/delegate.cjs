@@ -1,20 +1,24 @@
 'use strict';
 const {readJSON}=require('./delegate-auth.cjs');
-const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
-const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build']};
-const validModel=m=>typeof m==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(m);
+const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','openclaw:local_runtime':'','hermes:local_runtime':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
+const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build'],openclaw:[],hermes:[]};
+const validModel=m=>typeof m==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(m);
 function normalizeDelegate(config,patch={}){
   const mode=['managed','delegate'].includes(patch.reasoningMode)?patch.reasoningMode:(['managed','delegate'].includes(config.reasoningMode)?config.reasoningMode:'managed');
-  const provider=['openai','xai'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai'].includes(config.delegateProvider)?config.delegateProvider:'openai');
-  let auth=['api_key','oauth2','codex_app_server'].includes(patch.delegateAuth)?patch.delegateAuth:(['api_key','oauth2','codex_app_server'].includes(config.delegateAuth)?config.delegateAuth:'api_key');
-  if(provider!=='openai'&&auth==='codex_app_server')auth='api_key';
+  const provider=['openai','xai','openclaw','hermes'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai','openclaw','hermes'].includes(config.delegateProvider)?config.delegateProvider:'openai');
+  let auth=['api_key','oauth2','codex_app_server','local_runtime'].includes(patch.delegateAuth)?patch.delegateAuth:(['api_key','oauth2','codex_app_server','local_runtime'].includes(config.delegateAuth)?config.delegateAuth:'api_key');
+  if(['openclaw','hermes'].includes(provider))auth='local_runtime';
+  else if(auth==='local_runtime'||provider!=='openai'&&auth==='codex_app_server')auth='api_key';
   const models={...DEFAULT_MODELS};for(const key of Object.keys(models))if(validModel(config.delegateModels?.[key]))models[key]=config.delegateModels[key];
-  if(validModel(patch.delegateModel)||auth==='codex_app_server'&&patch.delegateModel==='')models[provider+':'+auth]=patch.delegateModel;
+  if(validModel(patch.delegateModel)||['codex_app_server','local_runtime'].includes(auth)&&patch.delegateModel==='')models[provider+':'+auth]=patch.delegateModel;
   return {reasoningMode:mode,delegateProvider:provider,delegateAuth:auth,delegateModels:models};
 }
 function selected(config){const c=normalizeDelegate(config);return {provider:c.delegateProvider,auth:c.delegateAuth,model:c.delegateModels[c.delegateProvider+':'+c.delegateAuth]};}
 function usesCodexServer(config){return config.reasoningMode==='delegate'&&selected(config).auth==='codex_app_server';}
-function usesCodexActions(config){return usesCodexServer(config)||config.agentEngine==='codex';}
+function reasoningEngine(config){const d=selected(config);return config.reasoningMode==='delegate'?(d.auth==='codex_app_server'?'codex':d.auth==='local_runtime'?d.provider:null):null;}
+function actionEngine(config){return reasoningEngine(config)||(['codex','openclaw','hermes'].includes(config.agentEngine)?config.agentEngine:'basic');}
+function usesCodexActions(config){return actionEngine(config)==='codex';}
+function runtimeConfig(config){const engine=reasoningEngine(config);return engine==='codex'?codexConfig(config):engine?{...config,agentRuntimeModels:{...config.agentRuntimeModels,[engine]:selected(config).model}}:config;}
 function codexConfig(config){return usesCodexServer(config)?{...config,agentCodexModel:selected(config).model}:config;}
 function messages(history,limit=2400){
   if(!Array.isArray(history))return [];
@@ -55,7 +59,7 @@ class DelegateBackend {
   async answer(owner,id,config,history,instructions,agent=null){
     if(typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(id))throw Error('Invalid delegation request.');
     const context=messages(history,agent?6000:2400);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
-    if(usesCodexServer(config)){if(!this.codex)throw Error('Codex App Server is not connected.');return this.codex.answer(owner,id,codexConfig(config),history,instructions);}
+    if(reasoningEngine(config)){if(!this.codex)throw Error('The agent runtime is not connected.');return this.codex.answer(owner,id,runtimeConfig(config),history,instructions);}
     this.cancel(owner);const abort=new AbortController(),request={owner,id,abort},key=owner+':'+id;this.requests.set(key,request);
     try{
       const {provider,auth,model}=selected(config),credential=await this.auth.bearer(provider,auth);
@@ -82,11 +86,11 @@ class DelegateBackend {
     }finally{if(this.requests.get(key)===request)this.requests.delete(key);}
   }
   async models(config){
-    const {provider,auth}=selected(config);if(auth==='codex_app_server'){if(!this.codex)throw Error('Codex App Server is not connected.');return (await this.codex.status()).models;}if(auth==='oauth2')return MODEL_CHOICES[provider];
+    const {provider,auth}=selected(config);if(['codex_app_server','local_runtime'].includes(auth)){if(!this.codex)throw Error('The agent runtime is not connected.');return (await this.codex.status(auth==='codex_app_server'?'codex':provider,config)).models;}if(auth==='oauth2')return MODEL_CHOICES[provider];
     const credential=await this.auth.bearer(provider,auth),url=provider==='openai'?'https://api.openai.com/v1/models':'https://api.x.ai/v1/models';
     let response;try{response=await this.fetch(url,{headers:{Authorization:`Bearer ${credential.access}`},redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw Error('Could not load the model list.');}
     if(!response.ok){await response.body?.cancel();throw Error(providerError(response.status));}
     const data=await readJSON(response,1024*1024);return (data.data||[]).map(m=>m.id).filter(m=>validModel(m)&&(provider==='openai'?/^(gpt-[56]|o[34])/.test(m)&&!/(live|audio|image|transcri|tts)/.test(m):/^grok/.test(m))).sort();
   }
 }
-module.exports={DelegateBackend,DEFAULT_MODELS,MODEL_CHOICES,normalizeDelegate,selected,usesCodexServer,usesCodexActions,codexConfig,messages,streamText,accountId};
+module.exports={reasoningEngine,actionEngine,runtimeConfig,DelegateBackend,DEFAULT_MODELS,MODEL_CHOICES,normalizeDelegate,selected,usesCodexServer,usesCodexActions,codexConfig,messages,streamText,accountId};

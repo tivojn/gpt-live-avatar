@@ -1,0 +1,12 @@
+{
+  "version": "0.2.9",
+  "date": "2026-09-15",
+  "title": "Choose your agent engine",
+  "description": "Five animated desktop companions for live conversation, group talk and tasks. Powered by EnConvo.",
+  "highlights": [
+    "Use Codex App Server, OpenClaw or Hermes for reasoning and enabled actions in solo and Together.",
+    "Choose an OpenClaw agent and Hermes profile separately for each character. Missing runtimes are clearly marked.",
+    "Task progress appears above the addressed avatar and verified results stay in the group context.",
+    "Check for updates and read version details from any avatar’s right-click menu."
+  ]
+}

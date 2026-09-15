@@ -9,6 +9,8 @@ const subscribe = (channel, callback) => {
 
 contextBridge.exposeInMainWorld('gla', {
   agent: {
+    inventory: ()=>ipcRenderer.invoke('gla:agent:inventory'),
+    runtimeStatus: engine=>ipcRenderer.invoke('gla:agent:runtime-status',engine),
     codexStatus: ()=>ipcRenderer.invoke('gla:agent:codex-status'),
     onQuestion: callback=>subscribe('gla:agent:question',callback),
     onQuestionClose: callback=>subscribe('gla:agent:question-close',callback),
