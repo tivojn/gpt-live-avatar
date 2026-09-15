@@ -8,17 +8,19 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated for **v0.2.12**, released September 15, 2026. The signed/notarized reference
-build is Apple Silicon only. [Release notes and checksums](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.12)
-identify the exact installer; no new DMG is needed for documentation-only updates.
+Updated September 15, 2026 for **v0.2.13**. Use the matching
+[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.13)
+to confirm Apple Silicon installer availability and checksums. Use the release
+tag and matching checksums for a reproducible reference.
 
 ## First successful run
 
 Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
-1. Download the official signed installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.12/GPT-Live.Avatar-0.2.12-arm64.dmg
+1. Confirm availability on the matching release page, then download the official
+   signed v0.2.13 installer:
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.13/GPT-Live.Avatar-0.2.13-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Tia appears. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
@@ -41,8 +43,10 @@ It imports only these **already shipped** resources:
 | assets-runtime.json | build/protected/assets-runtime.json |
 | assets-index.json | build/protected/index.json |
 | avatars/tia/base.gla | build/protected/starter/tia/base.gla |
+| avatars/tia/motions.gla, when present in the signed catalogue | build/protected/starter/tia/motions.gla |
 
-It also links the encrypted starter into `build/assets/bundle/tia` so the
+It also links the encrypted starter and its declared motion overlay into
+`build/assets/bundle/tia` so the
 unpackaged development app can display Tia. Files stay encrypted and ignored by
 Git. The command is safe to rerun with identical resources and refuses to
 replace different ones. For a different release, use a fresh clone or back up
@@ -67,7 +71,7 @@ ordinary Electron/HTML/JavaScript edits.
   Browser/computer tools need your own connected setup and macOS permissions.
 - Codex permissions default to Full access. You can choose Ask for approval or
   Approve for me in Settings or the avatar's right-click menu.
-- OpenClaw, Hermes and Grok Build are alternative reasoning/action engines in v0.2.12.
+- OpenClaw, Hermes and Grok Build are alternative reasoning/action engines in the reference app.
   Install and configure the chosen runtime with your own account; the avatar
   installer does not bundle it. Select its provider in Reasoning, enable
   actions, then choose native agents/profiles in **Agents for each character**.
@@ -83,7 +87,7 @@ ordinary Electron/HTML/JavaScript edits.
 See [Codex actions](CODEX-ACTIONS.md) and
 [Together conversations](GROUP-CONVERSATIONS.md).
 
-For the v0.2.12 rendering changes, see [Studio lighting](STUDIO-LIGHTING.md),
+For the rendering changes and v0.2.13 follow-up, see [Studio lighting](STUDIO-LIGHTING.md),
 [Wardrobe audit](WARDROBE-AUDIT.md) and [Motion audit](MOTION-AUDIT.md).
 
 ### Usage costs
@@ -190,10 +194,94 @@ updates), and `web/agent-progress.js` (overhead task updates).
 - Updated motions ship in encrypted `motions.gla` overlays. The signed catalogue’s optional `motionUpdate` field keeps old model/texture packages available. Fresh avatar downloads fetch the overlay; the Tia starter includes it. See [motion audit](MOTION-AUDIT.md) and [protected assets](PROTECTED-ASSETS.md).
 
 
-### 0.2.12 renderer and asset changes
+### Historical 0.2.12 renderer and asset changes
+
+These describe the earlier release. Sarah’s v8 panel and the v10 motion bake are
+superseded by the v0.2.13 changes below; retain this section as release history.
 
 - Keep `web/avatar3d-cloth-occlusion.js` with the renderer dependency tree. It provides a garment-only depth pass for Sarah's Brazilian outfit and Iselda's skirts. This pass runs only while a supported garment is visible. Body bounds and a depth limit prevent rear cloth or hands from erasing exposed skin.
 - Sarah's `sarah-wardrobe-v8` package includes a smooth pelvis-supported Brazilian panel. Iselda's `iselda-wardrobe-v9` includes corrected standing-pose leg alignment and skirt support. Both keep their original materials and wardrobe choices. Use the new signed base/texture/motion combination; do not overlay old tiers.
 - Idle pose transitions default on for all five characters and Together uses the saved preference. Explicit pose selections and prop modes retain their existing controls.
 - Ming-Mei's eyebrow material restores its missing brown tint. Armor outfits restore the clothed pilot and lock head direction to the helmet while allowing eye movement.
 - See [motion audit](MOTION-AUDIT.md) and [wardrobe audit](WARDROBE-AUDIT.md) for scope, reproducible checks and limitations. Physical M2/16 GB acceptance remains a host integration test.
+
+### 0.2.13 visual and motion corrections
+
+- **Head attachments:** keep `web/avatar3d-head-attachments.js` and its hooks in
+  `avatar3d.js` and `avatar3d-options.js`. Ming-Mei and Iselda export independent
+  hair spline roots beside the head. The module applies the additional
+  procedural head transform to those roots, restoring their full authored
+  matrices before the next pose or motion frame. Baked hair animation remains
+  part of the authored pose layer.
+- **Deep zoom:** keep `web/avatar-zoom.js` with both solo and Together controls.
+  Continued pinch/wheel zoom uses a camera crop after the native surface reaches
+  its display bounds. Zoom can pass a face close-up to eye detail; a finite
+  numerical guard prevents invalid math. Pointer anchoring, crop panning and
+  aspect changes stay coordinated. Render surfaces and texture budgets remain
+  bounded. Defaults remain **⌘⇧9** for close-up and **⌘⇧0** for recovery.
+- **Lighting:** Studio/Soft receive a restrained key/fill and catchlight
+  adjustment. The existing four lights, one shadow map and rendering budgets
+  remain the same. The v0.2.12 calibration is the rollback reference; see
+  [Studio lighting](STUDIO-LIGHTING.md).
+- **Motions:** use `meshy-v11-20260915` on all five avatars. The bake corrects
+  anatomical pelvis alignment, including secondary character retargeting, and
+  Ming-Mei/Iselda’s spine aliases. It retains the established in-place spin,
+  foot articulation and stable framing. The library still contains 65 clips per
+  character. See [Motion audit](MOTION-AUDIT.md) for measured scope.
+- **Sarah:** use the new immutable `sarah-wardrobe-v9` asset combination. The
+  derived body has a localized internal-component/topology and skin-weight
+  repair; original vertex positions remain intact. New body-fitted underwear
+  shares the outer body surface and lower-body morphs. Both dresses include
+  the brief; summer retains its native low-rise cut and ties. The dresses keep
+  their authored weights with a small garment clearance. Preserve the runtime
+  fit, visibility, morph and depth-layer hooks together with the revised assets.
+- **Ming-Mei:** `web/avatar3d-mingmei-fit.js`, called by `fitGarment`, matches the
+  fitted dress back to nearby body skin weights with up to 9 mm of clearance.
+  It runs once per loaded geometry, including after wardrobe eviction/reload.
+  The body and authored lace transparency stay intact. This is runtime-only;
+  it requires no replacement Ming-Mei model or texture package.
+
+Only the Sarah wardrobe and revised motion overlays need new protected content
+for this follow-up. Feature-only development still uses the published catalogue
+and protected loader; do not rebuild assets or rotate delivery keys. Maintainers
+must publish matching signed base/texture/motion revisions rather than mixing
+old Sarah tiers with the v9 base. The maintainer’s reproducible surface-repair
+tool is `tools/repair-sarah-underlayer.py`; ordinary UI/agent integration does
+not need to run it.
+
+### Reproducing the visual checks
+
+`npm test` includes the pure zoom checks. These additional Electron harnesses
+need the licensed local prepared packages under `build/characters/`. These are
+maintainer asset checks; a clone bootstrapped only from encrypted release
+resources can run `npm test` and the isolated app checks instead. Do not obtain
+private source assets or release keys merely to run these harnesses:
+
+```bash
+node_modules/.bin/electron qa/zoom-native.cjs
+node_modules/.bin/electron qa/head-attachments.cjs
+node_modules/.bin/electron qa/motion-support.cjs
+node_modules/.bin/electron qa/motion-posture.cjs
+node_modules/.bin/electron qa/mingmei-dress.cjs
+node_modules/.bin/electron qa/sarah-dress.cjs
+node qa/body-brief-hooks.cjs
+node_modules/.bin/electron qa/studio-lighting.cjs
+```
+
+Native deep-zoom checks pass beyond the prior face/body cutoff with bounded
+render surfaces and recovery. Head-attachment checks pass 200 alternating
+frames plus authored motion/pose changes; maximum matrix error is about
+1.11e-15 and GL error is zero. Lighting checks cover all five avatars and all
+quality profiles, retaining camera alignment and four light sources. The
+[previous calibration](https://github.com/tivojn/gpt-live-avatar/commit/e08ccab13f2cecf5a3df80a0f9a8dd3e187647b8)
+is the explicit visual rollback point.
+
+Ming-Mei’s opaque-back check passes 32 motion/angle samples with no exposed
+panel pixels, including actual wardrobe unload/reload and Eco/Quality changes.
+Motion support passes 2,910 frames on all five avatars; separate continuous
+posture QA passes 30 scenarios and 18,250 rendered frames. Detailed accepted QA
+results and remaining limits are in the wardrobe and motion audits. These are
+local renderer checks; physical M2/16 GB testing, a complete EnConvo integration
+and every possible outfit/animation combination require their own acceptance.
+The app uses garment-specific fitting and depth layers, not general cloth
+simulation.

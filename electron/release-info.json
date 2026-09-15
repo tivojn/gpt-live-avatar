@@ -1,15 +1,14 @@
 {
-  "version": "0.2.12",
+  "version": "0.2.13",
   "date": "2026-09-15",
-  "title": "Brighter studio portraits, wardrobe and motion refinements",
-  "description": "More consistent lighting across viewing angles, stable spin jumps, restored idle transitions and wardrobe corrections.",
+  "title": "Deep zoom, natural motion and wardrobe repairs",
+  "description": "Zoom from the full avatar to eye detail, with refined lighting and more natural pelvis and spine motion. Ming-Mei and Iselda keep their hair aligned; Sarah’s underwear and dresses and Ming-Mei’s dress back receive fitted repairs.",
   "highlights": [
-    "Softer studio lighting follows the view, with clearer upright faces and independent fill lighting for all five avatars.",
-    "360 Power Spin Jump stays in place, with a stable view from takeoff to landing.",
-    "Boxing Warm-up and Happy Sway Standing retain a supported stance and independent foot movement.",
-    "Restored changing idle poses in solo and Together mode.",
-    "Corrected Ming-Mei’s eyebrow tint, Sarah’s fitted clothing and Iselda’s skirt support.",
-    "Restored the pilot’s covered limbs in open armor and kept the head aligned inside closed helmets.",
-    "Updated encrypted wardrobe and motion downloads; appearance, voices and account settings are retained."
+    "Pinch or wheel past face close-up in solo and Together. Cmd-Shift-9 frames the face; Cmd-Shift-0 restores the normal view.",
+    "Ming-Mei and Iselda’s independent hair roots follow added head turns while keeping authored hair animation.",
+    "Corrected pelvis and spine alignment across all five avatars, retaining in-place spins, separate foot movement and stable framing.",
+    "Sarah receives body-fitted underwear and localized wardrobe repairs; both dresses include the fitted brief.",
+    "Ming-Mei’s fitted dress back stays covered through the checked motions while preserving the original upper lace.",
+    "Restrained studio lighting refinements retain the existing light, shadow, texture and rendering budgets."
   ]
 }

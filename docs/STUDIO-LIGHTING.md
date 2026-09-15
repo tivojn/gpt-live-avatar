@@ -9,3 +9,7 @@ The change uses the existing four studio sources, one shadow map and environment
 `qa/studio-lighting.cjs` loads all five local licensed character packs, captures upright, elevated, side and rear views, checks that the rig follows the camera, exercises all three performance presets and restores Classic/Soft/Studio. It also records renderer timings and texture counts. Review the resulting images in ignored `build/qa-lighting-*`; numerical checks alone cannot judge appearance. The release comparisons were made on the development Mac, not an M2, so they are not an M2 performance certification.
 
 For EnConvo integration, keep `avatar3d-portrait.js` with the renderer's material callbacks, environment rotation and per-frame `beforeRender()` call. Replacing only light intensities misses the shadow and camera-relative fixes.
+
+## 0.2.13 restrained refinement
+
+A slightly more lateral key and reduced fill retain gentle facial contours. A smaller eye panel makes the catchlight less broad; environment fill increases only from 0.26 to 0.28. The four-source rig, one shadow, texture limits and surface budgets are unchanged. The v0.2.12 calibration remains the rollback baseline in Git. Local side-by-side captures cover all five avatars; judge the result visually rather than interpreting the small renderer timing differences as a speed improvement.

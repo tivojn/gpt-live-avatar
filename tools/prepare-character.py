@@ -66,6 +66,14 @@ class Retarget:
    if n=='c_neck_01.x':mapped='neck.x'
    if n.startswith('c_toes_'):mapped='toes_01.'+n[-1]
    self.mapping[n]=mapped if mapped in self.snames else None
+  # A shortened spine maps its controls across the donor's whole torso.
+  # Deform aliases must use the same anatomical source segment; mapping them
+  # by their numeric suffix gives the skin and garment different rotations.
+  for n in self.names:
+   if re.match(r'^spine_\d+\.x$',n):
+    source_control=self.mapping.get('c_'+n.replace('.x','_bend.x'))
+    source_deform=source_control.replace('c_','',1).replace('_bend','') if source_control else None
+    if source_deform in self.snames:self.mapping[n]=source_deform
   # Facial and hair rest shapes belong to their own character, not the donor.
   body=re.compile(r'^(root|foot|toes|c_toes|c_thigh|c_leg|c_arm|c_forearm|shoulder|hand|neck|subneck|c_neck|head|c_spine|spine|c_breast|c_index|c_middle|c_ring|c_pinky|c_thumb|index|middle|ring|pinky|thumb)')
   for n in self.names:
@@ -77,6 +85,18 @@ class Retarget:
   # Legs need the same treatment: different resting knee angles otherwise
   # carry into every step and pull the feet inward.
   self.segment_alignment={}
+  # The pelvis is the triangle between the waist and the two hip joints.
+  # Characters with different lumbar rest curves need this anatomical basis
+  # alignment just like their limbs; a shared world rotation delta alone
+  # leaves a permanent forward/back pelvic pitch in every motion.
+  def pelvis_frame(names,world):
+   left=world[names['c_thigh_twist.l'],:3,3];right=world[names['c_thigh_twist.r'],:3,3]
+   x=left-right;up=world[names['root.x'],:3,3]-(left+right)*.5
+   if np.linalg.norm(x)<1e-5 or np.linalg.norm(up)<1e-5:raise ValueError('Degenerate anatomical pelvis landmarks')
+   x=x/np.linalg.norm(x);y=up-x*np.dot(up,x)
+   if np.linalg.norm(y)<1e-5:raise ValueError('Collinear anatomical pelvis landmarks')
+   y=y/np.linalg.norm(y);return np.stack([x,y,np.cross(x,y)],axis=1)
+  self.segment_alignment['root.x']=pelvis_frame(self.snames,self.sw)@pelvis_frame(self.tnames,self.tw).T
   for side in ['l','r']:
    segments=[('arm','c_arm_twist.','c_forearm_stretch.'),('forearm','c_forearm_stretch.','hand.'),('hand','hand.','middle1.'),
              ('thigh','c_thigh_twist.','c_leg_stretch.'),('leg','c_leg_stretch.','foot.')]

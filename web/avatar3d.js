@@ -17,6 +17,7 @@ import { NaturalAttention } from '/avatar3d-attention.js';
 import { fitGarment } from '/avatar3d-garment-fit.js';
 import { AvatarClearance } from '/avatar3d-clearance.js';
 import { AvatarClothOcclusion } from '/avatar3d-cloth-occlusion.js';
+import { AvatarHeadAttachments } from '/avatar3d-head-attachments.js';
 import { RoomEnvironment } from '/vendor/three/RoomEnvironment.js';
 import { Avatar3DOptions, Avatar3DAppearance, mountAvatar3DOptions } from '/avatar3d-options.js';
 
@@ -260,6 +261,7 @@ class Avatar3D {
       try { this.options = new Avatar3DOptions(this, library); }
       catch (error) { console.warn('3D options:', error.message); }
     }
+    this.headAttachments=new AvatarHeadAttachments(this);
     // Start at a medium texture size; the first fitted frame selects the
     // actual display size. A small companion should not decode 4K maps only
     // to discard them immediately. Quality still loads original textures.
@@ -902,6 +904,7 @@ class Avatar3D {
         this.performerRenderBudget?.texturePixels||view?.projectedHeight||state.projectedHeight||1200).catch(()=>{});
       if(!this.resources.ready)return this.canvas;
     }
+    this.headAttachments?.restore();
     // Performer owns the rig and facial coefficients exclusively. No AI pose
     // playlist, automatic smile, visemes, breathing or cursor gaze may compete.
     if(this.performerRig){
@@ -1099,12 +1102,13 @@ class Avatar3D {
     // The eyes acquire the cursor first; the head catches up over ~180 ms.
     // As it turns, the eyes settle back toward the middle of their sockets.
     let wantedYaw = gx * .46, wantedPitch = gy * .28;
-    if(cameraFocus){
+    if(cameraFocus||this.headAttachments?.roots.length){
       // Measure the authored gait, never last frame's added gaze. Otherwise
       // compensating a sideways head track creates a feedback oscillation.
       for(const [bone,base] of this.baseQuaternions)bone.quaternion.copy(base);
       this.root.updateMatrixWorld(true);
       if(this.headReferencePoint&&this.bones.head)this.headCenter.copy(this.headReferencePoint).applyMatrix4(this.bones.head.matrixWorld);
+      this.headAttachments?.capture();
     }
     if (target) {
       const direction = new THREE.Vector3(target.x, target.y, target.z).sub(this.headCenter);
@@ -1164,6 +1168,7 @@ class Avatar3D {
       }
     }
     this.root.updateMatrixWorld(true);
+    this.headAttachments?.apply();
     if (target) {
       const eyeTarget=new THREE.Vector3(target.x,target.y,target.z);
       const distance=eyeTarget.distanceTo(this.headCenter);
@@ -1226,6 +1231,7 @@ class Avatar3D {
     this.volumeSkin?.dispose();
     this.clearance?.dispose();
     this.clothOcclusion?.dispose();
+    this.headAttachments?.dispose();
     if (this.model) {
       this.model.traverse(node => {
         if (node.geometry) node.geometry.dispose();

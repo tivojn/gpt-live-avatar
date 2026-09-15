@@ -609,6 +609,7 @@ export class Avatar3DOptions {
   }
 
   write(transforms) {
+    this.avatar.headAttachments?.restore();
     this.bones.forEach(({node}, i) => {
       const transform = transforms[i];
       node.position.copy(transform.p); node.quaternion.copy(transform.q); node.scale.copy(transform.s);

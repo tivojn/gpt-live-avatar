@@ -87,6 +87,7 @@
 <script type="module" src="/avatar3d.js"></script>
 <script type="module">
 import {closeupFit} from '/avatar-closeup.js';
+import {zoomScale,zoomFit,keepZoomVisible} from '/avatar-zoom.js';
 import { installAgentUI } from './agent-client.js';
 import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
@@ -262,7 +263,7 @@ function paint(now) {
       avatar.prepareMotionFrame(now, reduce);
       fit = { scale, x: stage.anchor.x - stage.workArea.x - (bx + bw / 2) * scale, y: stage.anchor.y - stage.workArea.y - (by + bh) * scale };
     }
-    if (avatar.keepMotionInViewport&&!stage.closeup) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
+    if (avatar.keepMotionInViewport&&!stage.closeup&&!stage.manualZoom) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
     if(stage.manual)fit=keepManualVisible(fit,surface,layout);
   } else {
     if (userOrbitDirty) { avatar.setOrbit(userOrbit); userOrbitDirty = false; }
@@ -413,7 +414,7 @@ async function exitStage() {
   const factor = Math.max(.7, Math.min(2.5, scale / (current.baseScale || scale)));
   const area = current.workArea;
   let width = Math.max(MIN_WINDOW_WIDTH, Math.round(current.compact.width * factor)), height = Math.round(current.compact.height * factor);
-  if(current.manual){
+  if(current.manual&&!current.manualZoom&&!current.closeup){
     width=Math.max(MIN_WINDOW_WIDTH,Math.ceil((bw+pad*2)*scale));
     const content=(bh+pad*2)*scale;
     height=Math.ceil(content/.7<BUBBLE_RESERVE/.3?content/.7:content+BUBBLE_RESERVE);
@@ -782,6 +783,7 @@ function takeManualPlacement(){
 }
 function keepManualVisible(fit,surface,layout){
   const [fx,fy,fw,fh]=layout.faceBounds||layout.bounds;
+  if(stage?.manualZoom&&fh*fit.scale>surface.height*.65)return keepZoomVisible(fit,surface,layout.bounds);
   const crown=avatar.crownProjection?.();
   const headX=Number.isFinite(crown?.x)?crown.x:fx+fw/2;
   const headY=Number.isFinite(crown?.y)?crown.y:fy;
@@ -830,6 +832,8 @@ function rememberPlacement(){
   const content=(bh+pad*2)*fit.scale;
   // Below the full bubble reserve, compact framing reserves 30% instead.
   const actualHeight=Math.ceil(content/ .7 < BUBBLE_RESERVE/.3 ? content/.7 : content+BUBBLE_RESERVE);
+  // Extreme crop zoom is temporary; never persist it as a giant native window.
+  if(width>stage.workArea.width*1.2||actualHeight>stage.workArea.height*1.2)return;
   gla.window.remember({x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale-width/2,
     y:stage.workArea.y+fit.y+(by+bh+pad)*fit.scale-actualHeight,width,height:actualHeight});
 }
@@ -875,14 +879,19 @@ stageEl.addEventListener('dblclick', event => {
   if (!onHead(event.clientX, event.clientY)) { toast(live.state === 'idle' ? 'Double-click my head to start talking.' : 'Double-click my head to end the conversation.'); return; }
   toggleCall();
 });
-let resizeTimer=0,pendingScale=1,pinchFrame=0,pinching=false;
+let resizeTimer=0,pendingScale=1,pinchFrame=0,pinching=false,pinchPoint=null;
 const MIN_WINDOW_WIDTH=360;
 async function flushPinch(){
   if(!stage)await enterStage();
   pinchFrame=0;
   if(!stage){pendingScale=1;return;}
   takeManualPlacement();
-  stage.scale=Math.min(1.25,Math.max(.12,stage.scale*pendingScale));pendingScale=1;
+  const [bx,by,bw,bh]=avatar.layout().bounds,scale=stage.scale;
+  const current={scale,x:stage.anchor.x-stage.workArea.x-(bx+bw/2)*scale,y:stage.anchor.y-stage.workArea.y-(by+bh)*scale};
+  const point=pinchPoint?{x:pinchPoint.x-stage.workArea.x,y:pinchPoint.y-stage.workArea.y}:{x:innerWidth/2,y:innerHeight/2};
+  const fit=zoomFit(current,pendingScale,point,.12);pendingScale=1;
+  stage.scale=fit.scale;stage.manualZoom=true;
+  stage.anchor={x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale,y:stage.workArea.y+fit.y+(by+bh)*fit.scale};
   lastFrame=0;wake();
 }
 addEventListener('wheel',event=>{
@@ -892,7 +901,8 @@ addEventListener('wheel',event=>{
   if(event.ctrlKey){
     endGesture();
     const delta=Math.max(-90,Math.min(90,event.deltaY*unit));
-    pendingScale*=Math.exp(-delta*.0075);pinching=true;
+    pinchPoint={x:window.screenX+event.clientX,y:window.screenY+event.clientY};
+    pendingScale=zoomScale(pendingScale,Math.exp(-delta*.0075));pinching=true;
     if(!pinchFrame)pinchFrame=requestAnimationFrame(()=>void flushPinch());
     clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{pinching=false;requestAnimationFrame(rememberPlacement);},160);
     return;

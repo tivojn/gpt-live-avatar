@@ -5,7 +5,7 @@ import * as THREE from '/vendor/three/three.module.js';
 // A rear panel cannot erase the front of the body: their depths must be close.
 // Rest-space bounds keep hands and other foreground body parts unaffected.
 const configurations={
- sarah:{garments:['Fem-A_Bot_Ac_BknBrzl_1'],skin:['Top_Sara01A_M.001'],min:[-.25,.82,-1],max:[.25,1.13,1],depth:.035},
+ sarah:{garments:['Fem-A_Bot_Ac_BknBrzl_1','Fem-A_Whl_Ac_VDress'],skin:['Top_Sara01A_M.001','Bot_Ac_BknBrzl'],min:[-.25,.82,-1],max:[.25,1.13,1],depth:.035},
  iselda:{garments:['Short Skirt','Long Skirt'],skin:['skin'],min:[-.25,.50,-1],max:[.25,1.09,1],depth:.035},
 };
 const materials=n=>Array.isArray(n.material)?n.material:[n.material];
@@ -20,9 +20,12 @@ export class AvatarClothOcclusion {
   const seen=new Set();
   avatar.model.traverse(n=>{
    if(!n.isSkinnedMesh)return;
-   if(c.garments.includes(n.userData.sourceName||n.name))this.garments.push(n);
+   // The repaired brief follows the skin exactly; it never masks the body.
+   // The outer dress orders both skin and the brief beneath its fabric.
+   if(c.garments.includes(n.userData.sourceName||n.name)&&!n.userData.avatarBodyFittedUnderlayer)this.garments.push(n);
    for(const m of materials(n)){
-    if(!c.skin.includes(m.name)||seen.has(m))continue;seen.add(m);
+    if(!c.skin.includes(m.name)||seen.has(m)||(m.name==='Bot_Ac_BknBrzl'&&!n.userData.avatarBodyFittedUnderlayer))continue;seen.add(m);
+    const allowance=m.name==='Bot_Ac_BknBrzl'?.008:c.depth;
     const hook=m.onBeforeCompile,key=m.customProgramCacheKey;
     m.onBeforeCompile=(s,r)=>{
      hook.call(m,s,r);
@@ -37,7 +40,7 @@ export class AvatarClothOcclusion {
        vec2 uv=avatarClothBodyClip.xy/avatarClothBodyClip.w*.5+.5;
        vec4 cloth=texture2D(avatarClothMask,uv);
        float gap=cloth.r-avatarClothBodyDepth;
-       if(cloth.a>.5&&gap>0.&&gap<${c.depth.toFixed(5)})discard;
+       if(cloth.a>.5&&gap>0.&&gap<${allowance.toFixed(5)})discard;
       }`);
     };
     m.customProgramCacheKey=()=>key.call(m)+'-cloth-occlusion-v1';m.needsUpdate=true;

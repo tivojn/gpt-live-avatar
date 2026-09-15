@@ -19,6 +19,7 @@ from mathutils import Matrix, Quaternion, Vector
 parser = argparse.ArgumentParser()
 for key in ('blend', 'model', 'motion', 'output', 'name'):
     parser.add_argument('--' + key, required=True)
+parser.add_argument('--qa-output', help='Optional private numeric source/target diagnostics')
 parser.add_argument('--preset', action='store_true', help='Transfer a Meshy preset rig and preserve airborne motion')
 parser.add_argument('--in-place', action='store_true', help='Remove net locomotion; preserve weight shift for screen-space walking')
 parser.add_argument('--gait-clearance', action='store_true', help='Calibrate locomotion posture and keep the feet in separate anatomical lanes')
@@ -145,15 +146,23 @@ for side, prefix in [('l', 'L'), ('r', 'R')]:
         arm.pose.bones[control + side]['ik_fk_switch'] = 1.0
 
 # A Meshy preset's bind frame is already posed. Restore that initial
-# orientation using the anatomical torso, instead of subtracting its bend.
+# orientation using the anatomical pelvis and torso, instead of subtracting their bend.
 def body_frame(right, up):
     x=right.normalized();z=(up-x*up.dot(x)).normalized();y=z.cross(x).normalized()
     return Matrix((x,y,z)).transposed().to_quaternion()
 if args.preset:
     target_right=control_rest['c_thigh_fk.l'].translation-control_rest['c_thigh_fk.r'].translation
     source_right=donor_rest['L_Hip'].translation-donor_rest['R_Hip'].translation
-    target_up=control_rest['c_spine_01.x'].translation-control_rest['c_root.x'].translation
-    source_up=donor_rest['Spine1'].translation-donor_rest['Pelvis'].translation
+    # The first spine control nearly coincides with c_root (only 2.9 mm
+    # apart in Tia) and points mostly forward. It is not the pelvis axis.
+    # Build the anatomical pelvis from the hip triangle instead, preserving
+    # pelvic tilt independently of lumbar flexion in every source frame.
+    target_hips=(control_rest['c_thigh_fk.l'].translation+control_rest['c_thigh_fk.r'].translation)*.5
+    source_hips=(donor_rest['L_Hip'].translation+donor_rest['R_Hip'].translation)*.5
+    target_up=control_rest['c_root.x'].translation-target_hips
+    source_up=donor_rest['Pelvis'].translation-source_hips
+    if target_up.length<.01 or source_up.length<.01:
+        raise ValueError('The retarget pelvis needs distinct hip and pelvis landmarks')
     pelvis_alignment=body_frame(source_right,source_up)@body_frame(target_right,target_up).inverted()
     align['c_root_master.x']=pelvis_alignment;align['c_root.x']=pelvis_alignment
     for target,source in mapping:
@@ -375,6 +384,7 @@ for i in range(len(nodes)):
 bone_ids = [i for i, n in enumerate(nodes) if n.get('name') in rest_world]
 bone_names = [nodes[i]['name'] for i in bone_ids]
 frames = []
+pose_audit = []
 stance_samples=[]
 if args.supported_stance:
     for frame in range(start,end+1):
@@ -554,6 +564,17 @@ for frame_index,frame in enumerate(frame_times):
         for axis in range(3):
             envelope_min[axis]=min(envelope_min[axis],point[axis])
             envelope_max[axis]=max(envelope_max[axis],point[axis])
+    if args.qa_output:
+        ids = {nodes[i]['name']:i for i in bone_ids}
+        target_axis = targets[ids['root.x']].translation - (targets[ids['c_thigh_twist.l']].translation + targets[ids['c_thigh_twist.r']].translation)*.5
+        source_axis = C.to_3x3() @ (pose_world['Pelvis'].translation - (pose_world['L_Hip'].translation + pose_world['R_Hip'].translation)*.5)
+        lengths = {}
+        for side in ('l','r'):
+            for a,b in [('c_thigh_twist','c_leg_stretch'),('c_leg_stretch','foot')]:
+                lengths[a+'.'+side] = (targets[ids[a+'.'+side]].translation - targets[ids[b+'.'+side]].translation).length
+        pose_audit.append({'frame':frame,'pelvisDegrees':math.degrees(target_axis.angle(source_axis)),
+                           'pelvisLength':target_axis.length,'legLengths':lengths,
+                           'rootMaster':list(root.matrix.translation),'feet':[list(v) for v in foot_samples[-1]]})
     # Bake local matrices for the *exported* hierarchy, which deliberately
     # flattens some Blender constraint chains. Preserve all affine terms.
     values = []
@@ -590,7 +611,7 @@ for offset in range(0,len(frames[0]),12):
 loop_blend = 0 if seam_rotation < .25 and seam_distance < .0005 else .1
 result = {'version': 1, 'id': args.name, 'label': args.name.title(),
           'source': ('Meshy preset' if args.preset else 'Meshy text-to-motion') + ', retargeted to the original Tia rig',
-          'retargeting': {'version': 10, 'stationaryRoot': args.stationary_root, 'supportedStance': args.supported_stance, 'motionFit':'source-amplitude-and-initial-body-orientation',
+          'retargeting': {'version': 11, **({'pelvisReference': 'hip-midpoint-to-pelvis'} if args.preset else {}), 'stationaryRoot': args.stationary_root, 'supportedStance': args.supported_stance, 'motionFit':'source-amplitude-and-initial-body-orientation',
                           **({'walkingFit':'source-hip-and-arm-swing-with-neutral-sole-reference'} if args.walk_cycle else {}),
                           'sourceFrameRange': [start,end], 'walkingCycle': args.walk_cycle,
                           'loopBlendSeconds': loop_blend, 'seamRotationDegrees': round(seam_rotation,4), 'pelvisTranslation': 'xyz', 'travelScale': round(travel_scale, 7), 'inPlace': args.in_place,
@@ -602,4 +623,5 @@ result = {'version': 1, 'id': args.name, 'label': args.name.title(),
           'bounds': [[round(v-.12,5) for v in envelope_min], [round(v+.12,5) for v in envelope_max]],
           'loop': args.walk_cycle or args.name in ('walk', 'dance')}
 Path(args.output).write_text(json.dumps(result, separators=(',', ':')))
+if args.qa_output:Path(args.qa_output).write_text(json.dumps(pose_audit,separators=(',',':')))
 print('DONE', args.output, len(frames), 'frames', len(bone_names), 'bones', flush=True)

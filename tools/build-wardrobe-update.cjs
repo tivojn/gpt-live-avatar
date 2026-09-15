@@ -4,7 +4,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {pack,hash}=require('./build-protected-assets.cjs');
 async function main(){
  const repo=path.resolve(__dirname,'..'),out=path.join(repo,'build/protected');
- const selections=process.argv.slice(2).map(arg=>{const [slug,revision]=arg.split('=');if(!['sarah','iselda'].includes(slug)||!/^[-a-z0-9]{1,80}$/.test(revision||''))throw Error('Use sarah=REVISION or iselda=REVISION');return {slug,revision};});
+ const selections=process.argv.slice(2).map(arg=>{const [slug,revision]=arg.split('=');if(!['sarah','iselda','ming-mei'].includes(slug)||!/^[-a-z0-9]{1,80}$/.test(revision||''))throw Error('Use sarah=REVISION, iselda=REVISION or ming-mei=REVISION');return {slug,revision};});
  if(!selections.length||new Set(selections.map(s=>s.slug)).size!==selections.length)throw Error('Choose distinct characters to repack.');
  const secrets=JSON.parse(fs.readFileSync(path.join(out,'private-build.json'))),previous=JSON.parse(fs.readFileSync(path.join(out,'index.json')));
  if(!crypto.verify(null,Buffer.from(previous.payload),secrets.publicKey,Buffer.from(previous.signature,'base64')))throw Error('Invalid current catalogue.');
@@ -20,7 +20,7 @@ async function main(){
   const motion=await pack(source,slug,'motions',secrets,out,library.motionRevision);
   index.avatars[slug]={...index.avatars[slug],assetRevision:revision,mac,motionUpdate:{revision:library.motionRevision,package:motion}};
  }
- index.release='wardrobe-20260915-v12';
+ index.release='wardrobe-'+require('../package.json').version;
  const packs=Object.values(index.avatars).flatMap(a=>[...Object.values(a.mac),...(a.motionUpdate?[a.motionUpdate.package]:[])]),bytes=packs.reduce((n,p)=>n+p.bytes,0);
  if(bytes+2*1024*1024>require('../electron/asset-download.json').storageCapBytes)throw Error('Release exceeds storage cap.');
  const payload=JSON.stringify(index),envelope={payload,signature:crypto.sign(null,Buffer.from(payload),secrets.privateKey).toString('base64')};fs.writeFileSync(path.join(out,'index.json'),JSON.stringify(envelope));

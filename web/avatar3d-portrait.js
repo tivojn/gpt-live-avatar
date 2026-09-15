@@ -266,7 +266,7 @@ export class AvatarPortrait {
       // gives the cornea a legible catchlight without whitening the iris.
       // A lower, larger key reaches upright faces and a broad independent
       // fill opens eye sockets. Keep four sources and one shadow map.
-      for(const [x,y,z,w,h,power] of [[-1.25,.75,2,2,2.2,2.8],[1.6,.15,1.8,2,2,1.5],[.6,.9,-1,1,1,settings.rim*.65],[-.25,.15,1,.3,.3,12]]){
+      for(const [x,y,z,w,h,power] of [[-1.45,.85,2,2,2.2,2.9],[1.6,.15,1.8,2,2,1.35],[.6,.9,-1,1,1,settings.rim*.65],[-.25,.15,1,.24,.28,14]]){
         const light=new THREE.RectAreaLight(0xffffff,power,w,h);light.position.set(x,y,z);light.lookAt(0,0,0);this.portraitLights.add(light);
       }
     }
@@ -275,7 +275,7 @@ export class AvatarPortrait {
     if(!this.active)return;
     a.renderer.toneMappingExposure=style==='soft'?settings.softExposure:settings.exposure;
     this.portraitLights.children[0].color.set(settings.keyColor);
-    a.scene.environmentIntensity=.26;
+    a.scene.environmentIntensity=.28;
     [.5,.05,.1,.05,.02].forEach((intensity,i)=>{this.appearance.lights.children[i].intensity=intensity;});
     for(const [m,b] of this.materials){
       if(b.kind==='hair'){

@@ -4,12 +4,14 @@
 the intelligence, credentials, voice conversation, tools and permissions.**
 
 For the EnConvo developer and their AI coding assistant. Updated September 15,
-2026 for GPT-Live Avatar **v0.2.12**. Use the tagged release for a reproducible
-application source reference.
+2026 for GPT-Live Avatar **v0.2.13**. Use its tag for a reproducible source
+reference. Check the matching release page for signed installer availability
+and checksums, and record the exact source commit you integrate.
+
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.12
-- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.12/GPT-Live.Avatar-0.2.12-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.12/SHA256SUMS-0.2.12.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.13
+- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.13/GPT-Live.Avatar-0.2.13-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.13/SHA256SUMS-0.2.13.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
@@ -23,7 +25,7 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### What is ready in v0.2.12
+### Integration reference in the v0.2.13 source
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
   overhead speech/task updates, protected downloads and the encrypted Tia
@@ -39,7 +41,7 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-The release includes `SHA256SUMS-0.2.12.txt`; use it to verify the downloaded
+Use `SHA256SUMS-0.2.13.txt` from the matching release to verify its downloaded
 installer rather than checksums from an older release.
 
 ## 1. Scope and ownership
@@ -140,8 +142,9 @@ npm run start:isolated
 ```
 
 `import-release` verifies the shipped catalogue and encrypted Tia checksum.
-It imports only the release's `assets-runtime.json`, `assets-index.json` and
-`tia/base.gla` into ignored `build/` paths. It copies no personal account or
+It imports only the release's `assets-runtime.json`, `assets-index.json`,
+`tia/base.gla` and the signed catalogue's optional `tia/motions.gla` into ignored
+`build/` paths. It copies no personal account or
 settings. First unlock needs internet; displaying/manipulating Tia needs no
 voice key. Other characters download in Settings → Avatar.
 
@@ -149,8 +152,9 @@ voice key. Other characters download in Settings → Avatar.
 alone. Use the developer's own account if testing standalone voice. The EnConvo
 integration should use the developer's normal EnConvo credential setup.
 
-The reference DMG is about 1.05 GB because encrypted Tia, wardrobe and motions
-are included. EnConvo can use this starter pattern; a cloud-only package needs
+The earlier v0.2.12 reference DMG is about 1.05 GB because encrypted Tia,
+wardrobe and motions are included. Verify the final v0.2.13 artifact size from
+its published release rather than assuming it is unchanged. EnConvo can use this starter pattern; a cloud-only package needs
 a first-run download UI before a character can appear.
 
 Do not begin by re-exporting Blender models. Current protected packages contain
@@ -168,12 +172,14 @@ Paths are relative to this repository. Follow transitive imports: copying only
 | Core renderer | [web/avatar3d.js](../web/avatar3d.js) | Publishes `window.OpenClamAvatar3D`; WebGL canvas, rig, visemes and poses. |
 | Wardrobe/resources | [web/avatar3d-options.js](../web/avatar3d-options.js), [web/avatar3d-resources.js](../web/avatar3d-resources.js) | Selection, color variants, streaming and texture tiers. |
 | Skin/hair/eyes | [web/avatar3d-portrait.js](../web/avatar3d-portrait.js), [web/avatar3d-diffusion.js](../web/avatar3d-diffusion.js), [web/avatar3d-face.js](../web/avatar3d-face.js), `web/vendor/color/` | Per-character calibration, skin diffusion, display transforms and facial packs. |
-| Deformation corrections | [web/avatar3d-volume.js](../web/avatar3d-volume.js), [web/avatar3d-clearance.js](../web/avatar3d-clearance.js), [web/avatar3d-garment-fit.js](../web/avatar3d-garment-fit.js) | Joint volume and authored/character-specific clearance; keep with rig metadata. |
+| Deformation corrections | [web/avatar3d-volume.js](../web/avatar3d-volume.js), [web/avatar3d-clearance.js](../web/avatar3d-clearance.js), [web/avatar3d-garment-fit.js](../web/avatar3d-garment-fit.js), [web/avatar3d-body-brief.js](../web/avatar3d-body-brief.js), [web/avatar3d-mingmei-fit.js](../web/avatar3d-mingmei-fit.js), [web/avatar3d-cloth-occlusion.js](../web/avatar3d-cloth-occlusion.js) | Joint volume, body-fitted briefs, local garment fit and depth-limited layering; preserve material callbacks, morphs, rig metadata and streaming hooks. |
+| Head/hair attachment | [web/avatar3d-head-attachments.js](../web/avatar3d-head-attachments.js) | Ming-Mei/Iselda hair follows procedural head turns without replacing authored pose/motion transforms. Preserve restore/capture/apply ordering. |
 | Motions/stage | [web/avatar3d-motion.js](../web/avatar3d-motion.js), [web/avatar3d-companion.js](../web/avatar3d-companion.js) | Clips, reactions, `CompanionController`, `AvatarStudioStage`. |
 | Eye behavior | [web/avatar3d-attention.js](../web/avatar3d-attention.js) | Irregular blinks and subtle binocular eye movement; already called by renderer. |
-| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.12, not the removed RMS/spectral classifier. |
+| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8, not the removed RMS/spectral classifier. |
 | Connection sounds | [web/conversation-sounds.js](../web/conversation-sounds.js) | Synthesized connecting/ready/end cues; no samples or remote service. |
 | Task bubbles | [web/agent-progress.js](../web/agent-progress.js), [web/bubble-policy.js](../web/bubble-policy.js) | Public status, stale-event handling and Auto/Always/Off. |
+| Deep zoom / close-up | [web/avatar-zoom.js](../web/avatar-zoom.js), [web/avatar-closeup.js](../web/avatar-closeup.js) | Shared crop math; keep solo/Together pointer anchoring, pan, reset and pixel budgets together. |
 | Drawing/hit tests | [web/avatar-render-budget.js](../web/avatar-render-budget.js), [web/avatar-hit-mask.js](../web/avatar-hit-mask.js) | Pixel/texture budgets, frame pacing, cached alpha mask. |
 | Three.js runtime | `web/vendor/three/` | Keep the complete directory including workers, WASM and `avatar-morph-stream.js`. [MANIFEST.json](../web/vendor/three/MANIFEST.json) records 0.185.1 and the local morph-streaming patch. A stock replacement can regress memory use. |
 | Protected delivery | [electron/assets.cjs](../electron/assets.cjs), [electron/protected-assets.cjs](../electron/protected-assets.cjs), [electron/asset-download.json](../electron/asset-download.json) | Node/native-side responsibilities; port for a non-Electron host. |
@@ -493,6 +499,11 @@ More behavior: [GROUP-CONVERSATIONS.md](GROUP-CONVERSATIONS.md).
 - **Cmd+Shift+0** restores default size/upper-right placement. A saved manual
   location may differ on later launches. Port `default-placement.json` and
   native coordinate conversion/clamping for multiple monitors.
+- **Cmd+Shift+9** frames a face close-up. Pinch/wheel zoom can continue to eye
+  detail through `avatar-zoom.js`; the host surface stays bounded while its
+  camera crop becomes smaller. Preserve crop panning and pointer anchoring in
+  solo and Together, including aspect changes. Do not scale a native window or
+  drawing buffer indefinitely to implement deep zoom.
 - CSS `pointer-events: none` alone cannot make a native window click-through.
   Use silhouette masks plus native pass-through, while bubbles/menu controls
   remain interactive. Do not read the full GPU image on every pointer move.
@@ -687,7 +698,7 @@ credentials and M2/16 GB performance still need their own acceptance tests.
 
 > Read docs/ENCONVO-HANDOFF.md and inspect EnConvo's existing agent, credential,
 > voice, delegation and extension interfaces. Implement milestone A, then B,
-> before group work. Reuse v0.2.12's complete renderer dependency tree, real
+> before group work. Reuse v0.2.13's complete renderer dependency tree, real
 > audio-to-viseme pipeline and protected asset loader. EnConvo owns provider
 > credentials, reasoning, tools, microphone and conversation state. Build a
 > narrow adapter; do not instantiate the standalone app's Codex, OpenClaw,
@@ -707,7 +718,10 @@ Action permissions are under **Action Engine & Permissions**, separate from **De
 All five avatars now have 65 motions. `tools/retarget-meshy-motion.py` preserves the Meshy source’s body orientation and movement amplitude. The optional signed `motionUpdate` package contains only `runtime/motions/`; apply it before the base package for those paths, after verifying its signature, checksums, authenticated chunks and matching base revision. The Tia installer includes this encrypted overlay. Do not copy raw model or motion data into a public EnConvo repository.
 
 
-### 0.2.12 renderer and asset changes
+### Historical 0.2.12 renderer and asset changes
+
+This records the earlier release. Its Sarah v8 panel and v10 motion revision are
+superseded below; retain the v0.2.12 lighting calibration as a rollback reference.
 
 - Studio/Soft lighting and reflections now follow the camera, with independent fill lighting. Preserve the portrait renderer's material callbacks and `beforeRender()` integration; see [studio lighting](STUDIO-LIGHTING.md). Light count, texture limits and desktop pixel budgets are unchanged.
 - Keep `web/avatar3d-cloth-occlusion.js` with the renderer dependency tree. It provides a garment-only depth pass for Sarah's Brazilian outfit and Iselda's skirts. This pass runs only while a supported garment is visible. Body bounds and a depth limit prevent rear cloth or hands from erasing exposed skin.
@@ -715,3 +729,60 @@ All five avatars now have 65 motions. `tools/retarget-meshy-motion.py` preserves
 - Idle pose transitions default on for all five characters and Together uses the saved preference. Explicit pose selections and prop modes retain their existing controls.
 - Ming-Mei's eyebrow material restores its missing brown tint. Armor outfits restore the clothed pilot and lock head direction to the helmet while allowing eye movement.
 - See [motion audit](MOTION-AUDIT.md) and [wardrobe audit](WARDROBE-AUDIT.md) for scope, reproducible checks and limitations. Physical M2/16 GB acceptance remains a host integration test.
+
+### 0.2.13 integration follow-up
+
+Preserve the complete renderer dependency tree, especially:
+
+- `avatar3d-head-attachments.js` and authored-frame restore/capture/apply hooks.
+  Ming-Mei and Iselda’s extra procedural head turns carry their independent
+  hair roots through full matrices while retaining the baked hair animation.
+- `avatar-zoom.js`, solo `avatar.html` and per-actor Together crop state. Deep
+  zoom magnifies through a bounded camera crop; it does not allocate an
+  eye-sized model into an enormous desktop surface. Keep coordinate conversion,
+  aspect handling, panning and recovery together. EnConvo can own the shortcuts.
+- `avatar3d-mingmei-fit.js` through the normal `fitGarment` streaming path.
+  Ming-Mei’s fitted opaque back transfers local body weights and adds at most
+  9 mm clearance once on load; her body and upper lace remain unchanged.
+- Sarah’s `avatar3d-body-brief.js` and garment-fit/morph/depth-layer hooks and the matching
+  `sarah-wardrobe-v9` protected content. The final derived brief follows the
+  repaired outer body surface and lower-body morphs, including under both
+  dresses. Dress weights remain authored; a small clearance handles the fitted
+  fabric. See [Wardrobe audit](WARDROBE-AUDIT.md) for the localized derived-body
+  repair, summer cut and checked cases.
+- The `meshy-v11-20260915` motion overlays. They correct pelvis anatomy across
+  all five rigs and the Ming-Mei/Iselda spine aliases. Existing in-place jump,
+  separate foot motion and stable clip framing remain part of the pipeline.
+  Read [Motion audit](MOTION-AUDIT.md) before altering a retarget map.
+- The restrained Studio/Soft calibration, retaining four light sources, one
+  shadow map and existing texture/pixel limits. Compare against the v0.2.12
+  rollback reference rather than increasing exposure or light count globally.
+
+Sarah’s wardrobe revision and the new motion overlays need matching protected
+packages. The hair, lighting, zoom and Ming-Mei dress fitting changes are runtime
+corrections. They do not require another copy of every avatar asset or new R2
+credentials. Keep the signed catalogue’s revision compatibility checks.
+
+Useful maintainer checks when licensed prepared assets exist locally (a clone
+using only encrypted release imports should use `npm test` and the isolated app
+instead; these commands do not provide or request source model keys):
+
+```bash
+node_modules/.bin/electron qa/zoom-native.cjs
+node_modules/.bin/electron qa/head-attachments.cjs
+node_modules/.bin/electron qa/motion-support.cjs
+node_modules/.bin/electron qa/motion-posture.cjs
+node_modules/.bin/electron qa/mingmei-dress.cjs
+node_modules/.bin/electron qa/sarah-dress.cjs
+node qa/body-brief-hooks.cjs
+node_modules/.bin/electron qa/studio-lighting.cjs
+```
+
+The new Ming-Mei harness verifies opaque-back coverage across 32 samples and
+survival of wardrobe streaming and quality-tier changes. Motion support checks
+2,910 frames on all five characters. Separate continuous posture QA passes
+30 scenarios and 18,250 rendered frames with stable framing and hair attachments. The audits record the additional posture,
+hair and Sarah coverage results. These are reference renderer tests, not an
+EnConvo adapter test. Review movement from all angles, interruption and recovery
+inside EnConvo. There is no general cloth simulation or physical M2/16 GB
+acceptance result in this follow-up.
