@@ -179,7 +179,8 @@
     <p class="note">Drag Tia to move her. Scroll or pinch to resize. Option-drag or two-finger swipe to rotate. Double-click her to start or end a conversation; the bubble has the same controls. Say "do a kung fu punch", "sit down", "wave" or "dance" and she follows your words.</p>
   </section>
 </main>
-<script>
+<script type="module">
+  import {shortenHomePaths,expandHomePath} from "/path-display.js";
   const $ = s => document.querySelector(s);
   let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' }, codexModelChoices = [], codexConnection = null;
   let agentInventory=null;
@@ -187,7 +188,9 @@
   const localDelegate=s=>s.reasoningMode==='delegate'&&s.delegate.auth==='local_runtime';
   const localEngine=()=>SETTINGS.effectiveActionEngine||SETTINGS.agentEngine||'codex';
   const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
-  const setState = (el, text, cls = '') => { el.textContent = text; el.className = 'state ' + cls; };
+  const displayText = text => shortenHomePaths(text, SETTINGS?.userHome);
+  const escapeText = text => String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const setState = (el, text, cls = '') => { el.textContent = displayText(text); el.className = 'state ' + cls; };
 
   function render(settings) {
     const previousVoice = SETTINGS?.voice; SETTINGS = settings;
@@ -199,7 +202,7 @@
     $('#conversationSounds').checked=settings.conversationSounds!==false;
     $('#personaName').value = settings.personaName || '';
     $('#persona').value = settings.persona || '';
-    $('#avatarDir').value = settings.avatarDir || '';
+    $('#avatarDir').value = displayText(settings.avatarDir);
     renderAvatars(settings);
     for (const input of document.querySelectorAll('#quality input')) { input.checked = input.value === settings.quality; input.parentElement.classList.toggle('on', input.checked); }
     $('#opacity').value = Math.round((settings.opacity || 1) * 100); $('#opacityOut').value = $('#opacity').value + '%';
@@ -217,7 +220,7 @@
     $('#sharedCodexEngine').textContent='Actions: '+(engine==='codex'?'Codex App Server':runtimeNames[engine])+'. '+(settings.agentFollowReasoning!==false?(shared?'Follows your reasoning agent; permissions below belong to this action engine.':'Your reasoning choice has no action engine; uses your saved action provider. Choose a provider below to change it.'):'Independent of your reasoning provider. Changing reasoning will keep this action engine.');
     $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
-    $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=settings.agentFolder||'';
+    $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=displayText(settings.agentFolder);
   }
   function renderPermissions(settings) {
     const choices=settings.agentPermissionChoices||[], picker=$('#agentAccess');
@@ -248,8 +251,8 @@
         picker.dataset.character=character.slug;picker.dataset.engine=engine;picker.setAttribute('aria-label',character.name+' '+runtimeNames[engine]+' agent');
         const usable=inventory?.installed&&!inventory.error&&inventory.agents.length;
         picker.disabled=!usable;picker.append(new Option(!inventory?'Checking installation…':!inventory.installed?'Requires '+runtimeNames[engine]+' installation':!usable?'Agent list unavailable':'Runtime default',''));
-        if(usable)for(const agent of inventory.agents)picker.append(new Option(agent.name+(agent.isDefault?' · default':''),agent.id));
-        if(saved&&!inventory?.agents.some(a=>a.id===saved))picker.append(new Option(saved+' · unavailable',saved));picker.value=saved;
+        if(usable)for(const agent of inventory.agents)picker.append(new Option(displayText(agent.name)+(agent.isDefault?' · default':''),agent.id));
+        if(saved&&!inventory?.agents.some(a=>a.id===saved))picker.append(new Option(displayText(saved)+' · unavailable',saved));picker.value=saved;
         picker.onchange=()=>save({avatarAgentBindings:{[character.slug]:{[engine]:picker.value}}});cell.append(picker);row.append(cell);
       }body.append(row);
     }
@@ -261,7 +264,7 @@
   function renderRuntime(s){
     const engine=localEngine(),local=Boolean(runtimeNames[engine]);$('#runtimeOptions').hidden=!local;if(!local)return;
     const shared=engine===s.effectiveReasoningEngine;$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on this Mac. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':engine==='hermes'?'Install Hermes with its ACP extra.':'Sign in with Grok Build using grok login.');
-    if(document.activeElement!==$('#runtimePath'))$('#runtimePath').value=s.agentRuntimePaths?.[engine]||'';
+    if(document.activeElement!==$('#runtimePath'))$('#runtimePath').value=displayText(s.agentRuntimePaths?.[engine]);
     $('#runtimeModelRow').hidden=shared||engine==='openclaw';if(document.activeElement!==$('#runtimeModel'))$('#runtimeModel').value=s.agentRuntimeModels?.[engine]||'';
     $('#runtimeAccess').value=s.agentPermissions?.[engine]==='full'?'full':'workspace';
     const r=runtimeConnections[engine];setState($('#runtimeState'),r?(r.ok?r.message:r.error):'Not checked yet.',r?.ok?'ok':r?'bad':'');
@@ -289,7 +292,7 @@
     const useCustom=focused&&el.value==='__custom__';
     if(focused)selected=modelValue(id);
     const ids=[...new Set([...models,selected])].filter(Boolean);
-    const options=ids.map(value=>new Option(value,value));
+    const options=ids.map(value=>new Option(displayText(value),value));
     if(accountDefault)options.unshift(new Option('Account default',''));
     options.push(new Option('Custom model…','__custom__'));
     el.replaceChildren(...options);el.value=useCustom?'__custom__':selected;custom.hidden=!useCustom;
@@ -324,7 +327,7 @@
       else if (t.present) right = `<span class="ok">Ready</span>${(tier === 'base' && status.bundled || t.removable===false) ? '' : `<button data-remove="${tier}" type="button" ${busy ? 'disabled' : ''}>Remove</button>`}`;
       else if (t.available) right = `<button data-download="${tier}" type="button" ${busy ? 'disabled' : ''}>Download ${MB(t.bytes)}</button>`;
       else right = '<small>Not published</small>';
-      const note = active && progress.phase === 'error' ? `<small style="color:#ff5b4d">${progress.error}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
+      const note = active && progress.phase === 'error' ? `<small style="color:#ff5b4d">${escapeText(displayText(progress.error))}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
       rows.push(`<div class="tier"><div><div>${t.label}</div>${note}</div><div class="row" style="margin:0">${right}</div>${active && progress.phase !== 'error' ? `<div class="bar"><i style="width:${progress.percent}%"></i></div>` : ''}</div>`);
     }
     box.innerHTML = rows.join('');
@@ -383,7 +386,7 @@
   $('#refreshAgents').onclick=refreshAgents;
   $('#runtimeCheck').onclick=()=>checkRuntime();$('#delegateRuntimeCheck').onclick=()=>checkRuntime(SETTINGS.delegate.provider);
   $('#runtimeAccess').onchange=()=>save({agentPermissions:{[localEngine()]:$('#runtimeAccess').value}});
-  $('#runtimeSavePath').onclick=async()=>{const engine=localEngine(),value=$('#runtimePath').value.trim();if(value&&!value.startsWith('/')){setState($('#runtimeState'),'Use the full path to the executable, without command arguments.','bad');return;}delete runtimeConnections[engine];await save({agentRuntimePaths:{[engine]:value}});await refreshAgents();};
+  $('#runtimeSavePath').onclick=async()=>{const engine=localEngine(),value=expandHomePath($('#runtimePath').value.trim(),SETTINGS.userHome);if(value&&!value.startsWith('/')){setState($('#runtimeState'),'Use an absolute path or ~/path to the executable, without command arguments.','bad');return;}delete runtimeConnections[engine];await save({agentRuntimePaths:{[engine]:value}});await refreshAgents();};
   $('#runtimeSaveModel').onclick=()=>save({agentRuntimeModels:{[localEngine()]:$('#runtimeModel').value.trim()}});
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});

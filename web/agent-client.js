@@ -1,32 +1,67 @@
 import { AgentProgress } from './agent-progress.js';
-// Shared visible action log and request composer for solo and group windows.
-export function installAgentUI({api,execute,onStatus=()=>{},interactive=()=>{},name=()=> 'Avatar'}){
- const cancelled=new Set(),progress=new AgentProgress();let requestId='',history=[],cancelledRequest='';
- const style=document.createElement('style');style.textContent=`.agent-dialog{width:min(480px,80vw);max-height:76vh;overflow:auto;border:1px solid #bbb8;border-radius:16px;padding:20px;color:#202126;background:#fafafa;font:14px/1.45 -apple-system,system-ui;box-shadow:0 12px 50px #0003}.agent-dialog::backdrop{background:#0002}.agent-dialog h2{font-size:18px;margin:0 0 12px}.agent-dialog textarea{box-sizing:border-box;width:100%;min-height:85px;font:inherit;border:1px solid #bbb;border-radius:8px;padding:10px}.agent-dialog button{border:1px solid #bbb;border-radius:8px;padding:8px 12px;background:white;font:inherit;cursor:pointer}.agent-dialog button:disabled{opacity:.5}.agent-dialog .agent-row{display:flex;gap:8px;margin-top:10px}.agent-dialog .agent-answer{white-space:pre-wrap;max-height:200px;overflow:auto;margin:12px 0}.agent-dialog .agent-note{font-size:12px;color:#666}.agent-dialog .agent-events{font-size:12px;overflow-wrap:anywhere;max-height:100px;overflow:auto}.agent-dialog .agent-state{margin-top:10px}`;document.head.append(style);
- const dialog=document.createElement('dialog');dialog.className='agent-dialog';dialog.innerHTML='<h2>Help with this</h2><p class="agent-note">Ask your selected agent to help with files, the browser, or a character. Agent starting folder: <span class="agent-folder"></span></p><textarea aria-label="Request" placeholder="Go to the upper-right corner and create a test file called tia.txt."></textarea><div class="agent-row"><button data-send>Ask</button><button data-page>Read this page</button><button data-stop disabled>Stop</button><button data-close>Close</button></div><div class="agent-state" role="status"></div><div class="agent-answer"></div><div class="agent-events"></div>';document.body.append(dialog);
- const get=s=>dialog.querySelector(s),state=get('.agent-state'),answer=get('.agent-answer'),events=get('.agent-events');
- const stop=()=>{const update=progress.accept({id:requestId,state:'cancelled'});if(update)onStatus(update.label,update);cancelledRequest=requestId;if(requestId)void api.cancel(requestId);state.textContent='Stopped. Already completed file actions are kept.';requestId='';get('[data-send]').disabled=false;get('[data-page]').disabled=false;get('[data-stop]').disabled=true;};
- api.onAction(async({id,action,args})=>{try{const result=await execute(action,args,()=>cancelled.has(id));if(!cancelled.has(id))api.actionResult(id,result||{ok:true});}catch(e){api.actionResult(id,{ok:false,error:e.message});}finally{cancelled.delete(id);}});
- api.onCancel(({id})=>{cancelled.add(id);if(cancelled.size>64)cancelled.delete(cancelled.values().next().value);});
- api.onProgress(p=>{if(p.id===cancelledRequest)return;const update=progress.accept(p);if(!update)return;const message=update.label;onStatus(message,update);state.textContent=[message,update.detail].filter(Boolean).join(' · ');
-  if(p.state==='complete'){answer.textContent=p.text||'';const receipts=p.receipts||[];events.replaceChildren(...receipts.filter(x=>x.path||x.url||x.error).map(x=>{const d=document.createElement('div');d.textContent=x.error||x.path||[x.title,x.url].filter(Boolean).join(' — ');return d;}));}
- });
- async function run(text){if(requestId||!text.trim())return;requestId='agent-'+crypto.randomUUID();const id=requestId;history.push({role:'user',text:text.trim()});history=history.slice(-12);get('[data-send]').disabled=true;get('[data-page]').disabled=true;get('[data-stop]').disabled=false;answer.textContent='';events.textContent='';
-  let result;try{result=await api.run({id,history,turnId:id});}catch(e){result={ok:false,error:e.message};}if(requestId!==id)return;requestId='';get('[data-send]').disabled=false;get('[data-page]').disabled=false;get('[data-stop]').disabled=true;
-  if(result.ok){answer.textContent=result.text;history.push({role:'assistant',text:result.text});}else{state.textContent=result.error;const update=progress.accept({id,state:'error',error:result.error});if(update)onStatus(update.label,update);}
+import { shortenHomePaths } from './path-display.js';
+
+// Tasks stay owned by the avatar renderer. The existing overhead bubbles own
+// their composers; this controller never opens a modal or another window.
+export function installAgentUI({api,execute,onStatus=()=>{},name=()=> 'Avatar',settings=()=>({}),onOpen=()=>{},questionHost=()=>null,onQuestionChange=()=>{}}){
+ const cancelledActions=new Set(),cancelledRequests=new Set(),histories=new Map(),progress=new Map(),requests=new Map(),questions=new Map();
+ const character=value=>typeof value==='string'&&value?value:name();
+ const display=value=>shortenHomePaths(value,settings()?.userHome);
+ function update(p){
+  if(!p?.id||(cancelledRequests.has(p.id)&&p.state!=='cancelled'))return;
+  const key=character(p.character);let stream=progress.get(key);
+  if(!stream){stream=new AgentProgress();progress.set(key,stream);}
+  const current=stream.accept({...p,character:key});
+  if(current)onStatus(display(current.label),{...current,label:display(current.label),detail:display(current.detail)});
  }
- get('[data-send]').onclick=()=>run(get('textarea').value);get('[data-page]').onclick=()=>{get('textarea').value='What do you think of this webpage? Read the current page and give me your assessment.';void run(get('textarea').value);};get('[data-stop]').onclick=stop;get('[data-close]').onclick=()=>dialog.close();
- dialog.addEventListener('close',()=>interactive(false));dialog.addEventListener('cancel',()=>interactive(false));get('textarea').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();void run(get('textarea').value);}});
- // Codex asks for missing input in the same visible surface in solo and
- // Together. Text content never becomes HTML, and closing means no answer.
- let questionDialog=null;
+ api.onAction(async({id,action,args})=>{try{const result=await execute(action,args,()=>cancelledActions.has(id));if(!cancelledActions.has(id))api.actionResult(id,result||{ok:true});}catch(e){if(!cancelledActions.has(id))api.actionResult(id,{ok:false,error:e.message});}finally{cancelledActions.delete(id);}});
+ api.onCancel(({id})=>{cancelledActions.add(id);if(cancelledActions.size>64)cancelledActions.delete(cancelledActions.values().next().value);});
+ api.onProgress(update);
+ const isBusy=value=>{const key=character(value);return requests.has(key)||Boolean(progress.get(key)?.current?.active);};
+ async function run(text,value){
+  const key=character(value);text=String(text||'').trim();
+  if(!text)return {ok:false,error:'Enter a request first.'};
+  if(isBusy(key))return {ok:false,error:key+' is already working. Stop the current task before sending another.'};
+  const id='agent-'+crypto.randomUUID(),history=[...(histories.get(key)||[]),{role:'user',text}].slice(-12);
+  requests.set(key,id);histories.set(key,history);update({id,character:key,state:'thinking'});
+  let result;
+  try{result=await api.run({id,turnId:id,history,character:key});}catch(e){result={ok:false,error:e.message};}
+  if(cancelledRequests.has(id))result={ok:false,error:'Stopped.'};
+  else if(result?.ok){histories.set(key,[...history,{role:'assistant',text:result.text}].slice(-12));update({id,character:key,state:'complete',text:result.text,receipts:result.receipts});}
+  else {result={ok:false,error:result?.error||'The agent did not return a result.'};update({id,character:key,state:'error',error:result.error});}
+  if(requests.get(key)===id)requests.delete(key);
+  return {...result,requestId:id};
+ }
+ function closeQuestion(id,answer){
+  const item=questions.get(id);if(!item)return;
+  questions.delete(id);item.el.remove();
+  onQuestionChange(item.character,[...questions.values()].some(q=>q.character===item.character));
+  if(answer!==undefined)void api.answerQuestion(id,answer);
+ }
+ const stop=value=>{
+  const key=character(value),id=requests.get(key)||progress.get(key)?.current?.id;
+  if(!id)return;
+  cancelledRequests.add(id);if(cancelledRequests.size>64)cancelledRequests.delete(cancelledRequests.values().next().value);
+  requests.delete(key);void api.cancel(id);update({id,character:key,state:'cancelled'});
+  for(const [qid,item] of questions)if(item.character===key)closeQuestion(qid,{});
+ };
  api.onQuestion?.(request=>{
-  questionDialog?.close();const d=document.createElement('dialog');questionDialog=d;d.className='agent-dialog';d.dataset.id=request.id;
-  const title=document.createElement('h2');title.textContent=request.character+' has a question';d.append(title);const fields=[];
-  for(const q of request.questions||[]){const label=document.createElement('p');label.textContent=q.question;d.append(label);const input=document.createElement('textarea');input.setAttribute('aria-label',q.question);if(q.options?.length){const choices=document.createElement('div');for(const option of q.options){const b=document.createElement('button');b.textContent=option.label;b.title=option.description||'';b.onclick=()=>input.value=option.label;choices.append(b);}d.append(choices);}d.append(input);fields.push({q,input});}
-  const submit=document.createElement('button');submit.textContent='Send answer';submit.onclick=()=>{const answers=Object.fromEntries(fields.map(({q,input})=>[q.id,{answers:[input.value.trim()]}]));api.answerQuestion(request.id,answers);d.dataset.sent='true';d.close();};d.append(submit);
-  d.onclose=()=>{if(!d.dataset.sent)api.answerQuestion(request.id,{});if(questionDialog===d)questionDialog=null;d.remove();interactive(false);};document.body.append(d);interactive(true);d.showModal();fields[0]?.input.focus();
+  const key=character(request.character),host=questionHost(key);
+  if(!host){void api.answerQuestion(request.id,{});return;}
+  for(const [id,item] of questions)if(item.character===key)closeQuestion(id,{});
+  const panel=document.createElement('form');panel.className='agent-question';panel.setAttribute('aria-label',key+' has a question');
+  const title=document.createElement('strong');title.textContent=key+' has a question';panel.append(title);const fields=[];
+  for(const q of request.questions||[]){
+   const label=document.createElement('label');label.textContent=display(q.question);
+   const input=document.createElement('input');input.type='text';input.placeholder='Type your answer…';input.setAttribute('aria-label',display(q.question));
+   const field={q,input,selected:null};input.addEventListener('input',()=>{field.selected=null;});
+   if(q.options?.length){const choices=document.createElement('div');choices.className='agent-choices';for(const option of q.options){const b=document.createElement('button');b.type='button';b.textContent=display(option.label);b.title=display(option.description||'');b.onclick=()=>{input.value=display(option.label);field.selected=option.label;input.focus();};choices.append(b);}panel.append(label,choices,input);}else panel.append(label,input);
+   fields.push(field);
+  }
+  const row=document.createElement('div');row.className='agent-question-actions';const send=document.createElement('button');send.type='submit';send.textContent='Send answer';const dismiss=document.createElement('button');dismiss.type='button';dismiss.textContent='Dismiss';dismiss.onclick=()=>closeQuestion(request.id,{});row.append(send,dismiss);panel.append(row);
+  panel.onsubmit=e=>{e.preventDefault();const answers=Object.fromEntries(fields.map(({q,input,selected})=>[q.id,{answers:[selected??input.value.trim()]}]));closeQuestion(request.id,answers);};
+  questions.set(request.id,{character:key,el:panel});host.append(panel);onQuestionChange(key,true);onOpen(key);fields[0]?.input.focus();
  });
- api.onQuestionClose?.(({id})=>{if(questionDialog?.dataset.id===id){questionDialog.dataset.sent='true';questionDialog.close();}});
- return {open(settings){get('h2').textContent='Ask '+name();get('.agent-folder').textContent=settings.agentFolder||'Desktop';interactive(true);dialog.showModal();get('textarea').focus();},stop,dialog};
+ api.onQuestionClose?.(({id})=>closeQuestion(id));
+ return {open(value){onOpen(character(value));},run,stop,isBusy};
 }

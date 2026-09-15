@@ -49,7 +49,7 @@ const DEFAULTS = {
   agentRuntimePaths: {},
   agentRuntimeModels: {},
   avatarAgentBindings: {},
-  agentFolder: path.join(os.homedir(), 'Desktop'),
+  agentFolder: path.join(os.homedir(), 'Downloads'),
   avatar: 'tia',
   avatarDir: '',
   personaName: 'Tia',
@@ -89,7 +89,9 @@ function loadConfig() {
   config.agentEngine=ENGINES[config.agentEngine]?config.agentEngine:'codex';
   config.agentAccess=normalizePermission(config.agentAccess);
   config.agentPermissions=permissions(config);delete config.agentBrowser;
-  if(typeof config.agentFolder!=='string'||!path.isAbsolute(config.agentFolder))config.agentFolder=DEFAULTS.agentFolder;
+  const folder=require('./agent-folder.cjs').normalizeAgentFolder(config);
+  const folderChanged=config.agentFolder!==folder.agentFolder||config.agentFolderDefaultVersion!==folder.agentFolderDefaultVersion;
+  Object.assign(config,folder);if(folderChanged)saveConfig();
   if (!VOICES.includes(config.voice)) config.voice = DEFAULTS.voice;
   if (!['auto', 'always', 'off'].includes(config.bubbleMode)) config.bubbleMode = 'auto';
   if (!QUALITIES.includes(config.quality)) config.quality = DEFAULTS.quality;
@@ -118,7 +120,7 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+  return { ...config, userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function broadcastSettings() {
@@ -557,7 +559,7 @@ function showAvatarMenu(state) {
     { label: live === 'idle' ? 'Start Conversation' : live === 'connecting' ? 'Connecting…' : 'End Conversation', enabled: live !== 'connecting' && (live !== 'idle' || Boolean(state.hasKey)), click: send('call') },
     { label: 'Mute Microphone', type: 'checkbox', checked: Boolean(state.muted), enabled: live === 'connected', click: send('mute') },
     { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
-    { label: 'Help with this…', enabled:config.agentEnabled, click:send('agent') },
+    { label: 'Ask '+(avatarInfo().name||config.personaName)+' to do something…', enabled:config.agentEnabled, click:send('agent') },
     avatarReasoningMenu(),
     avatarPermissionsMenu(),
     { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
@@ -665,7 +667,7 @@ app.whenReady().then(async () => {
     const own=BrowserWindow.getAllWindows().some(w=>w.webContents.id===details.webContentsId&&w.webContents.getURL().startsWith(serverOrigin+'/'));
     const headers={...details.requestHeaders};if(own)headers['X-Gla-Asset-Key']=assetAccessKey;done({requestHeaders:headers});
   });
-  agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();agentManager?.cancelAll();config.agentFolder=folder;saveConfig();broadcastSettings();}});
+  agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();agentManager?.cancelAll();config.agentFolder=folder;config.agentFolderDefaultVersion=1;saveConfig();broadcastSettings();}});
   groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, avatarPermissionsMenu, avatarReasoningMenu, requestAvatarRecovery, shortcuts:()=>avatarShortcuts?.values||DEFAULT_SHORTCUTS, appInfoMenu:()=>appInfo.menu(), openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
   avatarShortcuts=new AvatarShortcuts(globalShortcut,{recover:requestAvatarRecovery,closeup:requestAvatarCloseup});
   avatarShortcuts.start(config.shortcuts);

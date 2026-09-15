@@ -5,10 +5,18 @@ Right-click the avatar, speech bubble or Listening label to switch installed ava
 ## Bubble modes
 
 - **Always On**: visible while idle, talking or moving.
-- **Off**: speech bubble remains hidden. The small Listening/Muted indicator still reports an active microphone session. **Steer Her** opens a separate message dialog.
+- **Off**: automatic speech/task bubbles remain hidden. The small Listening/Muted indicator still reports an active microphone session. Explicitly choosing **Ask [name] to do something…** temporarily opens that avatar’s input bubble; closing it restores Off.
 - **Only on Incoming Messages**: assistant transcript fragments reveal the bubble for nine seconds after the latest fragment. Animation, outgoing messages and status changes do not alter the timer. The message editor remains visible while focused.
 
 The Listening indicator has a 16-pixel gap above the projected crown, increased from 10 pixels. It moves beside the head if there is insufficient room above.
+
+## Ask from the overhead bubble
+
+Right-click **Ask [name] to do something…** to type a request above that character. Try “Do a backflip” or “Help with files or the browser.” Click the microphone or double-click the head to start talking. Solo live-conversation text continues the current conversation; an idle typed request uses the selected action engine directly. Together typed requests go to the character whose bubble you opened, with the shared group history and verified task results.
+
+Task updates and agent follow-up questions appear in the same bubble. Inputs remain visible while editing; the close button collapses the composer without canceling ongoing work. Use Stop task to cancel. Only the avatar and its visible controls intercept clicks; the rest of the desktop stays accessible.
+
+The agent starting folder defaults to `~/Downloads`. It is the runtime’s working directory, not a limit on its file access. Settings can change it. The previous default `~/Desktop` migrates once; custom folders and later explicit choices are retained. Displayed home paths use `~`; the runtime still receives the real absolute path.
 
 ## Voice behavior
 

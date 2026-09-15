@@ -17,8 +17,8 @@ class AcpAgent{
   // These ACP bridges don't advertise a tool-free sandbox. Never pretend that a
   // prompt alone enforces the app's actions-off switch.
   if(config.agentEnabled!==true)throw Error(`Enable actions to use ${NAMES[this.engine]}. Its connection runs with its configured tools; use Codex or an API connection for reasoning with actions disabled.`);
-  this.cancel(owner);const job={owner,id,character,abort:new AbortController(),receipts:[],calls:new Map(),parts:[],chunk:'',finished:false,config};this.jobs.set(owner,job);
-  const active=()=>this.jobs.get(owner)===job&&!job.abort.signal.aborted&&!job.finished;
+  const key=JSON.stringify([owner,character]);const previous=this.jobs.get(key);if(previous)this.cancel(owner,previous.id);const job={owner,id,character,abort:new AbortController(),receipts:[],calls:new Map(),parts:[],chunk:'',finished:false,config};this.jobs.set(key,job);
+  const active=()=>this.jobs.get(key)===job&&!job.abort.signal.aborted&&!job.finished;
   const redact=text=>String(text).replace(/http:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}/g,'[private avatar endpoint]');
   const receipt=r=>{if(!active())return;const item={...r,...(r.summary?{summary:redact(r.summary)}:{}),callId:String(job.receipts.length+1)};job.receipts.push(item);onReceipt(item);};
   let agent='';
@@ -58,10 +58,10 @@ class AcpAgent{
    const text=redact(job.chunk.trim());if(!text)throw Error(`${NAMES[this.engine]} finished without a final answer. Completed actions are retained.`);
    return {ok:true,text,engine:this.engine,agent,provider:this.engine,model:job.model,character,receipts:job.receipts};
   }catch(error){try{if(job.sessionId)job.client.notify('session/cancel',{sessionId:job.sessionId});}catch{}if(job.abort.signal.aborted)throw Error('Request cancelled. Already completed actions are retained.');throw error;}
-  finally{job.finished=true;bridge?.close();if(job.sessionId&&job.info?.agentCapabilities?.sessionCapabilities?.close)await job.client.request('session/close',{sessionId:job.sessionId},3000).catch(()=>{});job.client.close();if(this.jobs.get(owner)===job)this.jobs.delete(owner);}
+  finally{job.finished=true;bridge?.close();if(job.sessionId&&job.info?.agentCapabilities?.sessionCapabilities?.close)await job.client.request('session/close',{sessionId:job.sessionId},3000).catch(()=>{});job.client.close();if(this.jobs.get(key)===job)this.jobs.delete(key);}
  }
- cancel(owner,id){const job=this.jobs.get(owner);if(!job||id&&job.id!==id)return;job.abort.abort();try{if(job.sessionId)job.client.notify('session/cancel',{sessionId:job.sessionId});}catch{}const timer=setTimeout(()=>job.client.close(),1200);timer.unref();}
- cancelAll(){for(const owner of this.jobs.keys())this.cancel(owner);}
+ cancel(owner,id){for(const job of this.jobs.values()){if(job.owner!==owner||id&&job.id!==id)continue;job.abort.abort();try{if(job.sessionId)job.client.notify('session/cancel',{sessionId:job.sessionId});}catch{}const timer=setTimeout(()=>job.client.close(),1200);timer.unref();}}
+ cancelAll(){for(const owner of new Set([...this.jobs.values()].map(job=>job.owner)))this.cancel(owner);}
  close(){this.cancelAll();for(const job of this.jobs.values())job.client.close();}
 }
 module.exports={AcpAgent};

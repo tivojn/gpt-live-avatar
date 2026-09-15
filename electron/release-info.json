@@ -1,15 +1,14 @@
 {
-  "version": "0.2.13",
-  "date": "2026-09-15",
-  "title": "Deep zoom, natural motion and wardrobe repairs",
-  "description": "Zoom from the full avatar to eye detail, with refined lighting and more natural pelvis and spine motion. Ming-Mei and Iselda keep their hair aligned; Sarah’s underwear and dresses and Ming-Mei’s dress back receive fitted repairs.",
+  "version": "0.2.14",
+  "date": "2026-09-16",
+  "title": "Ask directly above your avatar",
+  "description": "Type requests or start talking from an avatar’s overhead bubble in solo and Together. Task updates and follow-up questions stay with the addressed character, while the rest of the desktop remains clickable.",
   "highlights": [
-    "Pinch or wheel past face close-up in solo and Together. Cmd-Shift-9 frames the face; Cmd-Shift-0 restores the normal view.",
-    "Ming-Mei and Iselda’s independent hair roots follow added head turns while keeping authored hair animation.",
-    "Corrected pelvis and spine alignment across all five avatars, retaining in-place spins, separate foot movement and stable framing.",
-    "Sarah receives body-fitted underwear and localized wardrobe repairs; both dresses include the fitted brief.",
-    "Ming-Mei’s fitted dress back stays covered through the checked motions while preserving the original upper lace.",
-    "Restrained studio lighting refinements retain the existing light, shadow, texture and rendering budgets.",
-    "Protected avatar downloads use the native browser network connection for faster large-file transfers."
+    "Right-click Ask [name] to do something to open a compact overhead input with examples and a microphone.",
+    "Double-click a character’s head to start talking. Together keeps requests and updates attached to the selected character.",
+    "Agent questions appear inside the same bubble; no full-screen request dialog blocks the desktop.",
+    "Task progress is tracked independently for group members, with shared group context for typed requests.",
+    "New agent tasks start in Downloads by default; home paths are displayed as ~ in settings and task updates.",
+    "Includes the v0.2.13 visual, wardrobe, motion and deep-zoom improvements with the existing protected avatar downloads."
   ]
 }

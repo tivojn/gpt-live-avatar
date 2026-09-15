@@ -20,9 +20,9 @@ class CodexAgent{
  }
  async answer(owner,id,config,history,request,character,tools,onReceipt=()=>{},progress=()=>{},options={}){
   clearTimeout(this.idleTimer);
-  this.cancel(owner);const job={owner,id,abort:new AbortController(),character,tools,onReceipt,progress,receipts:[],messages:new Map(),finished:false};this.jobs.set(owner,job);
+  const key=JSON.stringify([owner,character]);const previous=this.jobs.get(key);if(previous)this.cancel(owner,previous.id);const job={owner,id,abort:new AbortController(),character,tools,onReceipt,progress,receipts:[],messages:new Map(),finished:false};this.jobs.set(key,job);
   job.reasoningOnly=options.reasoningOnly===true;
-  const current=()=>!job.finished&&!job.abort.signal.aborted&&this.jobs.get(owner)===job;
+  const current=()=>!job.finished&&!job.abort.signal.aborted&&this.jobs.get(key)===job;
   try{
    await this.client.start();job.abort.signal.throwIfAborted();
    const account=await this.client.request('account/read',{});if(!account.account)throw Error('Sign in to Codex on this Mac, then try again.');
@@ -41,7 +41,7 @@ class CodexAgent{
    if(!current())void this.client.request('turn/interrupt',{threadId:job.threadId,turnId:job.turnId}).catch(()=>{});
    return await result;
   }finally{
-   job.finished=true;clearTimeout(job.timer);this.byThread.delete(job.threadId);if(this.jobs.get(owner)===job)this.jobs.delete(owner);
+   job.finished=true;clearTimeout(job.timer);this.byThread.delete(job.threadId);if(this.jobs.get(key)===job)this.jobs.delete(key);
    if(job.threadId)void this.client.request('thread/unsubscribe',{threadId:job.threadId}).catch(()=>{});
    this.releaseWhenIdle();
   }
@@ -101,8 +101,8 @@ class CodexAgent{
   if(method==='mcpServer/elicitation/request'){const accepted=await this.approve({method,...p,character:job.character,signal:job.abort.signal});return {action:accepted?'accept':'decline',content:accepted?{}:null};}
   throw Error('This Codex permission prompt is not supported by this version: '+method);
  }
- cancel(owner,id){const job=this.jobs.get(owner);if(!job||id&&job.id!==id)return;job.abort.abort();if(job.threadId&&job.turnId)void this.client.request('turn/interrupt',{threadId:job.threadId,turnId:job.turnId}).catch(()=>{});job.reject?.(Error('Request cancelled. Already completed actions are retained.'));}
- cancelAll(){for(const owner of this.jobs.keys())this.cancel(owner);}
+ cancel(owner,id){for(const job of this.jobs.values()){if(job.owner!==owner||id&&job.id!==id)continue;job.abort.abort();if(job.threadId&&job.turnId)void this.client.request('turn/interrupt',{threadId:job.threadId,turnId:job.turnId}).catch(()=>{});job.reject?.(Error('Request cancelled. Already completed actions are retained.'));}}
+ cancelAll(){for(const owner of new Set([...this.jobs.values()].map(job=>job.owner)))this.cancel(owner);}
  releaseWhenIdle(){clearTimeout(this.idleTimer);if(!this.jobs.size){this.idleTimer=setTimeout(()=>{if(!this.jobs.size)this.client.close();},60000);this.idleTimer.unref?.();}}
  close(){clearTimeout(this.idleTimer);this.cancelAll();this.client.close();}
 }

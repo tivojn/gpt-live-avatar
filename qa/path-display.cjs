@@ -1,0 +1,26 @@
+'use strict';
+const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict'), vm = require('node:vm');
+(async () => {
+  const root = process.env.GLA_PATH_DISPLAY_ROOT || path.resolve(__dirname, '..');
+  const source = fs.readFileSync(path.join(root, 'web/path-display.js'), 'utf8');
+  const {shortenHomePaths: show, expandHomePath: expand} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+  const home = '/Users/adamcohen';
+  const request = Object.freeze({folder:home+'/Downloads', text:`Read "${home}/Downloads/meeting notes.txt", then create ${home}/Downloads/result.txt.`});
+  assert.equal(show(request.text, home), 'Read "~/Downloads/meeting notes.txt", then create ~/Downloads/result.txt.');
+  assert.equal(request.folder, home+'/Downloads');assert(request.text.includes(home), 'Display formatting must not mutate the original request');
+  assert.equal(show(`${home}\n${home}/Desktop\n${home}.`, home), '~\n~/Desktop\n~.');
+  assert.equal(show(`ENOENT: open '${home}/Drafts/a.txt' (cwd=${home})`, home), "ENOENT: open '~/Drafts/a.txt' (cwd=~)");
+  assert.equal(show(JSON.stringify({cwd:home,file:home+'/a.txt'}), home), '{"cwd":"~","file":"~/a.txt"}');
+  const others = [`${home}-backup/file`, `${home}2/file`, `${home}.old/file`, '/Users/other/file', '/Volumes/backup'+home+'/file', 'https://example.test'+home+'/file', 'file://'+home+'/file', 'prefix'+home+'/file'];
+  for (const text of others) assert.equal(show(text, home), text, 'Do not mislabel unrelated paths or URLs');
+  const specialHome = '/Users/Ada (Work)+[1]';
+  assert.equal(show(specialHome+'/Downloads/東京.txt', specialHome+'/'), '~/Downloads/東京.txt');
+  for (const value of [undefined,null,'','/','relative']) assert.equal(show(home+'/file',value),home+'/file');
+  assert.equal(show(null,home),'');assert.equal(show('Already ~/Downloads',home),'Already ~/Downloads');
+  for (const absolute of [home,home+'/Downloads',home+'/My Folder/東京.txt']) assert.equal(expand(show(absolute,home),home),absolute,'Editable paths round-trip to the original absolute value');
+  assert.equal(expand('~someone/file',home),'~someone/file');assert.equal(expand('/tmp/a',home),'/tmp/a');assert.equal(expand('Read ~/a',home),'Read ~/a');
+  const page=fs.readFileSync(path.join(root,'web/settings.html'),'utf8');
+  const script=page.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+  assert.doesNotThrow(()=>new vm.Script(script.replace(/^\s*import .*$/gm,'')), 'Settings module remains syntactically valid');
+  console.log('Home path display: task/error text, path boundaries, Unicode, preserved requests and editable-path round trips passed.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

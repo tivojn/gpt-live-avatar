@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>GPT-Live Avatar</title>
+<link rel="stylesheet" href="/agent-composer.css">
 <style>
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-user-select: none; user-select: none; font: 13px/1.4 -apple-system, system-ui, sans-serif; color: #f4f4f6; }
   #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
@@ -11,6 +12,7 @@
   :root { --bubble-bg: rgba(250,250,250,.94); --bubble-line: rgba(0,0,0,.09); --bubble-text: #1d1d1f; --bubble-dim: #6e6e73; --bubble-user: rgba(72,120,255,.18); --bubble-assistant: rgba(0,0,0,.05); --bubble-chip: rgba(0,0,0,.07); --bubble-chip-hover: rgba(0,0,0,.13); --bubble-input: rgba(0,0,0,.05); --bubble-shadow: 0 10px 30px rgba(0,0,0,.18); }
   @media (prefers-color-scheme: dark) { :root { --bubble-bg: rgba(24,24,28,.88); --bubble-line: rgba(255,255,255,.14); --bubble-text: #f4f4f6; --bubble-dim: #b9b9c2; --bubble-user: rgba(72,120,255,.28); --bubble-assistant: rgba(255,255,255,.08); --bubble-chip: rgba(128,128,128,.22); --bubble-chip-hover: rgba(128,128,128,.36); --bubble-input: rgba(128,128,128,.14); --bubble-shadow: 0 10px 30px rgba(0,0,0,.35); } }
   #bubble { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 340px; box-sizing: border-box; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); border-radius: 14px; padding: 8px 10px 8px; box-shadow: var(--bubble-shadow); backdrop-filter: blur(14px); -webkit-app-region: no-drag; transition: opacity .18s ease, transform .18s ease; }
+  #bubble { max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
   #bubble.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(-6px); }
   #bubble .head { display: flex; align-items: center; gap: 8px; }
   #bubble .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a7a82; flex: 0 0 auto; }
@@ -26,6 +28,11 @@
   #bubble .line.pending { opacity: .7; } #bubble .line:empty { display: none; }
   #taskUpdate { margin-top: 7px; font-size: 12.5px; line-height: 1.4; max-height: 88px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; }
   #taskUpdate[hidden] { display: none; }
+  #bubble.composing #taskUpdate { max-height: min(240px, 42vh); }
+  #taskUpdate, #bubble .line { -webkit-user-select: text; user-select: text; }
+  #composerTip { margin: 7px 0 0; color: var(--bubble-dim); font-size: 11px; line-height: 1.4; }
+  #bubble [hidden] { display: none !important; }
+  #bubble button:disabled { opacity: .45; cursor: default; }
   #bubble.has-task .lines { display: none; }
   #bubble .dot.working { background: #d99828; animation: pulse 1.4s infinite; }
   @media (prefers-reduced-motion: reduce) { #bubble .dot.working { animation: none; } }
@@ -60,35 +67,33 @@
   @media (prefers-reduced-motion: reduce) { #listen.listening .listen-orb::before, #bubble .dot { animation: none; } }
   #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--bubble-bg); color: var(--bubble-text); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
-  #steerDialog { width: min(310px, 85vw); box-sizing: border-box; border: 1px solid var(--bubble-line); border-radius: 14px; padding: 14px; background: var(--bubble-bg); color: var(--bubble-text); }
-  #steerDialog::backdrop { background: transparent; }
-  #steerDialog input { width: 100%; box-sizing: border-box; margin: 10px 0; padding: 8px; font: inherit; }
-  #steerDialog button { padding: 6px 12px; font: inherit; }
 </style>
 </head>
 <body>
 <canvas id="stage"></canvas>
 <!-- Speech and task progress share the same overhead bubble. -->
 <div id="bubble" class="hidden">
-  <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span></div>
+  <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Tia</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span><button type="button" class="icon" id="composerClose" hidden title="Close typing controls" aria-label="Close typing controls"><svg viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
   <div id="taskUpdate" hidden role="status" aria-live="polite"></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
-  <div class="row" id="steerRow">
+  <p id="composerTip" hidden>Ask about files or a webpage. Tap the mic or double-click my head to talk.</p>
+  <div class="row" id="steerRow" hidden>
     <button class="icon" id="muteBtn" title="Mute microphone"><svg class="on" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><svg class="off" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M3 17 17 3"/></svg></button>
     <button class="icon" id="hushBtn" title="Stop talking"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg></button>
-    <input id="steer" placeholder="Steer or follow up…" maxlength="2000" autocomplete="off">
+    <input id="steer" aria-label="Ask the avatar" placeholder="Try “Do a backflip”…" maxlength="2000" autocomplete="off">
     <button class="icon" id="steerBtn" title="Send"><svg viewBox="0 0 20 20"><path d="M10 16V4M4.5 9.5 10 4l5.5 5.5"/></svg></button>
     <button class="icon end" id="endBtn" title="End conversation"><svg viewBox="0 0 20 20"><path d="M3 11.5c4-3.5 10-3.5 14 0l-2.2 2.4-2.6-1.4v-2c-1.4-.5-3-.5-4.4 0v2l-2.6 1.4z" fill="currentColor" stroke="none"/></svg></button>
   </div>
+  <div id="agentQuestions"></div>
 </div>
 <div id="listen" class="hidden" role="button" tabindex="0" aria-label="Show conversation"><span class="listen-orb" aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg></span><span class="meter" id="listenMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span id="listenText">Listening</span></div>
 <div id="toast"></div>
-<dialog id="steerDialog"><form method="dialog"><label for="steerMessage">Send a message</label><input id="steerMessage" autocomplete="off"><button value="cancel">Cancel</button> <button value="send">Send</button></form></dialog>
 <script type="module" src="/avatar3d.js"></script>
 <script type="module">
 import {closeupFit} from '/avatar-closeup.js';
 import {zoomScale,zoomFit,keepZoomVisible} from '/avatar-zoom.js';
 import { installAgentUI } from './agent-client.js';
+import { shortenHomePaths } from './path-display.js';
 import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
 import { SpeechOutput, silentSpeech } from '/lip-sync.js';
@@ -110,31 +115,66 @@ matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => {
 const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 30, idleFps: 10, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 15, maxTexture: Infinity } };
 const conversationSounds = new ConversationSounds(()=>settings.conversationSounds!==false);
 const quality = () => QUALITY[settings.quality] || QUALITY.balanced;
-const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
+const displayText = text => shortenHomePaths(text, settings.userHome);
+const currentCharacter = () => settings.avatar?.name || settings.personaName || 'Avatar';
+const isCurrentCharacter = name => !name || String(name).toLowerCase() === currentCharacter().toLowerCase();
+const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = displayText(text); t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
 let taskActivity = null, conversationStatus = {text: 'Loading…', dot: ''};
-const paintStatus = () => { const task=taskActivity && performance.now()<taskActivity.until ? taskActivity : null; $('#status').textContent=task?.label||conversationStatus.text; $('#dot').className='dot '+(task?(task.active?'working':task.state==='error'?'error':''):conversationStatus.dot); };
+let agentUI = null, composerOpen = false, questionOpen = false, composerGeneration = 0, composerResult = null;
+const questionHosts = new Map();
+const syncQuestionHosts = () => {
+  for(const [character,host] of questionHosts)host.hidden=!isCurrentCharacter(character);
+  questionOpen=Boolean(questionHosts.get(currentCharacter())?.querySelector('.agent-question'));
+};
+const questionHost = character => {
+  if(!isCurrentCharacter(character))return null;
+  if(!questionHosts.has(character)){const host=document.createElement('div');questionHosts.set(character,host);$('#agentQuestions').append(host);}
+  syncQuestionHosts();return questionHosts.get(character);
+};
+const currentTask = () => taskActivity && (performance.now() < taskActivity.until || (composerOpen && !taskActivity.active)) ? taskActivity : null;
+const paintStatus = () => { const task=currentTask(); $('#status').textContent=displayText(task?.label||conversationStatus.text); $('#dot').className='dot '+(task?(task.active?'working':task.state==='error'?'error':''):conversationStatus.dot); };
 const setStatus = (text, dot = '') => { conversationStatus={text,dot};paintStatus();if(dot==='error')toast(text,6000); };
-const taskStatus = (_message, update) => { if(!update)return;taskActivity=update;syncBubble();placeBubble(); };
+const taskStatus = (_message, update) => { if(!update||!isCurrentCharacter(update.character))return;taskActivity=update;if(update.active)composerResult=null;syncBubble();placeBubble(); };
 const bubblePolicy = new BubblePolicy();
 const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
 const showBubble = (ms = 9000) => { bubblePolicy.incoming(performance.now(), ms); syncBubble(); };
 const syncBubble = () => {
-  const task=taskActivity && performance.now()<taskActivity.until ? taskActivity : null;
+  const task=currentTask(), forced=composerOpen||questionOpen, connected=live.state==='connected';
+  const detail=composerResult&&task?.id===composerResult.id ? composerResult.text : displayText(task?.detail||'');
   bubblePolicy.activity=Boolean(task);
   bubble.classList.toggle('has-task',Boolean(task));
-  $('#taskUpdate').hidden=!task?.detail;
-  if($('#taskUpdate').textContent!==(task?.detail||''))$('#taskUpdate').textContent=task?.detail||'';
+  bubble.classList.toggle('composing',forced);
+  $('#taskUpdate').hidden=!detail;
+  if($('#taskUpdate').textContent!==detail)$('#taskUpdate').textContent=detail;
   paintStatus();
   bubblePolicy.setMode(bubbleMode());
-  if (bubbleMode() === 'off' && document.activeElement === $('#steer')) $('#steer').blur();
-  bubblePolicy.editor = live.state === 'connected' && document.activeElement === $('#steer');
-  bubble.classList.toggle('hidden', !bubblePolicy.visible(performance.now()));
-  $('#steerRow').hidden = live.state !== 'connected';
+  if (bubbleMode() === 'off' && !forced && bubble.contains(document.activeElement)) document.activeElement.blur();
+  bubblePolicy.editor = connected && bubble.contains(document.activeElement);
+  bubble.classList.toggle('hidden', !(forced || bubblePolicy.visible(performance.now())));
+  $('#steerRow').hidden = !forced && !connected;
+  $('#composerClose').hidden = !composerOpen;
+  $('#composerTip').hidden = !forced || live.state !== 'idle';
+  $('#steer').placeholder = connected ? 'Say something or follow up…' : 'Try “Do a backflip”…';
+  const busy=agentUI?.isBusy(currentCharacter());
+  $('#steerBtn').disabled = live.state === 'connecting' || (!connected && Boolean(busy));
+  $('#hushBtn').hidden = !connected && !busy;
+  $('#hushBtn').title = busy ? 'Stop task' : 'Stop talking';
+  $('#hushBtn').setAttribute('aria-label', $('#hushBtn').title);
+  $('#endBtn').hidden = live.state === 'idle';
+  $('#muteBtn').disabled = live.state === 'connecting';
 };
+const openComposer = character => {
+  if(!isCurrentCharacter(character))return;
+  composerOpen=true;syncBubble();placeBubble();
+  gla.window.setIgnoreMouse(false);ignoring=false;
+  $('#steer').focus();
+};
+const closeComposer = () => { composerOpen=false;if(bubble.contains(document.activeElement))document.activeElement.blur();syncBubble();placeBubble(); };
+$('#composerClose').onclick=closeComposer;
 $('#steer').addEventListener('focus', syncBubble);
 $('#steer').addEventListener('blur', syncBubble);
 setInterval(syncBubble, 100);
-const BUBBLE_RESERVE = 190; // fixed headroom: the bubble has a constant size and never scales with her
+const BUBBLE_RESERVE = 190; // fixed render headroom; a longer bubble scrolls without resizing her surface
 const BUBBLE_GAP = 26; // clear air between her crown and the bubble, even mid-motion
 
 // ---------------------------------------------------------------- streaming audio-to-viseme recognition
@@ -341,6 +381,7 @@ function placeBubble() {
   // narrows (never below 220 px) so it still fits the visible strip.
   const wanted = Math.max(220, Math.min(340, Math.floor(clip.right - clip.left) - 12));
   if (Math.abs(parseFloat(bubble.style.width) - wanted) > .5 || !bubble.style.width) bubble.style.width = wanted + 'px';
+  bubble.style.maxHeight = Math.max(120, clip.bottom - clip.top - 12) + 'px';
   const width = wanted, height = bubble.offsetHeight || 120, half = width / 2;
   const margin = 6, minX = clip.left + half + margin, maxX = clip.right - half - margin, minY = clip.top + margin, maxY = clip.bottom - height - margin;
   let targetX, targetY;
@@ -561,7 +602,7 @@ const delegate = new DelegateClient(live,gla.delegate,message=>{
  if(message==='Thinking…'){delegateStatusID='delegate-'+crypto.randomUUID();taskStatus(message,{id:delegateStatusID,label:'Working…',detail:'',active:true,until:Infinity});}
  else if(taskActivity?.id===delegateStatusID){taskStatus(message,{id:delegateStatusID,label:message?'Couldn’t finish':'',detail:message||'',state:message?'error':'cancelled',active:false,until:message?performance.now()+8000:0});}
 });
-const agentUI=installAgentUI({api:gla.agent,name:()=>settings.avatar?.name||settings.personaName,onStatus:taskStatus,interactive:value=>{if(value){gla.window.setIgnoreMouse(false);ignoring=false;}},execute:async(action,args,cancelled)=>{
+agentUI=installAgentUI({api:gla.agent,name:currentCharacter,onStatus:taskStatus,settings:()=>settings,onOpen:openComposer,questionHost,onQuestionChange:()=>{syncQuestionHosts();syncBubble();placeBubble();},execute:async(action,args,cancelled)=>{
  if(!avatar||!ready)throw Error('The avatar is still loading.');
  const slug=settings.avatar?.slug,name=settings.avatar?.name||settings.personaName;
  const state=()=>({ok:true,characters:[{slug,name,motions:[...avatar.motion.clips.values()].map(c=>({id:c.id,label:c.label||c.id})).slice(0,180)}]});
@@ -604,7 +645,7 @@ live.addEventListener('usage', ({ detail }) => { if (detail && Number.isFinite(d
 live.addEventListener('transcript', ({ detail }) => {
   const { role, text, final } = detail; if (!text) return;
   const line = role === 'user' ? $('#lineUser') : $('#lineAssistant');
-  line.textContent = text; line.classList.toggle('pending', !final);
+  line.textContent = displayText(text); line.classList.toggle('pending', !final);
   if (role === 'assistant') { if(taskActivity&&!taskActivity.active)taskActivity=null;showBubble(9000); } // incoming replies alone wake auto mode
   if (role === 'user') {
     lastUserActivity = performance.now();
@@ -648,7 +689,8 @@ setInterval(() => {
   paintMeter();
   const mic = $('#muteBtn'); mic.classList.toggle('listening', listening);
   mic.style.setProperty('--mic-level', String(Math.min(1, micLevel)));
-  mic.title = live.muted ? 'Unmute microphone' : listening ? 'Listening · click to mute' : 'Mute microphone';
+  mic.title = live.state === 'idle' ? 'Start conversation' : live.state === 'connecting' ? 'Connecting…' : live.muted ? 'Unmute microphone' : 'Listening · click to mute';
+  mic.setAttribute('aria-label',mic.title);
 }, 80);
 live.addEventListener('state', ({ detail }) => { if (detail.state === 'connected' && live.microphone) attachMicrophone(live.microphone); if (detail.state === 'idle') micAnalyser = null; });
 
@@ -665,26 +707,36 @@ const toggleCall = async () => {
   if (audioContext && audioContext.state === 'suspended') audioContext.resume();
   audio.play().catch(() => {}); live.start({ voice: settings.voice });
 };
-// Steering / follow-up: commentary makes her act on it right away; a plain
-// instruction append is absorbed silently and may never produce a reply.
-const steer = () => {
-  const text = $('#steer').value.trim(); if (!text || live.state !== 'connected') return;
-  delegate.cancel(); live.remember('user', text); live.appendCommentary(text); lastUserActivity = performance.now(); $('#steer').value = '';
-  // Echo what you typed as your side of the conversation and start a new turn.
-  turnID = 'typed-' + Date.now().toString(36); assistantTurn = ''; latestUser = text;
-  $('#lineUser').textContent = text; $('#lineUser').classList.remove('pending'); $('#lineAssistant').textContent = '';
-  $('#steer').blur(); syncBubble();
+// Live typing is spoken conversation; idle typing runs the selected action engine.
+const steer = async () => {
+  const text=$('#steer').value.trim();if(!text)return;
+  if(live.state==='connected'){
+    delegate.cancel();live.remember('user',text);live.appendCommentary(text);lastUserActivity=performance.now();$('#steer').value='';
+    turnID='typed-'+Date.now().toString(36);assistantTurn='';latestUser=text;
+    $('#lineUser').textContent=displayText(text);$('#lineUser').classList.remove('pending');$('#lineAssistant').textContent='';
+    $('#steer').blur();syncBubble();return;
+  }
+  if(live.state!=='idle')return;
+  const character=currentCharacter();
+  if(agentUI.isBusy(character)){toast('Stop the current task before sending another.');return;}
+  const generation=++composerGeneration;
+  composerOpen=true;composerResult=null;$('#steer').value='';
+  $('#lineUser').textContent=displayText(text);$('#lineUser').classList.remove('pending');$('#lineAssistant').textContent='';
+  const result=await agentUI.run(text,character);
+  if(generation!==composerGeneration||!isCurrentCharacter(character))return;
+  // Keep the full answer readable until the composer closes; task progress stays compact.
+  if(taskActivity?.id===result?.requestId&&!taskActivity.active)composerResult={id:taskActivity.id,text:displayText(result?.ok?result.text:result?.error||'The task did not return a result.')};
+  syncBubble();placeBubble();
 };
-$('#steerDialog').addEventListener('close', () => {
-  if ($('#steerDialog').returnValue === 'send') { $('#steer').value = $('#steerMessage').value; steer(); }
-  $('#steerMessage').value = '';
-});
 const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.toggle('active', live.muted); $('#muteBtn').title = live.muted ? 'Unmute microphone' : 'Mute microphone'; };
-$('#steerBtn').onclick = steer;
-$('#muteBtn').onclick = toggleMute;
-$('#hushBtn').onclick = () => { delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); };
+$('#steerBtn').onclick = () => void steer();
+$('#muteBtn').onclick = () => { if(live.state==='idle')void toggleCall();else if(live.state==='connected')toggleMute(); };
+$('#hushBtn').onclick = () => {
+  if(agentUI.isBusy(currentCharacter())){++composerGeneration;agentUI.stop(currentCharacter());syncBubble();return;}
+  delegate.cancel();live.stopSpeaking();toast('Asked her to stop.');
+};
 $('#endBtn').onclick = () => { if (live.state !== 'idle') live.stop('user'); };
-$('#steer').addEventListener('keydown', e => { if (e.key === 'Enter') steer(); if (e.key === 'Escape') $('#steer').blur(); });
+$('#steer').addEventListener('keydown', e => { if(e.isComposing)return;if(e.key==='Enter'){e.preventDefault();void steer();}if(e.key==='Escape'){e.preventDefault();closeComposer();} });
 // Right-click anywhere on her body or the bubble: the native menu holds every control.
 const catalogue = () => {
   if (!avatar || !avatar.options) return null;
@@ -719,11 +771,11 @@ addEventListener('contextmenu', event => {
   if (bubble.contains(event.target) || $('#listen').contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
 });
 gla.onMenuAction(id => {
-  if (id === 'agent') agentUI.open(settings);
+  if (id === 'agent') agentUI.open(currentCharacter());
   else if (id === 'call') toggleCall();
   else if (id === 'mute') toggleMute();
   else if (id === 'hush') { delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); }
-  else if (id === 'steer') { if (live.state === 'connected') { if (bubbleMode() === 'off') $('#steerDialog').showModal(); else { bubble.classList.remove('hidden'); $('#steer').focus(); syncBubble(); } } else toast('Start a conversation first.'); }
+  else if (id === 'steer') agentUI.open(currentCharacter());
   else if (id.startsWith('avatar:')) void gla.selectAvatar(id.slice(7));
   else if (id.startsWith('voice-preview:')) { const voice = id.slice(14); if (voice) void preview.start(voice); else preview.stop(); }
   else if (id.startsWith('voice:')) void gla.setSettings({ voice: id.slice(6) });
@@ -895,7 +947,7 @@ async function flushPinch(){
   lastFrame=0;wake();
 }
 addEventListener('wheel',event=>{
-  if(!avatar)return;
+  if(!avatar||bubble.contains(event.target)||$('#listen').contains(event.target))return;
   event.preventDefault();
   const unit=event.deltaMode===1?16:event.deltaMode===2?innerHeight:1;
   if(event.ctrlKey){
@@ -917,10 +969,9 @@ let wheelSave = 0;
 // Click-through: transparent pixels pass to the app underneath, unless the bubble is there.
 let ignoring = false;
 addEventListener('mousemove', event => {
-  if(agentUI.dialog.open){if(ignoring){gla.window.setIgnoreMouse(false);ignoring=false;}return;}
   const overBubble = !bubble.classList.contains('hidden') && bubble.contains(event.target);
   const overPill = !$('#listen').classList.contains('hidden') && $('#listen').contains(event.target);
-  const hit = overBubble || overPill || $('#steerDialog').open || dragging || pinching || Boolean(gesture) || paintedAt(event.clientX, event.clientY);
+  const hit = overBubble || overPill || dragging || pinching || Boolean(gesture) || paintedAt(event.clientX, event.clientY);
   if (hit === ignoring) { ignoring = !hit; gla.window.setIgnoreMouse(ignoring); }
 });
 addEventListener('resize', () => { lastFrame = 0; wake(); });
@@ -934,6 +985,7 @@ const applySettings = next => {
   if (avatar && previous.quality !== settings.quality) applyQuality();
   const changedAvatar = previous.avatarDir !== settings.avatarDir || previous.avatar?.dir !== settings.avatar?.dir || previous.avatar?.slug !== settings.avatar?.slug || previous.avatar?.modelURL !== settings.avatar?.modelURL;
   if (changedAvatar) {
+    ++composerGeneration;composerOpen=false;questionOpen=false;composerResult=null;taskActivity=null;$('#steer').value='';$('#steer').blur();syncQuestionHosts();syncBubble();
     // Stage exit changes the native window's aspect ratio. Hide the old
     // bitmap until the replacement's first complete frame is drawn.
     stageEl.style.visibility='hidden';

@@ -69,8 +69,12 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),path=require('n
  globalThis.Audio=class{pause(){}};
  globalThis.AudioContext=class{resume(){return Promise.resolve();}close(){return Promise.resolve();}createMediaStreamDestination(){return node;}createGain(){return {...node,gain:{value:0}};}createConstantSource(){return node;}};
  globalThis.LiveClient=class extends EventTarget{start(){return Promise.resolve();}stop(){}};
- const negotiating=live.start({cast:[{slug:'tia',name:'Tia'},{slug:'sarah',name:'Sarah'}],topic:'hello',human:{enabled:false}});
+ const priorLines=[{id:'earlier',speaker:'tia',text:'Created the shared file.'}];
+ const negotiating=live.start({cast:[{slug:'tia',name:'Tia'},{slug:'sarah',name:'Sarah'}],topic:'hello',human:{enabled:false},initialHistory:priorLines});
+ assert.equal(live.history[0].text,priorLines[0].text);assert.notEqual(live.history,priorLines,'Startup copies attributed context without replaying it as a fresh request');
  await new Promise(r=>setTimeout(r,0));assert.equal(live.peers.size,2);live.stop();
  await Promise.race([negotiating,new Promise((_,reject)=>setTimeout(()=>reject(Error('Cancelled startup did not settle')),100))]);assert.equal(live.peers.size,0);
+ const cancelledTasks=[],voiceOnly=new LiveGroup({cancel(){},cancelRequest:id=>cancelledTasks.push(id)});
+ voiceOnly.pendingRequests.add('voice-delegation');voiceOnly.interrupt(performance.now());assert.deepEqual(cancelledTasks,['voice-delegation']);assert.equal(voiceOnly.pendingRequests.size,0,'Voice interruption cancels its own pending delegates, never an unrelated bubble request');
  console.log('Speech gate, noise rejection, stream cleanup, cancelled startup, relayed input isolation and turn completion passed.');
 })().catch(e=>{console.error(String(e.stack||e).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'group-live.js'));process.exitCode=1;});

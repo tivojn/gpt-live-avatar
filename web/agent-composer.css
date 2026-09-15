@@ -1,0 +1,8 @@
+.agent-question{display:flex;flex-direction:column;gap:7px;max-height:220px;overflow:auto;overscroll-behavior:contain;margin:8px 0 2px;padding:10px 0 0;border-top:1px solid #8883;font:12px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;text-align:left;white-space:normal;user-select:text}
+.agent-question label{overflow-wrap:anywhere}
+.agent-question input{box-sizing:border-box;width:100%;min-width:0;border:1px solid #8884;border-radius:10px;padding:8px;color:inherit;background:#8881;font:inherit;user-select:text}
+.agent-choices,.agent-question-actions{display:flex;flex-wrap:wrap;gap:5px}
+.agent-question button{max-width:100%;border:1px solid #8883;border-radius:9px;padding:6px 9px;background:#8881;color:inherit;font:inherit;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
+.agent-question button:hover{background:#8882}
+.agent-question-actions button[type=submit]{background:#536ecf;color:white;border-color:transparent}
+.agent-question :focus-visible{outline:2px solid #5c7ee6;outline-offset:2px}

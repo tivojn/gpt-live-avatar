@@ -52,6 +52,12 @@ class Client{
   a.cancel(1,'unrelated');assert.equal(a.jobs.size,1);a.cancel(1,'y');await assert.rejects(cancelled,/cancelled/);assert(client.calls.some(c=>c.method==='session/cancel'));assert(client.closed);
   await assert.rejects(client.onRequest('session/request_permission',{sessionId:'s1',options:[]}),/Unavailable/);
   await assert.rejects(a.answer(1,'missing',{...cfg,avatarAgentBindings:{sarah:{[engine]:'deleted'}}},[],'hello','Sarah'),/no longer exists/);assert.equal(a.jobs.size,0);assert(client.closed);
+  const parallelTia=a.answer(9,'parallel-tia',cfg,[],'first','Tia');parallelTia.catch(()=>{});const tiaClient=client;
+  const parallelSarah=a.answer(9,'parallel-sarah',cfg,[],'second','Sarah');parallelSarah.catch(()=>{});const sarahClient=client;
+  await tick();assert.equal(a.jobs.size,2,engine+' supports simultaneous characters');assert(!tiaClient.closed&&!sarahClient.closed);
+  a.cancel(9,'parallel-tia');await assert.rejects(parallelTia,/cancelled/);assert.equal(a.jobs.size,1);assert(!sarahClient.closed);
+  const replacement=a.answer(9,'replacement',cfg,[],'third','Sarah');replacement.catch(()=>{});await assert.rejects(parallelSarah,/cancelled/);await tick();assert.equal(a.jobs.size,1);a.cancelAll();await assert.rejects(replacement,/cancelled/);assert.equal(a.jobs.size,0);
+
  }
  const requested=createAvatarTools({config:{agentFolder:os.tmpdir()},request:'Sarah, play your boxing warmup.',avatarCommand:async()=>({ok:true})});assert.equal((await requested.execute('play_motion',{character:'Sarah',motion:'boxing-warmup'},new AbortController().signal)).ok,true);
  const abort=new AbortController(),executed=[],tool={tools:[{name:'play_motion'}],execute:async(name,args)=>{executed.push(args);return {ok:true};}};

@@ -8,8 +8,8 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 15, 2026 for **v0.2.13**. Use the matching
-[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.13)
+Updated September 16, 2026 for **v0.2.14**. Use the matching
+[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.14)
 to confirm Apple Silicon installer availability and checksums. Use the release
 tag and matching checksums for a reproducible reference.
 
@@ -19,8 +19,8 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Confirm availability on the matching release page, then download the official
-   signed v0.2.13 installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.13/GPT-Live.Avatar-0.2.13-arm64.dmg
+   signed v0.2.14 installer:
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.14/GPT-Live.Avatar-0.2.14-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Tia appears. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
@@ -285,3 +285,10 @@ local renderer checks; physical M2/16 GB testing, a complete EnConvo integration
 and every possible outfit/animation combination require their own acceptance.
 The app uses garment-specific fitting and depth layers, not general cloth
 simulation.
+
+
+### 0.2.14 overhead input follow-up
+
+The fullscreen Ask dialog is removed. `web/agent-client.js` now owns only task routing, per-character progress, cancellation and inline questions. The composers live in the existing overhead bubbles in `web/avatar.html` and `web/group.js`. Reuse those surfaces for EnConvo input and route their requests to EnConvo’s own agent system; do not create an extra modal window. Group typed requests share conversation history and verified results while retaining the chosen character.
+
+`electron/agent-folder.cjs` supplies the `~/Downloads` working-folder default and a one-time migration of the former Desktop default. `web/path-display.js` shortens the current user’s home path for display without changing execution paths. This update uses the same protected v0.2.13 avatar catalogue; no new model download is needed.

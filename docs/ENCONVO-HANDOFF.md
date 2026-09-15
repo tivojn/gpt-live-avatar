@@ -3,15 +3,15 @@
 **Goal: give EnConvo's existing agents a visible, animated avatar. EnConvo owns
 the intelligence, credentials, voice conversation, tools and permissions.**
 
-For the EnConvo developer and their AI coding assistant. Updated September 15,
-2026 for GPT-Live Avatar **v0.2.13**. Use its tag for a reproducible source
+For the EnConvo developer and their AI coding assistant. Updated September 16,
+2026 for GPT-Live Avatar **v0.2.14**. Use its tag for a reproducible source
 reference. Check the matching release page for signed installer availability
 and checksums, and record the exact source commit you integrate.
 
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.13
-- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.13/GPT-Live.Avatar-0.2.13-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.13/SHA256SUMS-0.2.13.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.14
+- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.14/GPT-Live.Avatar-0.2.14-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.14/SHA256SUMS-0.2.14.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
@@ -25,7 +25,7 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### Integration reference in the v0.2.13 source
+### Integration reference in the v0.2.14 source
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
   overhead speech/task updates, protected downloads and the encrypted Tia
@@ -41,7 +41,7 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-Use `SHA256SUMS-0.2.13.txt` from the matching release to verify its downloaded
+Use `SHA256SUMS-0.2.14.txt` from the matching release to verify its downloaded
 installer rather than checksums from an older release.
 
 ## 1. Scope and ownership
@@ -419,10 +419,10 @@ optional `text`, `tool`, `error`, `receipts`. Send `thinking` first for a new
 task, then `update`/tool states, then `complete`, `error` or `cancelled`.
 Otherwise its stale-event guard rejects an unknown task.
 
-The class tracks one current task. Use a per-task/per-actor map for concurrent
-EnConvo jobs. Also adapt the existing group UI: it currently clears other actors'
-activity when one receives an update. Copying that behavior would hide parallel
-EnConvo tasks.
+The class tracks one current task. The standalone controller keeps a separate
+instance per character, so simultaneous tasks on different avatars retain
+independent progress. EnConvo should add a per-task map if one character can
+run multiple concurrent jobs.
 
 Show public status, not private reasoning, credentials or raw shell output.
 Detailed artifacts remain in EnConvo's result UI. Respect Bubble Off; Auto keeps
@@ -646,8 +646,9 @@ new task arriving before an old update. EnConvo owns permissions throughout.
 
 Test addressed names, a paused “Sarah…”, follow-ups, barge-in and roundtable
 resume. Tia creates a test file; Sarah operates on that exact file using shared
-receipts. Only the addressee narrates. Test parallel tasks if EnConvo supports
-them; don't inherit the standalone UI's single-task bubble limitation.
+receipts. Only the addressee narrates. Test parallel tasks across avatars and
+independent cancellation. If EnConvo supports multiple jobs per avatar, provide
+an additional task-selection UI.
 
 Play motions on all five, including Sarah's boxing warmup when installed.
 Inspect elbows, wrists, shoulders, skirt/hip joints and prop bounds from
@@ -793,3 +794,10 @@ The Electron host supplies `net.fetch` to `AvatarAssets` so protected downloads
 use Chromium’s network stack, including HTTP/2. An EnConvo port should supply an
 equivalent native HTTP/2-capable client while retaining origin restrictions,
 redirect rejection, cancellation and signed per-part/whole-package checksums.
+
+
+### 0.2.14 overhead input follow-up
+
+The fullscreen Ask dialog is removed. `web/agent-client.js` now owns only task routing, per-character progress, cancellation and inline questions. The composers live in the existing overhead bubbles in `web/avatar.html` and `web/group.js`. Reuse those surfaces for EnConvo input and route their requests to EnConvo’s own agent system; do not create an extra modal window. Group typed requests share conversation history and verified results while retaining the chosen character.
+
+`electron/agent-folder.cjs` supplies the `~/Downloads` working-folder default and a one-time migration of the former Desktop default. `web/path-display.js` shortens the current user’s home path for display without changing execution paths. This update uses the same protected v0.2.13 avatar catalogue; no new model download is needed.

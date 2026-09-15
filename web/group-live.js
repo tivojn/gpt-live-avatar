@@ -20,11 +20,11 @@ export class SpeechGate {
 }
 const rmsOf=(analyser,samples)=>{if(!analyser)return 0;analyser.getFloatTimeDomainData(samples);let sum=0;for(const v of samples)sum+=v*v;return Math.sqrt(sum/samples.length);};
 export class LiveGroup {
- constructor(api,callbacks={}){this.api=api;this.callbacks=callbacks;this.generation=0;this.peers=new Map();this.history=[];this.active='';this.running=false;this.muted=false;this.actions=[];this.contextVersion=0;this.offContext=api.onContext?.(entry=>this.actionResult(entry));}
+ constructor(api,callbacks={}){this.api=api;this.callbacks=callbacks;this.generation=0;this.peers=new Map();this.history=[];this.active='';this.running=false;this.muted=false;this.actions=[];this.pendingRequests=new Set();this.contextVersion=0;this.offContext=api.onContext?.(entry=>this.actionResult(entry));}
  emit(type,detail){this.callbacks[type]?.(detail);}
- async start({cast,topic,mode,human,inputStream=null,monitor=true,agentEnabled=false}){
+ async start({cast,topic,mode,human,inputStream=null,monitor=true,agentEnabled=false,initialHistory=[]}){
   this.stop();const generation=this.generation,current=()=>generation===this.generation;
-  Object.assign(this,{cast,topic,mode,human,monitor,agentEnabled,running:true,history:[],turn:0,active:'',userSpeaking:false,muted:false,directed:null,awaitingHuman:false,awaitingNextHuman:false,gate:new SpeechGate()});
+  Object.assign(this,{cast,topic,mode,human,monitor,agentEnabled,running:true,history:initialHistory.slice(-95).map(line=>({...line})),turn:0,active:'',userSpeaking:false,muted:false,directed:null,awaitingHuman:false,awaitingNextHuman:false,gate:new SpeechGate()});
   try{
    this.context=new AudioContext();await this.context.resume();if(!current())return;
    if(human.enabled){
@@ -164,14 +164,14 @@ export class LiveGroup {
   if(target&&target!==p.slug){p.delegating=false;this.open(target,false,{text:p.lastHumanText,id:p.lastHumanId});return;}
   // Only origin-tagged human input grants permission; peer dialogue is context.
   const history=[...this.history];
-  let result;try{result=await this.api.reply({id,speaker:p.slug,participants:this.cast.map(c=>c.slug),topic:this.topic,mode:this.mode,human:this.human,history,humanRequest:p.acceptUser?p.lastHumanText:'',turnId:p.lastHumanId});}catch(e){result={ok:false,error:e.message};}
+  this.pendingRequests.add(id);let result;try{result=await this.api.reply({id,speaker:p.slug,participants:this.cast.map(c=>c.slug),topic:this.topic,mode:this.mode,human:this.human,history,humanRequest:p.acceptUser?p.lastHumanText:'',turnId:p.lastHumanId});}catch(e){result={ok:false,error:e.message};}finally{this.pendingRequests.delete(id);}
   if(generation!==this.generation||p.openAt!==floor||p.slug!==this.active)return;p.delegating=false;p.agentHandledText=p.lastHumanText;p.agentDue=0;this.awaitingHuman=false;this.finishLine(p);p.heard=false;p.openAt=p.lastText=p.lastAudio=performance.now();this.advanceAt=0;
   const text=result.ok?result.text:'The tool request could not be completed. Report this actual error briefly: '+String(result.error||'No result was returned.').slice(0,500);p.agentResult=text;p.acceptUser=false;for(const entry of result.sharedActions||[])this.actionResult(entry);
   p.client.appendInstructions('Floor OPEN for '+p.name+'. '+(result.ok?'Your agent returned a result. Explain that result accurately, including any limitations.':'Your agent request failed. Explain the error; do not claim the task succeeded.')+' Then wait for the human. Do not repeat the action.');
   for(const chunk of commentaryChunks(text))p.client.appendCommentary(chunk,application?null:id);
  }
  interrupt(now){
-  void this.api.cancel();
+  this.cancelDelegates();void this.api.cancel();
   this.userSpeaking=true;this.awaitingHuman=true;this.awaitingNextHuman=false;this.advanceAt=0;this.userUntil=now+1600;
   const p=this.peers.get(this.active);if(p){
    const continuing=p.acceptUser&&!p.heard&&!p.segments.size&&(p.routingPending||now-(p.humanChangedAt||0)<4000);
@@ -222,21 +222,22 @@ export class LiveGroup {
  setMuted(value){
   this.muted=Boolean(value);for(const track of this.microphone?.getTracks()||[])track.enabled=!this.muted;
   for(const p of this.peers.values())p.micGain.gain.value=p.slug===this.active&&!this.muted?1:0;
-  if(this.muted){this.userSpeaking=false;this.gate=new SpeechGate();const p=this.peers.get(this.active);if(p?.routingPending){p.inputRevision++;p.routingPending=false;p.acceptUser=false;this.awaitingHuman=false;this.awaitingNextHuman=true;void this.api.cancel();}}
+  if(this.muted){this.userSpeaking=false;this.gate=new SpeechGate();const p=this.peers.get(this.active);if(p?.routingPending){p.inputRevision++;p.routingPending=false;p.acceptUser=false;this.awaitingHuman=false;this.awaitingNextHuman=true;this.cancelDelegates();void this.api.cancel();}}
   this.routeAudio();
   this.emit('microphone',{muted:this.muted,active:Boolean(this.microphone)});
  }
  say(text){
   text=String(text||'').trim().slice(0,1200);if(!text||!this.running)return;
   const id='typed-'+Date.now();this.recordLine({speaker:'_human',id,text,at:performance.now()});
-  void this.api.cancel();const target=this.target(text);this.open(target,false,{text,id}); // Store authorization before opening the floor.
+  this.cancelDelegates();void this.api.cancel();const target=this.target(text);this.open(target,false,{text,id}); // Store authorization before opening the floor.
  }
+ cancelDelegates(){for(const id of this.pendingRequests||[])void this.api.cancelRequest?.(id);this.pendingRequests?.clear();}
  stop(){
   this.generation++;this.running=false;clearInterval(this.timer);this.timer=null;
   this.capture?.close();this.capture=null;
   this.microphone?.getTracks().forEach(t=>t.stop());this.microphone=null;this.source=null;this.micAnalyser=null;
   for(const p of this.peers.values()){p.cancelConnect?.();p.cancelConnect=null;p.client.stop('group_end');p.output?.close();try{p.silence.stop();}catch{}p.input.stream.getTracks().forEach(t=>t.stop());}
   this.peers.clear();void this.context?.close().catch(()=>{});this.context=null;this.active='';this.userSpeaking=false;
-  void this.api.cancel();this.emit('microphone',{active:false,muted:true});
+  this.cancelDelegates();void this.api.cancel();this.emit('microphone',{active:false,muted:true});
  }
 }

@@ -53,5 +53,11 @@ class FakeClient{
  const readStart=client.calls.filter(c=>c.method==='thread/start').at(-1).p;assert.equal(readStart.model,'gpt-5.6-luna');assert.equal(readStart.sandbox,'read-only');assert.equal(readStart.approvalPolicy,'never');assert.deepEqual(readStart.dynamicTools,[]);assert.equal(readStart.config.features.shell_tool,false);assert.equal(readStart.config.mcp_servers.example.enabled,false);assert.equal(readStart.config.plugins['example@tools'].enabled,false);assert.equal(readStart.config.apps.example.enabled,false);
  for(const key of ['image_generation','view_image','goals','tool_suggest','workspace_dependencies'])assert.equal(readStart.config.features[key],false);
  await assert.rejects(client.onRequest('item/tool/call',{threadId:'thread-'+client.n,tool:'move_avatar',arguments:{}}),/Actions are disabled/);agent.cancel(3);await assert.rejects(reasoning,/cancelled/);
+ const parallelTia=agent.answer(7,'parallel-tia',config,history,'first','Tia',tools);parallelTia.catch(()=>{});
+ const parallelSarah=agent.answer(7,'parallel-sarah',config,history,'second','Sarah',tools);parallelSarah.catch(()=>{});
+ await new Promise(r=>setImmediate(r));assert.equal(agent.jobs.size,2,'Two characters in one renderer keep separate tasks');
+ agent.cancel(7,'parallel-tia');await assert.rejects(parallelTia,/cancelled/);assert.equal(agent.jobs.size,1);assert.equal([...agent.jobs.values()][0].character,'Sarah');
+ const replacement=agent.answer(7,'sarah-replacement',config,history,'replacement','Sarah',tools);replacement.catch(()=>{});await assert.rejects(parallelSarah,/cancelled/);await new Promise(r=>setImmediate(r));assert.equal(agent.jobs.size,1);
+ const another=agent.answer(8,'other-window',config,history,'other','Tia',tools);another.catch(()=>{});await new Promise(r=>setImmediate(r));agent.cancel(7);await assert.rejects(replacement,/cancelled/);assert.equal(agent.jobs.size,1,'Window cancellation preserves another window');agent.cancelAll();await assert.rejects(another,/cancelled/);
  agent.close();console.log('Codex identity, shell/file receipts, dynamic avatar tools, explicit approval, final-only replies, cancellation and stale-tool rejection passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('gla', {
     voice: request => ipcRenderer.invoke('gla:group:voice', request),
     live: request => ipcRenderer.invoke('gla:group:live', request),
     transcribe: request => ipcRenderer.invoke('gla:group:transcribe', request),
-    cancel: () => ipcRenderer.invoke('gla:group:cancel'),
+    cancel: options => ipcRenderer.invoke('gla:group:cancel',options),
     setIgnoreMouse: value => ipcRenderer.send('gla:group:ignore-mouse', Boolean(value)),
     onContext: callback => subscribe('gla:group:context', callback),
     onReset: callback => subscribe('gla:group:reset', callback),
