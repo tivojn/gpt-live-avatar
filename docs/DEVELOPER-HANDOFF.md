@@ -4,13 +4,17 @@ For an authorized coworker making feature changes to GPT-Live Avatar while
 continuing to use the existing protected avatar download service. No owner
 Cloudflare login, Blender originals or private release keys are needed.
 
+If you are integrating the avatar layer into **EnConvo**, start with
+[ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
+components from the account, voice and agent systems EnConvo already owns.
+
 ## First successful run
 
 Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Download the official signed installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.7/GPT-Live.Avatar-0.2.7-arm64.dmg
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.8/GPT-Live.Avatar-0.2.8-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Tia appears. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:

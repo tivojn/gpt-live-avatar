@@ -119,7 +119,11 @@ Avatar and voice selection, voice previews, reliable bubble modes and Tia's orig
 
 ## Handoff for other hosts (EnConvo)
 
-See [docs/ENCONVO-HANDOFF.md](docs/ENCONVO-HANDOFF.md) for how to reuse only the avatar layer (renderer, motions, lip-sync, stage) inside another app that owns its own GPT-Live session.
+See [the EnConvo integration handoff](docs/ENCONVO-HANDOFF.md) for the v0.2.8
+component map, current audio-to-viseme pipeline, protected R2 setup, proposed
+host adapter and staged acceptance checks. EnConvo keeps its own credentials,
+voice/delegate sessions, reasoning and agentic tools; this repository supplies
+the avatar layer. Native audio/webview adaptation still needs implementation.
 
 
 Desktop Delegate mode supports OpenAI and xAI reasoning with API keys or account
