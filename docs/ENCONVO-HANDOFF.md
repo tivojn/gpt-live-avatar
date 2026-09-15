@@ -3,20 +3,48 @@
 **Goal: give EnConvo's existing agents a visible, animated avatar. EnConvo owns
 the intelligence, credentials, voice conversation, tools and permissions.**
 
-For the EnConvo developer and their AI coding assistant. Prepared September 15,
-2026 against GPT-Live Avatar **v0.2.8**, source commit
-[`fcc4e02`](https://github.com/tivojn/gpt-live-avatar/commit/fcc4e02a57f55c667d4e92222918bddd8a0516f1).
+For the EnConvo developer and their AI coding assistant. Updated September 15,
+2026 against the published GPT-Live Avatar **v0.2.9**, application source commit
+[`b6dd188`](https://github.com/tivojn/gpt-live-avatar/commit/b6dd188d296a3233431d1bd6ee51a0e3124ff04f).
+Later documentation-only commits do not change that installer.
 
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.8
-- Signed Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.8/GPT-Live.Avatar-0.2.8-arm64.dmg
-- Clone/build guide: [DEVELOPER-HANDOFF.md](DEVELOPER-HANDOFF.md)
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.9
+- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.9/GPT-Live.Avatar-0.2.9-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.9/SHA256SUMS-0.2.9.txt
+- This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
+- Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
+- Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
+- Standalone agent setup: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/AGENT-RUNTIMES.md
+- Asset delivery details: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/PROTECTED-ASSETS.md
 
 This document describes working repository components and a proposed integration
 boundary. **There is no completed EnConvo adapter or published avatar SDK here.**
 EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
+
+### What is ready in v0.2.9
+
+- Five characters, solo/Together controls, local audio-to-viseme lip-sync,
+  overhead speech/task updates, protected downloads and the encrypted Tia
+  starter are available as the integration reference.
+- Standalone reasoning and enabled actions can use Codex App Server, OpenClaw
+  or Hermes. OpenClaw agents and Hermes profiles can be assigned separately to
+  each character. Missing runtimes are marked unavailable; a failed selected
+  runtime does not silently fall back to another provider.
+- Right-click menus include About and Check for Updates, with the installed
+  version, release description and official download links. Checks are on
+  demand; the app does not automatically replace itself.
+- The new runtime adapters are optional examples, not prerequisites for
+  EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
+  tools. Do not start by reproducing the standalone account/settings system.
+
+The v0.2.9 DMG is **1,047,191,904 bytes** (about 1.05 GB). Its SHA-256 is:
+
+```text
+c2d09bcdc289f577c89dbf62fd01c2a1bb63b48a415b49707511e4fe6b5f383c
+```
 
 ## 1. Scope and ownership
 
@@ -43,9 +71,31 @@ even if initially mapped 1:1. A visual avatar does not automatically require a
 new agent/session. Changing an outfit must not reconnect voice or reasoning.
 
 The standalone app has a Live client, direct provider delegation, a small
-built-in action engine, and a Codex App Server reasoning/action lane because
+built-in action engine, and Codex App Server/OpenClaw/Hermes integrations because
 it needs its own backend. **Do not run these alongside EnConvo's own system.
-Codex is not a required dependency for this integration.**
+None of those runtimes is a required dependency for this integration.**
+
+### Agent assignment in the reference app
+
+The standalone app stores assignments as
+`avatarAgentBindings[characterId][engine]`. OpenClaw discovers native agents;
+Hermes discovers named profiles. A blank assignment follows the runtime's
+default, while an explicit missing assignment produces an error. The engine
+selected for reasoning also handles enabled actions; direct API/OAuth reasoning
+can instead use a separately selected action engine. Both solo and Together
+pass the addressed character and shared, verified task context to that engine.
+
+For EnConvo, map characters to **EnConvo agent IDs** using its existing registry.
+Preserve the addressed character through progress, tools and spoken results.
+Agent/profile selection must not move a task's reply to another avatar or create
+an independent conversation history for each outfit. Reference implementation:
+[runtime-agents.cjs](../electron/runtime-agents.cjs), with operational details in
+[AGENT-RUNTIMES.md](AGENT-RUNTIMES.md).
+
+The local validation used a Hermes `tia` profile with OpenAI OAuth2 and
+`openai-codex:gpt-5.6-sol`. **That profile and sign-in are not included in the
+installer or repository.** Coworkers configure their own runtime accounts if
+testing those optional backends. No owner login or token transfer is needed.
 
 ## 2. Target architecture
 
@@ -123,7 +173,7 @@ Paths are relative to this repository. Follow transitive imports: copying only
 | Deformation corrections | [web/avatar3d-volume.js](../web/avatar3d-volume.js), [web/avatar3d-clearance.js](../web/avatar3d-clearance.js), [web/avatar3d-garment-fit.js](../web/avatar3d-garment-fit.js) | Joint volume and authored/character-specific clearance; keep with rig metadata. |
 | Motions/stage | [web/avatar3d-motion.js](../web/avatar3d-motion.js), [web/avatar3d-companion.js](../web/avatar3d-companion.js) | Clips, reactions, `CompanionController`, `AvatarStudioStage`. |
 | Eye behavior | [web/avatar3d-attention.js](../web/avatar3d-attention.js) | Irregular blinks and subtle binocular eye movement; already called by renderer. |
-| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | v0.2.8 real audio recognition, not the removed RMS/spectral classifier. |
+| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.9, not the removed RMS/spectral classifier. |
 | Connection sounds | [web/conversation-sounds.js](../web/conversation-sounds.js) | Synthesized connecting/ready/end cues; no samples or remote service. |
 | Task bubbles | [web/agent-progress.js](../web/agent-progress.js), [web/bubble-policy.js](../web/bubble-policy.js) | Public status, stale-event handling and Auto/Always/Off. |
 | Drawing/hit tests | [web/avatar-render-budget.js](../web/avatar-render-budget.js), [web/avatar-hit-mask.js](../web/avatar-hit-mask.js) | Pixel/texture budgets, frame pacing, cached alpha mask. |
@@ -143,6 +193,12 @@ Read these as host examples, not drop-in EnConvo pages:
   without initializing its agent/account/session machinery.
 - [electron/preload.cjs](../electron/preload.cjs): Electron's `window.gla` bridge,
   mixing UI, accounts, tools and voice. Replace with a narrow EnConvo bridge.
+- [electron/app-info.cjs](../electron/app-info.cjs),
+  [electron/releases.cjs](../electron/releases.cjs),
+  [electron/release-info.json](../electron/release-info.json): standalone
+  version details and update checks. EnConvo should use its own updater. A
+  separately distributed fork must change its update destination so users
+  cannot accidentally replace it with the upstream standalone app.
 
 Leave EnConvo in charge instead of copying these backends:
 
@@ -150,11 +206,16 @@ Leave EnConvo in charge instead of copying these backends:
 - `web/group-live.js`, `web/group-voice.js`, `web/group-input.js`,
   `web/group-capture.js`, `web/group-capture-worklet.js`;
 - `electron/live-config.cjs`, `electron/delegate*.cjs`, `electron/agent*.cjs`,
-  `electron/codex*.cjs`, `electron/group-input.cjs`.
+  `electron/codex*.cjs`, `electron/group-input.cjs`;
+- `electron/acp-client.cjs`, `electron/acp-agent.cjs`,
+  `electron/runtime-agents.cjs`, `electron/runtime-tools.cjs`.
 
 They remain useful behavior references. `web/group-context.js`,
 `web/group-actions.js` and `electron/group-context.cjs` inform routing/shared
 receipts, but EnConvo's conversation store should remain the source of truth.
+The ACP bridge and its short-lived local avatar-tool endpoint exist for the
+standalone runtimes. EnConvo should register avatar commands directly in its
+own tool system, rather than introducing that additional bridge.
 
 ## 5. Renderer API that exists today
 
@@ -245,7 +306,7 @@ and pass silent speech state: audio is not required to mount the character.
 
 ### Current pipeline
 
-v0.2.8 uses HeadAudio: MFCC features and learned Gaussian phoneme prototypes
+The current pipeline uses HeadAudio: MFCC features and learned Gaussian phoneme prototypes
 select 15 visemes locally. It is not neural and not text-driven animation.
 RMS controls intensity. The model is 14,352 bytes, with no inference API or GPU
 model. Visemes are `sil`, `PP`, `FF`, `TH`, `DD`, `kk`, `CH`, `SS`, `nn`, `RR`,
@@ -608,20 +669,37 @@ installed voice credential and real provider sessions, incurring normal usage.
 Use only the developer's account. Normal `npm test` requires no original
 Blender files or live microphone.
 
+### What was verified for the published v0.2.9 reference
+
+- The full `npm test` suite passed, including runtime routing/permissions and
+  release checking. Packaged content checks verified the encrypted starter and
+  excluded raw models and private keys.
+- Real OpenClaw 2026.9.4 and Hermes 0.21.3 requests exercised reasoning,
+  test-file creation/readback, solo/Together agent/profile routing, public task
+  updates and Sarah's boxing-warmup command. These runtime checks opened no
+  microphone or voice sessions; they are not a new full voice-quality test.
+- A packaged app with a fresh avatar profile unlocked/rendered Tia without a
+  voice key and completed a Hermes reasoning request using the separately
+  configured native runtime. Missing-runtime settings and version/update UI
+  were also checked.
+- The app and DMG were signed, notarized and stapled. Installation on the
+  development Mac retained existing user settings. GitHub's uploaded DMG
+  digest matches the checksum at the start of this handoff.
+
+These are reference-app checks. EnConvo integration, another developer's
+credentials and M2/16 GB performance still need their own acceptance tests.
+
 ## 13. Starting instruction for your coding assistant
 
 > Read docs/ENCONVO-HANDOFF.md and inspect EnConvo's existing agent, credential,
 > voice, delegation and extension interfaces. Implement milestone A, then B,
-> before group work. Reuse v0.2.8's complete renderer dependency tree, real
+> before group work. Reuse v0.2.9's complete renderer dependency tree, real
 > audio-to-viseme pipeline and protected asset loader. EnConvo owns provider
 > credentials, reasoning, tools, microphone and conversation state. Build a
-> narrow adapter; do not instantiate the standalone app's Codex, direct-OAuth
-> or built-in agent backends, or duplicate its voice session. Identify the real
+> narrow adapter; do not instantiate the standalone app's Codex, OpenClaw,
+> Hermes, direct-OAuth or built-in agent backends, or duplicate its voice
+> session. Map avatars to EnConvo's own agent IDs. Identify the real
 > audio format and playback clock, validate APIs in code, preserve R2 protection
 > and original character proportions, and test inside EnConvo before claiming
 > completion. Treat proposed events/tools as interfaces to implement, not an
 > existing SDK. Report host assumptions, hardware measurements and limitations.
-
-## Addendum: v0.2.9 local runtimes
-
-The standalone app now also supports OpenClaw and Hermes, including per-character native-agent/profile choices. See [AGENT-RUNTIMES.md](AGENT-RUNTIMES.md). These adapters are optional reference integrations: EnConvo should continue to use its own credentials, reasoning and action system as described above. `electron/acp-client.cjs`, `acp-agent.cjs`, `runtime-agents.cjs` and `runtime-tools.cjs` belong to the standalone runtime layer and are not renderer dependencies.

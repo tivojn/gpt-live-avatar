@@ -119,7 +119,7 @@ Avatar and voice selection, voice previews, reliable bubble modes and Tia's orig
 
 ## Handoff for other hosts (EnConvo)
 
-See [the EnConvo integration handoff](docs/ENCONVO-HANDOFF.md) for the v0.2.8
+See [the EnConvo integration handoff](docs/ENCONVO-HANDOFF.md) for the v0.2.9
 component map, current audio-to-viseme pipeline, protected R2 setup, proposed
 host adapter and staged acceptance checks. EnConvo keeps its own credentials,
 voice/delegate sessions, reasoning and agentic tools; this repository supplies
