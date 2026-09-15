@@ -24,10 +24,10 @@ function installShaders(){
  if(THREE.ShaderChunk.avatar_cloth_ready)return;
  THREE.ShaderChunk.avatar_cloth_ready=true;
  THREE.ShaderChunk.skinning_pars_vertex+=declarations;
- THREE.ShaderChunk.skinning_vertex+=`
+ THREE.ShaderChunk.project_vertex=`
 #ifdef AVATAR_CLOTH_CLEARANCE
  transformed=(avatarClothFromModel*vec4(avatarClothContact((avatarClothToModel*vec4(transformed,1.)).xyz,avatarClothAllowance),1.)).xyz;
-#endif`;
+#endif\n`+THREE.ShaderChunk.project_vertex;
 }
 const materials=n=>Array.isArray(n.material)?n.material:[n.material];
 export class AvatarClearance {

@@ -16,6 +16,7 @@ import { AvatarVolumeSkin } from '/avatar3d-volume.js';
 import { NaturalAttention } from '/avatar3d-attention.js';
 import { fitGarment } from '/avatar3d-garment-fit.js';
 import { AvatarClearance } from '/avatar3d-clearance.js';
+import { AvatarClothOcclusion } from '/avatar3d-cloth-occlusion.js';
 import { RoomEnvironment } from '/vendor/three/RoomEnvironment.js';
 import { Avatar3DOptions, Avatar3DAppearance, mountAvatar3DOptions } from '/avatar3d-options.js';
 
@@ -246,6 +247,7 @@ class Avatar3D {
     this.authoredChannels = library?.channelAliases || {};
     this.resolveChannels();
     if(library?.clothClearance)this.clearance=new AvatarClearance(this,library.clothClearance);
+    this.clothOcclusion=new AvatarClothOcclusion(this);
     this.appearance = new Avatar3DAppearance(this);
     for (const targets of this.channels.values()) {
       for (const { mesh, index } of targets) {
@@ -920,7 +922,16 @@ class Avatar3D {
     }
     if (this.cameraApproach) this.camera.copy(this.cameraApproach.camera);
     if(!view&&state.fitContent&&this.options){
-      const points=this.options.visiblePoints({ignoreFaceMorphs:Boolean(state.stableFitContent)});
+      // Fit a full-body clip once from its complete authored envelope. A
+      // running union of per-frame skin boxes zooms out during a spin and
+      // never comes back, even when its root stays at the desktop anchor.
+      const motionBounds=this.motion?.active?.bounds;
+      const points=motionBounds&&!this.motion.active.gesture
+        ? [motionBounds.min.x,motionBounds.max.x].flatMap(x=>
+          [motionBounds.min.y,motionBounds.max.y].flatMap(y=>
+            [motionBounds.min.z,motionBounds.max.z].map(z=>this.project(new THREE.Vector3(x,y,z)))))
+        : this.options.visiblePoints({ignoreFaceMorphs:Boolean(state.stableFitContent)});
+      if(motionBounds&&propActive)points.push(...this.options.propPoints());
       if(points.length&&points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))){
         const pad=Math.max(12,this.height*.04),xs=points.map(p=>p.x),ys=points.map(p=>p.y);
         const left=Math.min(0,Math.min(...xs)-pad),right=Math.max(this.width,Math.max(...xs)+pad);
@@ -988,9 +999,10 @@ class Avatar3D {
     const gaze = state.gaze || { x: 0, y: 0 };
     const attentionX = clamp(Number(gaze.x) || 0, -1, 1);
     const attentionY = clamp(Number(gaze.y) || 0, -1, 1);
+    const headLocked=this.options?.outfits.find(o=>o.id===(this.options.selection.outfit||this.options.data.defaultOutfit))?.headClearance==='helmet';
     const { x: gx, y: gy } = this.pose(now, elapsed, {
       gx: attentionX, gy: attentionY, reduce, speaking: Boolean(state.speaking),
-      breathe: Number(state.breathe) || 1, head: state.head || {}, target: state.lookTarget,cameraFocus:state.cameraFocus, eyeOffset:state.eyeOffset||attention.eyeOffset, propActive, bodyMotion:state.bodyMotion,
+      breathe: Number(state.breathe) || 1, head: state.head || {}, target: state.lookTarget,cameraFocus:state.cameraFocus, eyeOffset:state.eyeOffset||attention.eyeOffset, propActive, bodyMotion:state.bodyMotion,headLocked,
     });
     // +x is the viewer's right, which is the character's own left.
     if (!(state.lookTarget && this.bones.eye.l && this.bones.eye.r)) {
@@ -1064,6 +1076,7 @@ class Avatar3D {
     this.clearance?.update();
     this.appearance?.portrait?.beforeRender();
     this.volumeSkin?.beforeRender();
+    this.clothOcclusion?.beforeRender();
     const portrait=this.appearance?.portrait;
     if(portrait?.active&&portrait.diffusion?.filmic)portrait.diffusion.render(portrait.profile==='quality');
     else this.renderer.render(this.scene, this.camera);
@@ -1080,9 +1093,9 @@ class Avatar3D {
     bone.quaternion.copy(base).premultiply(localDelta);
   }
 
-  pose(now, elapsed, { gx, gy, reduce, speaking, breathe, head, target, cameraFocus=false, eyeOffset={x:0,y:0}, propActive=false, bodyMotion=true }) {
+  pose(now, elapsed, { gx, gy, reduce, speaking, breathe, head, target, cameraFocus=false, eyeOffset={x:0,y:0}, propActive=false, bodyMotion=true, headLocked=false }) {
     const t = now / 1000;
-    const idle = reduce || propActive || !bodyMotion ? 0 : 1;
+    const idle = reduce || propActive || !bodyMotion || headLocked ? 0 : 1;
     // The eyes acquire the cursor first; the head catches up over ~180 ms.
     // As it turns, the eyes settle back toward the middle of their sockets.
     let wantedYaw = gx * .46, wantedPitch = gy * .28;
@@ -1104,6 +1117,9 @@ class Avatar3D {
       const frontPitch=cameraFocus?Math.atan2(-front.y,Math.hypot(front.x,front.z)):0;
       wantedPitch = clamp((Math.atan2(-direction.y, Math.hypot(direction.x, direction.z))-frontPitch) * gain, -.35, .35);
     }
+    // A rigid helmet follows the authored rig, not the spectator camera.
+    // Keep eye contact through the eyes without turning the face through it.
+    if(headLocked){wantedYaw=wantedPitch=0;head={};this.smooth.gazeYaw=this.smooth.gazePitch=this.smooth.headRoll=0;}
     this.smooth.gazeYaw = approach(this.smooth.gazeYaw, wantedYaw, elapsed, reduce ? 1 : 180);
     this.smooth.gazePitch = approach(this.smooth.gazePitch, wantedPitch, elapsed, reduce ? 1 : 210);
     const yawTarget = this.smooth.gazeYaw + idle * (Math.sin(t * .37) * .012 + Math.sin(t * .11) * .01)
@@ -1209,6 +1225,7 @@ class Avatar3D {
     this.appearance?.dispose();
     this.volumeSkin?.dispose();
     this.clearance?.dispose();
+    this.clothOcclusion?.dispose();
     if (this.model) {
       this.model.traverse(node => {
         if (node.geometry) node.geometry.dispose();

@@ -23,11 +23,17 @@ parser.add_argument('--preset', action='store_true', help='Transfer a Meshy pres
 parser.add_argument('--in-place', action='store_true', help='Remove net locomotion; preserve weight shift for screen-space walking')
 parser.add_argument('--gait-clearance', action='store_true', help='Calibrate locomotion posture and keep the feet in separate anatomical lanes')
 parser.add_argument('--walk-cycle', action='store_true', help='Use the normal walking arm clearance for a complete locomotion cycle')
+parser.add_argument('--stationary-root', action='store_true', help='Keep an acrobatic performance at its desktop anchor; preserve height and rotation')
+parser.add_argument('--supported-stance', action='store_true', help='Retarget foot contacts with native leg lengths and a balanced standing footprint')
 parser.add_argument('--frame-start', type=int)
 parser.add_argument('--frame-end', type=int)
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 if args.walk_cycle and not (args.in_place and args.gait_clearance and args.preset):
     parser.error('--walk-cycle requires a preset, --in-place and --gait-clearance')
+if (args.stationary_root or args.supported_stance) and not args.preset:
+    parser.error('Stationary root and supported stance require a preset')
+if args.stationary_root and args.in_place:
+    parser.error('Choose either stationary root or in-place locomotion')
 if args.gait_clearance and not args.in_place:
     parser.error('--gait-clearance requires --in-place locomotion')
 bpy.ops.wm.open_mainfile(filepath=args.blend)
@@ -369,6 +375,30 @@ for i in range(len(nodes)):
 bone_ids = [i for i, n in enumerate(nodes) if n.get('name') in rest_world]
 bone_names = [nodes[i]['name'] for i in bone_ids]
 frames = []
+stance_samples=[]
+if args.supported_stance:
+    for frame in range(start,end+1):
+        scene.frame_set(frame);bpy.context.view_layer.update()
+        source={p.name:donor.matrix_world@p.matrix for p in donor.pose.bones}
+        stance_samples.append(source)
+    source_hip0=(stance_samples[0]['L_Hip'].translation+stance_samples[0]['R_Hip'].translation)*.5
+    source_floor=min(m[p+'_Ankle'].translation.z for m in stance_samples for p in ('L','R'))
+    stance_right=Vector((1,0,0))
+    # A stable footprint leaves room for the actual shoes, retaining each
+    # source step, heel lift and bounce rather than pinning both feet.
+    target_width=(control_rest['c_thigh_fk.l'].translation-control_rest['c_thigh_fk.r'].translation).length
+    source_gap=min((m['L_Ankle'].translation-m['R_Ankle'].translation).x for m in stance_samples)
+    def balance_x(m):
+        # A coarse body-mass estimate, used only to choose a constant lateral
+        # footprint. It never drives a per-frame body jiggle or foot lock.
+        hips=(m['L_Hip'].translation.x+m['R_Hip'].translation.x)*.5
+        return hips*.6+m['Spine3'].translation.x*.25+m['Head'].translation.x*.15
+    source_balance_margin=max(max(balance_x(m)-m['L_Ankle'].translation.x,
+                                 m['R_Ankle'].translation.x-balance_x(m)) for m in stance_samples)
+    sole_reference={}
+    for prefix in ('L','R'):
+        low=sorted(stance_samples,key=lambda m:m[prefix+'_Ankle'].translation.z)[:max(4,len(stance_samples)//3)]
+        sole_reference[prefix]=statistics.median(math.atan2((m[prefix+'_Foot'].translation-m[prefix+'_Ankle'].translation).z,math.hypot(*(m[prefix+'_Foot'].translation-m[prefix+'_Ankle'].translation)[:2])) for m in low)
 envelope_min = Vector((math.inf,math.inf,math.inf))
 envelope_max = Vector((-math.inf,-math.inf,-math.inf))
 # Keep long catalog presets within the runtime limit without speeding them up.
@@ -442,7 +472,8 @@ for frame_index,frame in enumerate(frame_times):
         if target == 'c_root_master.x':
             position = control_rest[target].translation.copy()
             travel = pose_world['Pelvis'].translation-root_start
-            if args.in_place:travel -= root_drift*(frame_index/(samples-1))
+            if args.stationary_root:travel.x=travel.y=0
+            elif args.in_place:travel -= root_drift*(frame_index/(samples-1))
             position += travel*travel_scale
         pb.matrix = Matrix.LocRotScale(position, rotation, control_rest[target].to_scale())
         bpy.context.view_layer.update()
@@ -450,6 +481,57 @@ for frame_index,frame in enumerate(frame_times):
         calibrate_walking(pose_world)
     elif args.gait_clearance:
         calibrate_gait(pose_world)
+    if args.supported_stance:
+        # Preserve source support trajectories in a fixed ground frame. The
+        # old per-frame lowest-ankle correction hid heel articulation, and
+        # the source's narrow footprint made the shoes overlap after fitting.
+        root=arm.pose.bones['c_root_master.x'];m=root.matrix.copy()
+        deps=bpy.context.evaluated_depsgraph_get();ev=arm.evaluated_get(deps)
+        hip_center=(ev.pose.bones['thigh.l'].head+ev.pose.bones['thigh.r'].head)*.5
+        source_center=(pose_world['L_Hip'].translation+pose_world['R_Hip'].translation)*.5
+        target_center=(control_rest['c_thigh_fk.l'].translation+control_rest['c_thigh_fk.r'].translation)*.5
+        desired_center=target_center+(source_center-source_hip0)*travel_scale
+        # Use the source leg compression at the opening pose, not a straight
+        # neutral pelvis above already bent knees.
+        initial_height=(source_hip0.z-source_floor)*travel_scale+min_feet
+        desired_center.z=initial_height+(source_center.z-source_hip0.z)*travel_scale
+        m.translation+=desired_center-hip_center;root.matrix=m;bpy.context.view_layer.update()
+        spread=max(max(0,target_width*.8-source_gap*travel_scale)*.5,source_balance_margin*travel_scale-target_width*.15)
+        for side,prefix,sign in [('l','L',1),('r','R',-1)]:
+            thigh,shin,foot=[arm.pose.bones[n+'.'+side] for n in ('c_thigh_fk','c_leg_fk','c_foot_fk')]
+            ev=arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            hip,knee,ankle=[ev.pose.bones[n+'.'+side].head.copy() for n in ('thigh','leg','foot')]
+            goal=target_center+(pose_world[prefix+'_Ankle'].translation-source_hip0)*travel_scale
+            goal.z=min_feet+(pose_world[prefix+'_Ankle'].translation.z-source_floor)*travel_scale
+            goal.x+=sign*spread
+            a,b=(knee-hip).length,(ankle-knee).length
+            delta=goal-hip;distance=min(delta.length,a+b-.0001);direction=delta.normalized()
+            goal=hip+direction*distance
+            pole=pose_world[prefix+'_Knee'].translation-pose_world[prefix+'_Hip'].translation
+            pole-=direction*pole.dot(direction)
+            if pole.length<1e-6:pole=Vector((0,-1,0));pole-=direction*pole.dot(direction)
+            pole.normalize();along=(a*a-b*b+distance*distance)/(2*distance)
+            knee_goal=hip+direction*along+pole*math.sqrt(max(0,a*a-along*along))
+            for control,start_name,end_name,target in [(thigh,'thigh','leg',knee_goal),(shin,'leg','foot',goal)]:
+                for _ in range(3):
+                    ev=arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                    start_point=ev.pose.bones[start_name+'.'+side].head
+                    actual=ev.pose.bones[end_name+'.'+side].head-start_point
+                    correction=actual.normalized().rotation_difference((target-start_point).normalized())
+                    q=control.matrix.copy();control.matrix=Matrix.LocRotScale(q.translation,correction@q.to_quaternion(),q.to_scale());bpy.context.view_layer.update()
+            # Transfer pitch changes around each rig's flat supporting sole.
+            # Preserve the authored yaw and heel lift, including left/right timing.
+            direction=pose_world[prefix+'_Foot'].translation-pose_world[prefix+'_Ankle'].translation
+            pitch=math.atan2(direction.z,math.hypot(direction.x,direction.y))
+            rest_direction=rest_directions['foot.'+side]
+            rest_pitch=math.atan2(rest_direction.z,math.hypot(rest_direction.x,rest_direction.y))
+            flat=Vector((direction.x,direction.y,0)).normalized()
+            angle=pitch-sole_reference[prefix]+rest_pitch
+            desired=flat*math.cos(angle)+Vector((0,0,math.sin(angle)))
+            for _ in range(3):
+                ev=arm.evaluated_get(bpy.context.evaluated_depsgraph_get());actual=ev.pose.bones['foot.'+side].tail-ev.pose.bones['foot.'+side].head
+                correction=actual.normalized().rotation_difference(desired.normalized());q=foot.matrix.copy()
+                foot.matrix=Matrix.LocRotScale(q.translation,correction@q.to_quaternion(),q.to_scale());bpy.context.view_layer.update()
     # Keep the supporting foot on the original floor. Retargeted leg lengths
     # differ from the donor; adjust the root, never stretch the geometry.
     deps = bpy.context.evaluated_depsgraph_get()
@@ -458,7 +540,7 @@ for frame_index,frame in enumerate(frame_times):
     root = arm.pose.bones['c_root_master.x']
     m = root.matrix.copy()
     airborne = max(0, donor_floor[frame]-floor_base)*travel_scale if args.preset else 0
-    m.translation.z += min_feet + airborne - floor
+    if not args.supported_stance:m.translation.z += min_feet + airborne - floor
     root.matrix = m
     bpy.context.view_layer.update()
     evaluated = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
@@ -508,7 +590,7 @@ for offset in range(0,len(frames[0]),12):
 loop_blend = 0 if seam_rotation < .25 and seam_distance < .0005 else .1
 result = {'version': 1, 'id': args.name, 'label': args.name.title(),
           'source': ('Meshy preset' if args.preset else 'Meshy text-to-motion') + ', retargeted to the original Tia rig',
-          'retargeting': {'version': 9, 'motionFit':'source-amplitude-and-initial-body-orientation',
+          'retargeting': {'version': 10, 'stationaryRoot': args.stationary_root, 'supportedStance': args.supported_stance, 'motionFit':'source-amplitude-and-initial-body-orientation',
                           **({'walkingFit':'source-hip-and-arm-swing-with-neutral-sole-reference'} if args.walk_cycle else {}),
                           'sourceFrameRange': [start,end], 'walkingCycle': args.walk_cycle,
                           'loopBlendSeconds': loop_blend, 'seamRotationDegrees': round(seam_rotation,4), 'pelvisTranslation': 'xyz', 'travelScale': round(travel_scale, 7), 'inPlace': args.in_place,

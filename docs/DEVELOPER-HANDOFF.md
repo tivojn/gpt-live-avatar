@@ -8,8 +8,8 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated for **v0.2.11**, released September 15, 2026. The signed/notarized reference
-build is Apple Silicon only. [Release notes and checksums](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.11)
+Updated for **v0.2.12**, released September 15, 2026. The signed/notarized reference
+build is Apple Silicon only. [Release notes and checksums](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.12)
 identify the exact installer; no new DMG is needed for documentation-only updates.
 
 ## First successful run
@@ -18,7 +18,7 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Download the official signed installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.11/GPT-Live.Avatar-0.2.11-arm64.dmg
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.12/GPT-Live.Avatar-0.2.12-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Tia appears. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
@@ -67,7 +67,7 @@ ordinary Electron/HTML/JavaScript edits.
   Browser/computer tools need your own connected setup and macOS permissions.
 - Codex permissions default to Full access. You can choose Ask for approval or
   Approve for me in Settings or the avatar's right-click menu.
-- OpenClaw, Hermes and Grok Build are alternative reasoning/action engines in v0.2.11.
+- OpenClaw, Hermes and Grok Build are alternative reasoning/action engines in v0.2.12.
   Install and configure the chosen runtime with your own account; the avatar
   installer does not bundle it. Select its provider in Reasoning, enable
   actions, then choose native agents/profiles in **Agents for each character**.
@@ -82,6 +82,9 @@ ordinary Electron/HTML/JavaScript edits.
 
 See [Codex actions](CODEX-ACTIONS.md) and
 [Together conversations](GROUP-CONVERSATIONS.md).
+
+For the v0.2.12 rendering changes, see [Studio lighting](STUDIO-LIGHTING.md),
+[Wardrobe audit](WARDROBE-AUDIT.md) and [Motion audit](MOTION-AUDIT.md).
 
 ### Usage costs
 
@@ -185,3 +188,12 @@ updates), and `web/agent-progress.js` (overhead task updates).
 - Settings → Keyboard shortcuts records custom combinations. Defaults: **⌘⇧0 Bring Avatar Back**, **⌘⇧9 Avatar Close-up**. Together uses the last clicked character; recovery restores the group. Conflicts preserve the previous shortcuts.
 - 54 Meshy presets were baked with source amplitude and initial body orientation, including three additions: Backflip, 360 Power Spin Jump and All Night Dance. The library now contains 65 clips per character. No mesh, skin, material or wardrobe data changed.
 - Updated motions ship in encrypted `motions.gla` overlays. The signed catalogue’s optional `motionUpdate` field keeps old model/texture packages available. Fresh avatar downloads fetch the overlay; the Tia starter includes it. See [motion audit](MOTION-AUDIT.md) and [protected assets](PROTECTED-ASSETS.md).
+
+
+### 0.2.12 renderer and asset changes
+
+- Keep `web/avatar3d-cloth-occlusion.js` with the renderer dependency tree. It provides a garment-only depth pass for Sarah's Brazilian outfit and Iselda's skirts. This pass runs only while a supported garment is visible. Body bounds and a depth limit prevent rear cloth or hands from erasing exposed skin.
+- Sarah's `sarah-wardrobe-v8` package includes a smooth pelvis-supported Brazilian panel. Iselda's `iselda-wardrobe-v9` includes corrected standing-pose leg alignment and skirt support. Both keep their original materials and wardrobe choices. Use the new signed base/texture/motion combination; do not overlay old tiers.
+- Idle pose transitions default on for all five characters and Together uses the saved preference. Explicit pose selections and prop modes retain their existing controls.
+- Ming-Mei's eyebrow material restores its missing brown tint. Armor outfits restore the clothed pilot and lock head direction to the helmet while allowing eye movement.
+- See [motion audit](MOTION-AUDIT.md) and [wardrobe audit](WARDROBE-AUDIT.md) for scope, reproducible checks and limitations. Physical M2/16 GB acceptance remains a host integration test.

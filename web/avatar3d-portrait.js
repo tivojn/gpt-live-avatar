@@ -9,7 +9,7 @@ const portraitSettings={
   tia:{displayTransform:'filmic',headOffset:.10050046,exposure:1.2,softExposure:1.35,hairEnvironment:.14,keyColor:0xfff0e9,rim:3,diffusionRadius:.16,channelVariance:[2.25,.027777778,.006944444],skinTint:[.42548996,.002338724,0]},
   sarah:{displayTransform:'filmic',headOffset:.10050046,exposure:1.2,softExposure:1.35,hairEnvironment:.14,hairTransport:.25,keyColor:0xfff0e9,rim:2.5,diffusionRadius:.16,channelVariance:[2.25,.027777778,.006944444],skinTint:[.42548996,.004867622,0]},
   iselda:{displayTransform:'filmic',headOffset:.0921685,exposure:1.5,softExposure:1.65,hairEnvironment:.2,keyColor:0xfff4fc,rim:4},
-  'ming-mei':{displayTransform:'filmic',headOffset:.080164785,exposure:1.5,softExposure:1.65,hairEnvironment:.5,keyColor:0xfff4fc,keyPosition:[-.8,1,1.5],rim:4,diffusionRadius:.14},
+  'ming-mei':{displayTransform:'filmic',headOffset:.080164785,exposure:1.5,softExposure:1.65,hairEnvironment:.5,keyColor:0xfff4fc,rim:4,diffusionRadius:.14},
   seraphim:{displayTransform:'agx',headOffset:.10050046,exposure:1.2,softExposure:1.32,hairEnvironment:.065,keyColor:0xffe9e2,rim:2.5,diffusionRadius:.15,aoStrength:.5,channelVariance:[2.25,.027777778,.006944444]},
 };
 const restoredKeys=['roughness','metalness','specularIntensity','envMap','envMapIntensity','ior','aoMap','aoMapIntensity','alphaTest','shadowSide','opacity',
@@ -32,7 +32,7 @@ export class AvatarPortrait {
       for(const m of materials)if(surface(m)&&!this.materials.has(m))this.materials.set(m,{
         kind:surface(m),onBeforeCompile:m.onBeforeCompile,customProgramCacheKey:m.customProgramCacheKey,
         roughness:m.roughness,metalness:m.metalness,specularIntensity:m.specularIntensity,normalScale:m.normalScale?.clone(),
-        envMapIntensity:m.envMapIntensity,ior:m.ior,aoMap:m.aoMap,aoMapIntensity:m.aoMapIntensity,alphaTest:m.alphaTest,shadowSide:m.shadowSide,
+        envMapIntensity:m.envMapIntensity,envRotation:m.envMapRotation?.clone(),ior:m.ior,aoMap:m.aoMap,aoMapIntensity:m.aoMapIntensity,alphaTest:m.alphaTest,shadowSide:m.shadowSide,
         ...Object.fromEntries(restoredKeys.map(k=>[k,m[k]])),color:m.color.clone(),
       });
       const record={node:n,cast:n.castShadow,receive:n.receiveShadow,onBeforeRender:n.onBeforeRender,depth:n.customDepthMaterial,renderOrder:n.renderOrder};
@@ -126,6 +126,7 @@ export class AvatarPortrait {
     const a=this.avatar;
     for(const [m,b] of this.materials) {
       for(const key of restoredKeys)m[key]=b[key];m.color.copy(b.color);
+      if(b.envRotation)m.envMapRotation.copy(b.envRotation);
       if(b.normalScale)m.normalScale.copy(b.normalScale);
       m.onBeforeCompile=b.onBeforeCompile;m.customProgramCacheKey=b.customProgramCacheKey;
       if(this.authored&&b.kind==='hair'){
@@ -263,7 +264,9 @@ export class AvatarPortrait {
       this.portraitLights=new THREE.Group();a.scene.add(this.portraitLights);
       // Broad sources soften facial and strand highlights. The small panel
       // gives the cornea a legible catchlight without whitening the iris.
-      for(const [x,y,z,w,h,power] of [[-1.2,1.4,1.5,1.5,1.5,4.5],[1.3,.4,1,1.5,1.5,1],[.6,.9,-1,1,1,settings.rim],[-.25,.15,1,.2,.2,35]]){
+      // A lower, larger key reaches upright faces and a broad independent
+      // fill opens eye sockets. Keep four sources and one shadow map.
+      for(const [x,y,z,w,h,power] of [[-1.25,.75,2,2,2.2,2.8],[1.6,.15,1.8,2,2,1.5],[.6,.9,-1,1,1,settings.rim*.65],[-.25,.15,1,.3,.3,12]]){
         const light=new THREE.RectAreaLight(0xffffff,power,w,h);light.position.set(x,y,z);light.lookAt(0,0,0);this.portraitLights.add(light);
       }
     }
@@ -272,8 +275,7 @@ export class AvatarPortrait {
     if(!this.active)return;
     a.renderer.toneMappingExposure=style==='soft'?settings.softExposure:settings.exposure;
     this.portraitLights.children[0].color.set(settings.keyColor);
-    if(settings.keyPosition){this.portraitLights.children[0].position.set(...settings.keyPosition);this.portraitLights.children[0].lookAt(0,0,0);}
-    a.scene.environmentIntensity=.2;
+    a.scene.environmentIntensity=.26;
     [.5,.05,.1,.05,.02].forEach((intensity,i)=>{this.appearance.lights.children[i].intensity=intensity;});
     for(const [m,b] of this.materials){
       if(b.kind==='hair'){
@@ -311,19 +313,23 @@ export class AvatarPortrait {
       const hook=m.onBeforeCompile,cache=m.customProgramCacheKey;
       m.onBeforeCompile=(shader,renderer)=>{
         hook.call(m,shader,renderer);
-        // Reuse the key's soft visibility for the broad sources. Three's
-        // rectangular lights do not themselves cast shadows.
+        // Only the key uses its matching shadow. Applying that shadow to
+        // the fill and rim also blacked out light arriving from other sides.
         // Every rectangular light uses the same surface/view lookup. Evaluate it
         // once per fragment; keep the original area-light integration intact.
-        let physical=THREE.ShaderChunk.lights_physical_pars_fragment.replace('vec3 lightColor = rectAreaLight.color;','vec3 lightColor = rectAreaLight.color * avatarAreaShadow();');
+        let physical=THREE.ShaderChunk.lights_physical_pars_fragment;
         physical='vec4 avatarLtc1,avatarLtc2; bool avatarLtcReady=false;\n'+physical;
         physical=physical.replace('vec2 uv = LTC_Uv( normal, viewDir, roughness );\n\t\tvec4 t1 = texture2D( ltc_1, uv );\n\t\tvec4 t2 = texture2D( ltc_2, uv );',
           'if(!avatarLtcReady){vec2 uv=LTC_Uv(normal,viewDir,roughness);avatarLtc1=texture2D(ltc_1,uv);avatarLtc2=texture2D(ltc_2,uv);avatarLtcReady=true;}\nvec4 t1=avatarLtc1;vec4 t2=avatarLtc2;');
-        shader.fragmentShader=shader.fragmentShader.replace('#include <lights_physical_pars_fragment>','float avatarAreaShadow();\n'+physical);
-        shader.fragmentShader=shader.fragmentShader.replace('#include <shadowmap_pars_fragment>','#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>\nfloat avatarCachedAreaShadow;\nfloat avatarAreaShadow(){return avatarCachedAreaShadow;}');
-        shader.fragmentShader=shader.fragmentShader.replace('#include <lights_fragment_begin>','avatarCachedAreaShadow=mix(1.,getShadowMask(),.8);\n#include <lights_fragment_begin>');
+        shader.fragmentShader=shader.fragmentShader.replace('#include <lights_physical_pars_fragment>',physical);
+        shader.fragmentShader=shader.fragmentShader.replace('#include <shadowmap_pars_fragment>','#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>');
+        // The avatar owns these four rectangular lights; the key is created
+        // first. Three unrolls this loop, so the shadow is sampled once.
+        const lighting=THREE.ShaderChunk.lights_fragment_begin.replace('rectAreaLight = rectAreaLights[ i ];',
+          'rectAreaLight = rectAreaLights[ i ];\n#if UNROLLED_LOOP_INDEX == 0\nrectAreaLight.color *= mix(1.,getShadowMask(),.8);\n#endif');
+        shader.fragmentShader=shader.fragmentShader.replace('#include <lights_fragment_begin>',lighting);
       };
-      m.customProgramCacheKey=()=>cache.call(m)+':authored-area-shadow-v3';m.needsUpdate=true;
+      m.customProgramCacheKey=()=>cache.call(m)+':authored-area-shadow-v4';m.needsUpdate=true;
     }
   }
 
@@ -365,7 +371,13 @@ export class AvatarPortrait {
       a.bones.head.getWorldPosition(this.portraitLights.position);
       this.portraitLights.position.y+=this.calibration.headOffset*scale;
       this.portraitLights.scale.setScalar(scale);
-      if(this.fastPortraitLights){this.fastPortraitLights.position.copy(this.portraitLights.position);this.fastPortraitLights.scale.copy(this.portraitLights.scale);}
+      // Studio illumination follows the viewing direction continuously, like
+      // a portrait softbox beside the lens. Orbiting no longer leaves the
+      // visible face on the unlit side of a world-fixed lighting setup.
+      this.portraitLights.quaternion.copy(a.camera.quaternion);
+      a.scene.environmentRotation.setFromQuaternion(a.camera.quaternion);
+      for(const [m,b] of this.materials)if(m.envMap&&['hair','cornea'].includes(b.kind))m.envMapRotation.copy(a.scene.environmentRotation);
+      if(this.fastPortraitLights){this.fastPortraitLights.position.copy(this.portraitLights.position);this.fastPortraitLights.scale.copy(this.portraitLights.scale);this.fastPortraitLights.quaternion.copy(this.portraitLights.quaternion);}
     }
     if(a.headCenter&&a.bones.head){
       if(!this.hairCenterLocal)this.hairCenterLocal=a.headCenter.clone().applyMatrix4(a.bones.head.matrixWorld.clone().invert());
@@ -376,7 +388,8 @@ export class AvatarPortrait {
       if(a.bones.hips)a.bones.hips.getWorldPosition(this.center);else bounds.getCenter(this.center);
       this.center.y+=height*.08;
       this.key.target.position.copy(this.center);
-      this.key.position.copy(this.center).addScaledVector(new THREE.Vector3(-2.15,2.42,3.43).normalize(),height*2.8);
+      const direction=this.portraitLights?this.portraitLights.children[0].position.clone().normalize().applyQuaternion(this.portraitLights.quaternion):new THREE.Vector3(-2.15,2.42,3.43).normalize();
+      this.key.position.copy(this.center).addScaledVector(direction,height*2.8);
       const c=this.key.shadow.camera;c.left=-span;c.right=span;c.top=span;c.bottom=-span;c.near=height*.1;c.far=height*5;c.updateProjectionMatrix();
       this.key.target.updateMatrixWorld();
     }

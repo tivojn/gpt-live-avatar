@@ -1,13 +1,15 @@
 {
-  "version": "0.2.11",
+  "version": "0.2.12",
   "date": "2026-09-15",
-  "title": "Face close-ups and faithful motions",
-  "description": "Customizable avatar shortcuts, Meshy motion corrections and independent action permissions.",
+  "title": "Brighter studio portraits, wardrobe and motion refinements",
+  "description": "More consistent lighting across viewing angles, stable spin jumps, restored idle transitions and wardrobe corrections.",
   "highlights": [
-    "Cmd+Shift+9 frames the avatar’s face. Cmd+Shift+0 restores normal size and placement. Customize both in Settings.",
-    "Action Engine & Permissions follows the reasoning agent by default, with an optional separate action engine.",
-    "Restored original body movement in Meshy presets, including Bubble Dance and Boxing Warm-up, without changing character geometry.",
-    "Added Backflip, 360 Power Spin Jump and All Night Dance for all five characters.",
-    "Encrypted motion updates reuse existing model and texture downloads."
+    "Softer studio lighting follows the view, with clearer upright faces and independent fill lighting for all five avatars.",
+    "360 Power Spin Jump stays in place, with a stable view from takeoff to landing.",
+    "Boxing Warm-up and Happy Sway Standing retain a supported stance and independent foot movement.",
+    "Restored changing idle poses in solo and Together mode.",
+    "Corrected Ming-Mei’s eyebrow tint, Sarah’s fitted clothing and Iselda’s skirt support.",
+    "Restored the pilot’s covered limbs in open armor and kept the head aligned inside closed helmets.",
+    "Updated encrypted wardrobe and motion downloads; appearance, voices and account settings are retained."
   ]
 }

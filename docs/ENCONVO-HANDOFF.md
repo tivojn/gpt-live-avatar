@@ -4,17 +4,18 @@
 the intelligence, credentials, voice conversation, tools and permissions.**
 
 For the EnConvo developer and their AI coding assistant. Updated September 15,
-2026 for GPT-Live Avatar **v0.2.11**. Use the tagged release for a reproducible
+2026 for GPT-Live Avatar **v0.2.12**. Use the tagged release for a reproducible
 application source reference.
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.11
-- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.11/GPT-Live.Avatar-0.2.11-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.11/SHA256SUMS-0.2.11.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.12
+- Signed/notarized Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.12/GPT-Live.Avatar-0.2.12-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.12/SHA256SUMS-0.2.12.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
 - Standalone agent setup: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/AGENT-RUNTIMES.md
 - Asset delivery details: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/PROTECTED-ASSETS.md
+- Studio lighting: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/STUDIO-LIGHTING.md
 
 This document describes working repository components and a proposed integration
 boundary. **There is no completed EnConvo adapter or published avatar SDK here.**
@@ -22,7 +23,7 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### What is ready in v0.2.11
+### What is ready in v0.2.12
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
   overhead speech/task updates, protected downloads and the encrypted Tia
@@ -38,7 +39,7 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-The release includes `SHA256SUMS-0.2.11.txt`; use it to verify the downloaded
+The release includes `SHA256SUMS-0.2.12.txt`; use it to verify the downloaded
 installer rather than checksums from an older release.
 
 ## 1. Scope and ownership
@@ -170,7 +171,7 @@ Paths are relative to this repository. Follow transitive imports: copying only
 | Deformation corrections | [web/avatar3d-volume.js](../web/avatar3d-volume.js), [web/avatar3d-clearance.js](../web/avatar3d-clearance.js), [web/avatar3d-garment-fit.js](../web/avatar3d-garment-fit.js) | Joint volume and authored/character-specific clearance; keep with rig metadata. |
 | Motions/stage | [web/avatar3d-motion.js](../web/avatar3d-motion.js), [web/avatar3d-companion.js](../web/avatar3d-companion.js) | Clips, reactions, `CompanionController`, `AvatarStudioStage`. |
 | Eye behavior | [web/avatar3d-attention.js](../web/avatar3d-attention.js) | Irregular blinks and subtle binocular eye movement; already called by renderer. |
-| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.11, not the removed RMS/spectral classifier. |
+| Current lip-sync | [web/lip-sync.js](../web/lip-sync.js), [web/lip-sync-worklet.js](../web/lip-sync-worklet.js), [web/lip-sync-model.js](../web/lip-sync-model.js), `web/vendor/headaudio/` | Learned audio-to-viseme recognition introduced in v0.2.8 and retained in v0.2.12, not the removed RMS/spectral classifier. |
 | Connection sounds | [web/conversation-sounds.js](../web/conversation-sounds.js) | Synthesized connecting/ready/end cues; no samples or remote service. |
 | Task bubbles | [web/agent-progress.js](../web/agent-progress.js), [web/bubble-policy.js](../web/bubble-policy.js) | Public status, stale-event handling and Auto/Always/Off. |
 | Drawing/hit tests | [web/avatar-render-budget.js](../web/avatar-render-budget.js), [web/avatar-hit-mask.js](../web/avatar-hit-mask.js) | Pixel/texture budgets, frame pacing, cached alpha mask. |
@@ -686,7 +687,7 @@ credentials and M2/16 GB performance still need their own acceptance tests.
 
 > Read docs/ENCONVO-HANDOFF.md and inspect EnConvo's existing agent, credential,
 > voice, delegation and extension interfaces. Implement milestone A, then B,
-> before group work. Reuse v0.2.11's complete renderer dependency tree, real
+> before group work. Reuse v0.2.12's complete renderer dependency tree, real
 > audio-to-viseme pipeline and protected asset loader. EnConvo owns provider
 > credentials, reasoning, tools, microphone and conversation state. Build a
 > narrow adapter; do not instantiate the standalone app's Codex, OpenClaw,
@@ -704,3 +705,13 @@ Use `electron/shortcuts.cjs` only if EnConvo does not already own shortcuts. The
 Action permissions are under **Action Engine & Permissions**, separate from **Delegate Reasoning Provider**. `agentFollowReasoning` defaults to true. An explicit external action choice turns following off and preserves independent action models and permissions. EnConvo can replace both routing controls with its own agent system.
 
 All five avatars now have 65 motions. `tools/retarget-meshy-motion.py` preserves the Meshy source’s body orientation and movement amplitude. The optional signed `motionUpdate` package contains only `runtime/motions/`; apply it before the base package for those paths, after verifying its signature, checksums, authenticated chunks and matching base revision. The Tia installer includes this encrypted overlay. Do not copy raw model or motion data into a public EnConvo repository.
+
+
+### 0.2.12 renderer and asset changes
+
+- Studio/Soft lighting and reflections now follow the camera, with independent fill lighting. Preserve the portrait renderer's material callbacks and `beforeRender()` integration; see [studio lighting](STUDIO-LIGHTING.md). Light count, texture limits and desktop pixel budgets are unchanged.
+- Keep `web/avatar3d-cloth-occlusion.js` with the renderer dependency tree. It provides a garment-only depth pass for Sarah's Brazilian outfit and Iselda's skirts. This pass runs only while a supported garment is visible. Body bounds and a depth limit prevent rear cloth or hands from erasing exposed skin.
+- Sarah's `sarah-wardrobe-v8` package includes a smooth pelvis-supported Brazilian panel. Iselda's `iselda-wardrobe-v9` includes corrected standing-pose leg alignment and skirt support. Both keep their original materials and wardrobe choices. Use the new signed base/texture/motion combination; do not overlay old tiers.
+- Idle pose transitions default on for all five characters and Together uses the saved preference. Explicit pose selections and prop modes retain their existing controls.
+- Ming-Mei's eyebrow material restores its missing brown tint. Armor outfits restore the clothed pilot and lock head direction to the helmet while allowing eye movement.
+- See [motion audit](MOTION-AUDIT.md) and [wardrobe audit](WARDROBE-AUDIT.md) for scope, reproducible checks and limitations. Physical M2/16 GB acceptance remains a host integration test.

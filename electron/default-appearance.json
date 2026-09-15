@@ -3,7 +3,7 @@
     "body": "Ps007.stand",
     "outfit": "tactical",
     "accessory": "earrings",
-    "playTransitions": "false",
+    "playTransitions": "true",
     "followCursor": "false",
     "lighting": "soft",
     "expression": "thoughtful",
@@ -18,7 +18,7 @@
   "tia": {
     "body": "Ps012.stand",
     "outfit": "dress",
-    "playTransitions": "false",
+    "playTransitions": "true",
     "lighting": "soft",
     "expression": "smile",
     "texture:eyes": "tia-original/eyes-011",
@@ -37,7 +37,7 @@
   "ming-mei": {
     "body": "Ps007.stand",
     "outfit": "dress",
-    "playTransitions": "false",
+    "playTransitions": "true",
     "followCursor": "false",
     "lighting": "soft",
     "expression": "neutral",
@@ -51,13 +51,15 @@
     "expression": "neutral",
     "texture:hair": "original/hair-020",
     "texture:short-skirt": "original/short-skirt-036",
-    "prop": ""
+    "prop": "",
+    "playTransitions": "true"
   },
   "seraphim": {
     "body": "Ps001.heart",
     "outfit": "pilot",
     "lighting": "studio",
     "expression": "neutral",
-    "prop": ""
+    "prop": "",
+    "playTransitions": "true"
   }
 }

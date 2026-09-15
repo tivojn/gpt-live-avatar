@@ -1,6 +1,6 @@
 # Meshy motion audit · September 15, 2026
 
-Version 0.2.11 restores the source movement of 51 existing Meshy presets and adds three presets for all five avatars. The library contains 65 clips per character. Existing calibrated walking clips and the custom conversational greeting are retained.
+Version 0.2.11 restored the source movement of 51 existing Meshy presets and adds three presets for all five avatars. The library contains 65 clips per character. Existing calibrated walking clips and the custom conversational greeting are retained.
 
 ## Findings and changes
 
@@ -10,7 +10,7 @@ Version 0.2.11 restores the source movement of 51 existing Meshy presets and add
 - Sarah’s legacy `neutral_bone` is not an animated deform joint in the runtime appearance library. It is excluded from converted motion channels.
 - Stable framing is scoped to the current motion, so a wide flip does not leave the following dance zoomed too far out.
 
-The character model files remain byte-for-byte unchanged. Native proportions, skin weights, face shape, outfits, accessories and textures were not altered to compensate for motion issues.
+For the 0.2.11 motion release, the character model files remained byte-for-byte unchanged. Native proportions, skin weights, face shape, outfits, accessories and textures were not altered to compensate for motion issues.
 
 ## Source presets
 
@@ -37,3 +37,14 @@ With licensed local packages in `build/characters/`, run `node_modules/.bin/elec
 ## Delivery
 
 `tools/build-motion-update.cjs` creates encrypted motion-only overlays. Existing model and texture parts remain unchanged in R2. The Tia starter includes the updated motion overlay, and downloads of other avatars include their current motion update. Existing installations can download **Motion update** in Settings.
+
+
+## 0.2.12 follow-up
+
+The 360 Power Spin Jump now removes horizontal root travel while retaining its vertical jump and spin. Solo and Together frame the complete clip before playback, so later wide poses cannot progressively zoom the avatar out or leave a changed scale after landing.
+
+Boxing Warm-up and Happy Sway Standing use a supported stance: leg lengths are retained, the hips remain over that stance, and each ankle can lift and each foot can pitch independently. These are adaptations for the five native rigs, not a claim of pixel-identical playback of the Meshy donor.
+
+`qa/motion-support.cjs` samples every frame of these three clips on all five characters (2,910 frames). It checks limb length, foot separation, independent lift/heel articulation, stationary depth and constant framing. The full-loop spin depth ratio is about 1.03 (limb movement), and the framing ratio is 1.00. Run with Electron and licensed local character packages.
+
+The motion revision is `meshy-v10-20260915`. This release also updates Sarah and Iselda's derived wardrobe packages separately; see [wardrobe audit](WARDROBE-AUDIT.md). The original authoring projects are unchanged.

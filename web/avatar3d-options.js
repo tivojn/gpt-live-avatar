@@ -34,6 +34,8 @@ export class Avatar3DAppearance {
           customProgramCacheKey:material.customProgramCacheKey});
       }
     });
+    // The source eyebrow color is mixed separately from its pale opacity map.
+    if(avatar.characterId==='ming-mei')for(const m of this.materials.keys())if(m.name==='Eyebrows')m.color.set(0x65402d);
     this.isTia=[...this.materials.keys()].some(m=>m.name==='Top_Tia01A_M');
     this.hasPortraitSkin=[...this.materials.keys()].some(m=>m.userData.avatarSurface==='skin'||m.name==='Top_Tia01A_M'||/^Top_Sara01A_M(?:\.\d+)?$/.test(m.name));
     this.defaultLighting=this.hasPortraitSkin?'studio':'classic';
@@ -415,7 +417,22 @@ export class Avatar3DOptions {
     this.playback = [...this.poses.values()].filter(pose => pose.group === 'body'
       && (Array.isArray(data.playback) ? data.playback.includes(pose.id)
         : /standing|heart/i.test(pose.label || pose.id)));
-    this.outfits = data.outfits || [];
+    this.outfits = (data.outfits || []).map(outfit=>{
+      if(data.characterId==='sarah'&&outfit.id==='tactical')return {...outfit,bodyMasks:{...outfit.bodyMasks,
+        // The shirt's sleeves and back are covered by the coat in this
+        // combination. Keep the central tie/front opening visible.
+        Top_Ac_Tshtt:[{min:[.095,1.21,-1],max:[1,2,1]},
+          {min:[-1,1.21,-1],max:[-.095,2,1]},
+          {min:[-1,1.21,-1],max:[1,2,-.015]}]}};
+      if(data.characterId!=='seraphim')return outfit;
+      // Older encrypted packs hide broad slices of the pilot to avoid armor
+      // intersections. Open cockpit outfits need the complete clothed pilot;
+      // those rest-space slices visibly amputate her arms and chest.
+      if(['light-armor','heavy-armor'].includes(outfit.id))return {...outfit,bodyMasks:{},
+        nodes:[...new Set([...outfit.nodes,'spaceJumpSuit','SpaceLegs','SpaceBoots'])],
+        headClearance:'helmet'};
+      return outfit.id==='robot-armor'?{...outfit,headClearance:'helmet'}:outfit;
+    });
     this.props = data.props || [];
     // An accessory's authoring origin can be displaced from the hand it is
     // bound to. Correct its bind-space attachment without changing the

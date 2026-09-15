@@ -74,9 +74,12 @@ class Retarget:
   # almost vertically. A world rotation delta alone carries that difference
   # into every pose, pushing wrists back through the waist and skirt. Align
   # anatomical segment directions first, retaining target lengths and skin.
-  self.arm_alignment={}
+  # Legs need the same treatment: different resting knee angles otherwise
+  # carry into every step and pull the feet inward.
+  self.segment_alignment={}
   for side in ['l','r']:
-   segments=[('arm','c_arm_twist.','c_forearm_stretch.'),('forearm','c_forearm_stretch.','hand.'),('hand','hand.','middle1.')]
+   segments=[('arm','c_arm_twist.','c_forearm_stretch.'),('forearm','c_forearm_stretch.','hand.'),('hand','hand.','middle1.'),
+             ('thigh','c_thigh_twist.','c_leg_stretch.'),('leg','c_leg_stretch.','foot.')]
    corrections={}
    for group,start,end in segments:
     a,b=start+side,end+side
@@ -84,8 +87,8 @@ class Retarget:
      corrections[group]=align_directions(self.tw[self.tnames[b],:3,3]-self.tw[self.tnames[a],:3,3],self.sw[self.snames[b],:3,3]-self.sw[self.snames[a],:3,3])
    for n in self.names:
     if not n.endswith('.'+side):continue
-    group='arm' if n.startswith('c_arm') else 'forearm' if n.startswith('c_forearm') else 'hand' if re.match(r'^(hand|c_index|c_middle|c_ring|c_pinky|c_thumb|index|middle|ring|pinky|thumb)',n) else None
-    if group in corrections:self.arm_alignment[n]=corrections[group]
+    group='arm' if n.startswith('c_arm') else 'forearm' if n.startswith('c_forearm') else 'thigh' if n.startswith('c_thigh') else 'leg' if n.startswith('c_leg') else 'hand' if re.match(r'^(hand|c_index|c_middle|c_ring|c_pinky|c_thumb|index|middle|ring|pinky|thumb)',n) else None
+    if group in corrections:self.segment_alignment[n]=corrections[group]
   self.logical={}
   for n,j in self.tnames.items():
    p=self.target['nodes'][self.tp[j]].get('name') if j in self.tp else None
@@ -131,7 +134,7 @@ class Retarget:
   f=len(sw);dest=np.repeat(self.tw[None],f,axis=0);sd=rot(sw)@self.sri;td={}
   for n in self.order:
    j=self.tnames[n];p=self.logical[n];mapped=self.mapping[n]
-   delta=sd[:,self.snames[mapped]]@self.arm_alignment.get(n,np.eye(3)) if mapped else td[p] if p else np.repeat(np.eye(3)[None],f,axis=0)
+   delta=sd[:,self.snames[mapped]]@self.segment_alignment.get(n,np.eye(3)) if mapped else td[p] if p else np.repeat(np.eye(3)[None],f,axis=0)
    td[n]=delta;dest[:,j,:3,:3]=delta@self.tr[j]
    if p:
     pj=self.tnames[p];dest[:,j,:3,3]=dest[:,pj,:3,3]+np.einsum('fij,j->fi',td[p],self.tw[j,:3,3]-self.tw[pj,:3,3])

@@ -1,4 +1,7 @@
-"""Bake one authored subdivision level including every facial shape key.
+"""Bake authored surfaces including every facial shape key.
+
+Use one subdivision level for the large meshes and three for the small,
+closely fitted Brazilian panel so its silhouette survives skinning.
 
 Run inside Blender with the original Sarah ARP blend loaded. Writes only the
 GLB supplied after --. Materials are placeholders, matched to the base export.
@@ -16,7 +19,8 @@ def show(layer):
 show(bpy.context.view_layer.layer_collection)
 for collection in bpy.data.collections:collection.hide_viewport=False
 names=['Fem-A__Whl_BY_Sarah.export','Fem-A_Whl_Ac_VDress','Fem-A_Top_Ac_Tshtt','Fem-A_Top_Ac_ChnCt',
-    'Fem-A_Bot_Ac_ChnPnts_1','Fem-A_Fot_Ac_Chnhl','Fem-A_Fot_Ac_Sndlhl']
+    'Fem-A_Bot_Ac_ChnPnts_1','Fem-A_Fot_Ac_Chnhl','Fem-A_Fot_Ac_Sndlhl','Fem-A_Bot_Ac_BknBrzl_1']
+if '--bottoms-only' in sys.argv:names=['Fem-A_Bot_Ac_BknBrzl_1']
 objects=[];report=[]
 for name in names:
     obj=bpy.data.objects[name];obj.hide_set(False);obj.hide_viewport=False
@@ -26,7 +30,7 @@ for name in names:
     for key in keys.key_blocks if keys else []:key.value=0
     for mod in obj.modifiers:
         mod.show_viewport=mod.type in {'SUBSURF','MIRROR'}
-        if mod.type=='SUBSURF':mod.levels=1;mod.subdivision_type='CATMULL_CLARK'
+        if mod.type=='SUBSURF':mod.levels=3 if name=='Fem-A_Bot_Ac_BknBrzl_1' else 1;mod.subdivision_type='CATMULL_CLARK'
     obj.show_only_shape_key=False
     bpy.context.view_layer.update()
     deps=bpy.context.evaluated_depsgraph_get()
