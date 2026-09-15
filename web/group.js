@@ -7,24 +7,29 @@ import {AvatarHitMask} from '/avatar-hit-mask.js';
 import {groupAction} from '/group-actions.js';
 import {needsAgent} from '/group-agent-request.js';
 import {LiveGroup} from '/group-live.js';
+import {ConversationSounds} from '/conversation-sounds.js';
 import {installGroupPanel} from '/group-panel.js';
 import {GroupMicrophone} from '/group-input.js';
 const $=s=>document.querySelector(s),api=window.gla.group,voice=new GroupVoice(api),actors=new Map();
 let catalogue,loadGeneration=0,runGeneration=0,running=false,loading=false,speaker='',listener='',history=[],drag=null,ignore=false,lastFrame=0;
 let waitingHuman=false,humanResolve=null,wantsTurn=false,currentTurn=0,totalTurns=0,human={enabled:false,name:'You'};
+const conversationSounds=new ConversationSounds(()=>catalogue?.conversationSounds!==false);
 const microphone=new GroupMicrophone(api,{
  onState:(state,seconds)=>{const busy=state!=='idle';$('#mic').textContent=state==='recording'?'Finish recording':state==='requesting'?'Opening microphone…':state==='transcribing'?'Transcribing…':'Speak my reply';$('#mic').setAttribute('aria-pressed',String(state==='recording'));$('#mic').disabled=!waitingHuman||['requesting','transcribing'].includes(state);$('#humanText').disabled=busy;$('#send').disabled=!waitingHuman||busy||!$('#humanText').value.trim();$('#micStatus').textContent=state==='recording'?`Microphone on · ${seconds} / 60 seconds`:state==='requesting'?'Waiting for microphone access…':state==='transcribing'?'Microphone off · transcribing your recording…':'Microphone off. Review your text, then send.';},
  onText:text=>{if(!waitingHuman)return;$('#humanText').value=[$('#humanText').value.trim(),text].filter(Boolean).join(' ').slice(0,1200);$('#humanText').focus();},
  onError:message=>{$('#micStatus').textContent=message;}
 });
 const liveGroup=new LiveGroup(api,{
- status:message=>status(message),error:message=>{stop();status(message,true);},
+ connected:()=>conversationSounds.transition('connected'),
+ warning:message=>status(message,true),status:message=>status(message),error:message=>{stop();status(message,true);},
  floor:floor=>{speaker=floor.speaker;listener=floor.listener;for(const a of actors.values()){a.el.classList.toggle('speaking',a.slug===speaker);if(a.slug!==speaker)setBubble(a,'');}},
  text:line=>{const actor=actors.get(line.speaker);if(actor)setBubble(actor,line.text);},
  line:line=>{if(line.speaker==='_human'&&!(catalogue?.agentEnabled&&needsAgent(line.text)))void actOnSpeech(line.text);history.push(line);appendLine(actors.get(line.speaker)||{info:{name:human.name+' (you)'}},line.text);},
  microphone:state=>{$('#liveMic').textContent=!state.active?'Microphone off':state.muted?'Unmute microphone':'Mute microphone';$('#liveMic').disabled=!state.active;$('#liveMic').setAttribute('aria-pressed',String(state.active&&!state.muted));},
 });
 function liveMode(){return $('#liveMode').checked;}
+voice.onWarning=message=>status(message,true);
+voice.onConnected=()=>conversationSounds.transition('connected');
 const status=(message,error=false)=>{$('#status').textContent=message;$('#status').classList.toggle('error',error);};
 let helpCharacter='tia';
 const agentUI=installAgentUI({api:{...window.gla.agent,run:request=>api.reply({...request,speaker:helpCharacter,participants:[...actors.keys()],human:{enabled:true,name:human.name||'You'},topic:$('#topic').value,mode:$('#format').value,history:[...history],humanRequest:request.history.at(-1)?.text||''})},onStatus:(_message,update)=>{if(!update)return;const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(update.character).toLowerCase()));if(!actor)return;for(const a of actors.values())if(a!==actor){a.activity=null;refreshBubble(a);}actor.activity=update;refreshBubble(actor);},name:()=>actors.get(helpCharacter)?.info.name||'the characters',interactive:value=>{if(value){api.setIgnoreMouse(false);ignore=false;}},execute:async(action,args,cancelled)=>{
@@ -68,7 +73,7 @@ function refreshBubble(actor){
  actor.bubble.style.left=Math.max(width/2+8-actor.x,Math.min(actor.w/2,innerWidth-width/2-8-actor.x))+'px';
  actor.bubble.style.bottom=Math.min(actor.h,actor.y+actor.h-height-8)+'px';
 }
-function stop(message='Stopped. Everyone is resting.'){runGeneration++;running=false;speaker='';listener='';waitingHuman=false;wantsTurn=false;const resolve=humanResolve;humanResolve=null;resolve?.(null);microphone.cancel();voice.stop();liveGroup.stop();for(const a of actors.values()){a.activity=null;setBubble(a,'');a.el.classList.remove('speaking');}controls();status(message);}
+function stop(message='Stopped. Everyone is resting.'){conversationSounds.transition('idle');runGeneration++;running=false;speaker='';listener='';waitingHuman=false;wantsTurn=false;const resolve=humanResolve;humanResolve=null;resolve?.(null);microphone.cancel();voice.stop();liveGroup.stop();for(const a of actors.values()){a.activity=null;setBubble(a,'');a.el.classList.remove('speaking');}controls();status(message);}
 async function loadCast(){
  const generation=++loadGeneration;stop('Loading characters…');loading=true;controls();const slugs=selected().slice(0,5);
  for(const [slug,actor] of actors)if(!slugs.includes(slug)){actor.avatar.dispose();actor.el.remove();actors.delete(slug);}
@@ -98,7 +103,7 @@ function finishHuman(pass=false){if(!waitingHuman||!pass&&microphone.state!=='id
 async function start(){
  if(liveMode())return startLive();
  if(running||loading||actors.size<2)return;const topic=$('#topic').value.trim();if(!topic){status('Add a topic first.',true);return;}
- stop('Starting…');compact(true);const generation=runGeneration;running=true;human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};currentTurn=0;totalTurns=Math.min(10,Math.max(2,Number($('#rounds').value)||6));controls();history=[];$('#transcript').replaceChildren();const cast=[...actors.keys()],turns=totalTurns,mode=$('#format').value;let sinceHuman=0;
+ stop('Starting…');compact(true);const generation=runGeneration;running=true;conversationSounds.transition('connecting');human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};currentTurn=0;totalTurns=Math.min(10,Math.max(2,Number($('#rounds').value)||6));controls();history=[];$('#transcript').replaceChildren();const cast=[...actors.keys()],turns=totalTurns,mode=$('#format').value;let sinceHuman=0;
  try{for(let turn=0;turn<turns;turn++){
   if(generation!==runGeneration)break;currentTurn=turn;const slug=cast[turn%cast.length],actor=actors.get(slug),humanNext=human.enabled&&turn<turns-1&&(sinceHuman>=1||wantsTurn);speaker=slug;listener=humanNext?'_human':cast[(turn+1)%cast.length];controls();
   status(`${actor.info.name} is thinking · turn ${turn+1} of ${turns}`);
@@ -118,12 +123,12 @@ async function start(){
 }
 async function startLive(){
  if(running||loading||actors.size<2)return;const topic=$('#topic').value.trim();if(!topic){status('Add a topic first.',true);return;}
- stop('Starting live talk…');running=true;compact(true);human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};history=[];$('#transcript').replaceChildren();controls();
+ stop('Starting live talk…');running=true;conversationSounds.transition('connecting');compact(true);human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};history=[];$('#transcript').replaceChildren();controls();
  await liveGroup.start({agentEnabled:catalogue.agentEnabled,cast:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,voice:document.querySelector(`[data-voice="${a.slug}"]`).value})),topic,mode:$('#format').value,human});
 }
 function animate(now){requestAnimationFrame(animate);if(document.visibilityState!=='visible')return;const due=frameDue(now,lastFrame,30);if(due===null)return;const dt=Math.min(.12,(now-lastFrame)/1000);lastFrame=due;const signal=liveGroup.running?liveGroup.sample():voice.sample();
  for(const actor of actors.values()){
-  const a=actor.avatar;if(a.disposed||!a.options)continue;const isSpeaker=actor.slug===speaker,talking=isSpeaker&&signal.rms>.008;
+  const a=actor.avatar;if(a.disposed||!a.options)continue;const isSpeaker=actor.slug===speaker,talking=isSpeaker&&Boolean(signal.speaking);
   const busy=isSpeaker||a.motion?.active||a.options.transition||drag?.actor===actor||gestureSize?.actor===actor||wheelActor===actor;
   const actorDue=frameDue(now,actor.lastFrame||0,busy?30:12);if(actorDue===null)continue;const actorDt=Math.min(.15,(now-(actor.lastFrame||now))/1000);actor.lastFrame=actorDue;
   const partner=actors.get(isSpeaker?listener:speaker),audience=!running||!partner||(isSpeaker&&Math.sin(now/3200)>.75);
@@ -131,7 +136,7 @@ function animate(now){requestAnimationFrame(animate);if(document.visibilityState
   actor.yaw+= (targetYaw-actor.yaw)*(1-Math.exp(-actorDt*2.8));if(Math.abs(actor.yaw-(actor.renderYaw??999))>.001||pitch!==actor.renderPitch){a.setOrbit({yaw:actor.yaw,pitch});actor.renderYaw=actor.yaw;actor.renderPitch=pitch;}
   let lookTarget;if(!audience){lookTarget=a.camera.position.clone();lookTarget.x+=direction*1.5;}
   const cursor=a.options.enabled('followCursor'),gaze=cursor&&hoverPoint?{x:Math.max(-1,Math.min(1,(hoverPoint.x-actor.x-actor.w/2)/(actor.w/2))),y:Math.max(-1,Math.min(1,-(hoverPoint.y-actor.y-actor.h/2)/(actor.h/2)))}:{x:0,y:0};
-  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?(signal.relative>.7?'aa':signal.relative>.4?'oh':'ih'):'sil',speaking:talking,audioSignal:signal,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:{}});
+  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?signal.viseme:'sil',visemeWeights:talking?signal.visemeWeights:{},lipSyncSource:signal.lipSyncSource,intensity:talking?signal.relative:0,speaking:talking,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:{}});
   refreshBubble(actor);
   if(now-actor.maskAt>80){actor.hitMask.update(a.canvas);actor.maskAt=now;}
  }
@@ -210,7 +215,7 @@ async function actorMenuAction({slug,action}){
 api.onMenuAction(request=>void actorMenuAction(request).catch(e=>status(e.message,true)));
 window.gla.onSettings(next=>{
  if(!catalogue)return;
- catalogue.agentFolder=next.agentFolder;catalogue.agentEnabled=next.agentEnabled;
+ catalogue.conversationSounds=next.conversationSounds;catalogue.agentFolder=next.agentFolder;catalogue.agentEnabled=next.agentEnabled;
  const changed=catalogue.quality!==next.quality;catalogue.hasKey=next.hasKey;catalogue.hardware=next.hardware;
  if(changed){catalogue.quality=next.quality;const performance=next.quality==='best'?'quality':next.quality==='friendly'?'eco':'balanced';
   for(const actor of actors.values()){const a=actor.avatar;if(a.disposed||!a.options)continue;a.textureLimit=textureBudget(actors.size,next.hardware?.memoryGB);if(a.resources)a.resources.maxTextureSize=a.textureLimit;a.options.select({...a.options.selection,performance});position(actor);actor.lastFrame=0;}

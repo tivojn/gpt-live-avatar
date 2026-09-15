@@ -52,6 +52,11 @@ character. Speech is indicated by the overhead wave and highlighted name,
 without a body shake or speech-driven camera zoom. With actions enabled in
 Settings, a human's spoken or typed file/page request uses the same real tools
 as solo mode. Address a character by name; it reports the verified outcome.
+
+Solo and Together recognize mouth shapes directly from streaming audio using
+a small local 15-viseme model. **Conversation sounds** in Voice settings enables
+short sci-fi connecting and ending cues. See [lip-sync details and testing](docs/LIP-SYNC.md).
+
 All participants share the dialogue and verified file results. For example,
 ask Tia to create a file and Sarah to delete “that file”; removal uses the
 Mac's recoverable Trash. A greeting such as “Hi Tia…” selects Tia and keeps

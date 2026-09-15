@@ -55,6 +55,7 @@ const DEFAULTS = {
   orbitPitch: 0,
   zoom: 1,
   bubble: true,
+  conversationSounds: true,
   bubbleMode: 'auto', // incoming replies, always visible, or hidden
 };
 
@@ -340,6 +341,7 @@ function updateSettings(patch) {
   if (!patch || typeof patch !== 'object') return publicSettings();
   const previousAvatar=config.avatar;
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentBrowser,config.agentEngine,config.agentAccess,config.agentCodexModel]);
+  if(typeof patch.conversationSounds==='boolean')config.conversationSounds=patch.conversationSounds;
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(['basic','codex'].includes(patch.agentEngine))config.agentEngine=patch.agentEngine;
   if(validPermission(patch.agentAccess))config.agentAccess=patch.agentAccess;

@@ -77,6 +77,8 @@
 import { installAgentUI } from './agent-client.js';
 import { DelegateClient } from './delegate-client.js';
 import { LiveClient } from '/live-client.js';
+import { SpeechOutput, silentSpeech } from '/lip-sync.js';
+import { ConversationSounds } from '/conversation-sounds.js';
 import { BubblePolicy } from '/bubble-policy.js';
 import { VoicePreview } from '/voice-preview.js';
 import { frameDue, surfaceSize, renderPixelBudget, textureBudget } from '/avatar-render-budget.js';
@@ -90,6 +92,7 @@ let avatar = null; let companion = null; let ready = false; let renderRequest = 
 let reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => { reduce = e.matches; });
 const QUALITY = { friendly: { performance: 'eco', dprCap: 1, cap: 1280, activeFps: 30, idleFps: 10, maxTexture: 1024 }, balanced: { performance: 'balanced', dprCap: 2, cap: 2048, activeFps: 30, idleFps: 15, maxTexture: 2048 }, best: { performance: 'quality', dprCap: 3, cap: 4096, activeFps: 30, idleFps: 15, maxTexture: Infinity } };
+const conversationSounds = new ConversationSounds(()=>settings.conversationSounds!==false);
 const quality = () => QUALITY[settings.quality] || QUALITY.balanced;
 const toast = (text, ms = 3200) => { const t = $('#toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), ms); };
 let taskActivity = null, conversationStatus = {text: 'Loading…', dot: ''};
@@ -118,54 +121,21 @@ setInterval(syncBubble, 100);
 const BUBBLE_RESERVE = 190; // fixed headroom: the bubble has a constant size and never scales with her
 const BUBBLE_GAP = 26; // clear air between her crown and the bubble, even mid-motion
 
-// ---------------------------------------------------------------- audio analysis (lip-sync)
-const audio = new Audio(); audio.autoplay = true;
-let audioContext = null, analyser = null, timeData = null, freqData = null, audioPeak = .018;
-let audioSignal = { rms: 0, relative: 0, low: 0, mid: 0, high: 0, centroid: 0, zcr: 0 };
-const measureAudioSignal = (samples, spectrum, sampleRate) => {
-  let squareSum = 0, crossings = 0, previous = 0;
-  for (let i = 0; i < samples.length; i++) { const v = (samples[i] - 128) / 128; squareSum += v * v; if (i && ((v >= 0) !== (previous >= 0))) crossings++; previous = v; }
-  const rms = samples.length ? Math.sqrt(squareSum / samples.length) : 0;
-  const bands = { low: [80, 520], mid: [520, 2200], high: [2200, 7200] }; const totals = { low: 0, mid: 0, high: 0 }, counts = { low: 0, mid: 0, high: 0 };
-  let weighted = 0, energyTotal = 0; const nyquist = Math.max(1, sampleRate || 48000) * .5;
-  for (let i = 1; i < spectrum.length; i++) { const f = i / spectrum.length * nyquist; if (f > bands.high[1]) break; const m = spectrum[i] / 255, e = m * m; energyTotal += e; weighted += f * e; for (const n of ['low', 'mid', 'high']) if (f >= bands[n][0] && f < bands[n][1]) { totals[n] += e; counts[n]++; break; } }
-  return { rms, relative: 0, low: Math.sqrt(totals.low / Math.max(1, counts.low)), mid: Math.sqrt(totals.mid / Math.max(1, counts.mid)), high: Math.sqrt(totals.high / Math.max(1, counts.high)), centroid: energyTotal ? Math.min(1, weighted / energyTotal / bands.high[1]) : 0, zcr: samples.length > 1 ? crossings / (samples.length - 1) : 0 };
-};
-const firstAvailableViseme = (valid, names) => { for (const n of names) if (valid.has(n)) return n; return valid.has('sil') ? 'sil' : [...valid][0] || 'sil'; };
-const classifyAudioViseme = (signal, validNames) => {
-  const valid = new Set(validNames); const intensity = Math.max(0, Math.min(1, signal.relative)); const { low, mid, high, centroid, zcr } = signal;
-  if ((zcr > .145 && high > low * .82) || high > Math.max(low, mid) * 1.22) return firstAvailableViseme(valid, ['SS', 'FF', 'TH', 'ih']);
-  if (centroid < .31 && low > high * 1.12) return firstAvailableViseme(valid, intensity > .72 ? ['oh', 'aa', 'ou'] : ['ou', 'RR', 'oh']);
-  if (intensity > .78) return firstAvailableViseme(valid, ['aa', 'oh', 'E']);
-  if (centroid > .55) return firstAvailableViseme(valid, intensity > .46 ? ['E', 'ih', 'SS'] : ['ih', 'nn']);
-  if (intensity > .48) return firstAvailableViseme(valid, ['E', 'oh', 'aa']);
-  return firstAvailableViseme(valid, ['ih', 'nn', 'RR']);
-};
-const mouth = { viseme: 'sil', changedAt: 0, audibleUntil: 0 };
-let currentViseme = 'sil', speaking = false;
-const sampleAudio = now => {
-  if (!analyser) { audioSignal.relative = 0; speaking = false; currentViseme = 'sil'; return; }
-  if (!timeData) { timeData = new Uint8Array(analyser.fftSize); freqData = new Uint8Array(analyser.frequencyBinCount); }
-  analyser.getByteTimeDomainData(timeData); analyser.getByteFrequencyData(freqData);
-  const measured = measureAudioSignal(timeData, freqData, audioContext.sampleRate);
-  audioPeak = Math.max(.018, measured.rms, audioPeak * .994);
-  audioSignal = { ...measured, relative: Math.min(1, measured.rms / audioPeak) };
-  const audible = measured.rms > .012;
-  if (audible) mouth.audibleUntil = now + 160;
-  speaking = now < mouth.audibleUntil;
-  if (!speaking) { currentViseme = 'sil'; return; }
-  const wanted = audible ? classifyAudioViseme(audioSignal, visemeNames) : mouth.viseme;
-  if (wanted !== mouth.viseme && now - mouth.changedAt > 70) { mouth.viseme = wanted; mouth.changedAt = now; }
-  currentViseme = mouth.viseme;
+// ---------------------------------------------------------------- streaming audio-to-viseme recognition
+let audioContext = null, speechOutput = null, speechMuted = false;
+let audioSignal = silentSpeech(), currentViseme = 'sil', speaking = false;
+// Voice preview temporarily mutes this output without touching the microphone.
+const audio = { get muted(){return speechMuted;}, set muted(v){speechMuted=Boolean(v);if(speechOutput)speechOutput.muted=speechMuted;}, play(){return audioContext?.resume()||Promise.resolve();} };
+const sampleAudio = () => {
+  audioSignal = speechOutput?.sample() || silentSpeech();
+  currentViseme = audioSignal.viseme; speaking = audioSignal.speaking;
 };
 const attachRemoteAudio = stream => {
-  audio.srcObject = stream; audio.play().catch(() => toast('Click Tia once to allow audio playback.'));
-  try {
-    audioContext = audioContext || new AudioContext();
-    analyser = audioContext.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .5;
-    audioContext.createMediaStreamSource(stream).connect(analyser);
-    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
-  } catch (error) { console.warn('analyser', error); }
+  speechOutput?.close();
+  audioContext ||= new AudioContext();
+  speechOutput = new SpeechOutput(audioContext, {onError:message=>toast(message,7000)});
+  speechOutput.muted=speechMuted;
+  speechOutput.attach(stream);void audioContext.resume().catch(()=>toast('Click the avatar to allow audio playback.'));
 };
 let visemeNames = ['sil', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou'];
 // Microphone meter: proof that she can hear you, shown on the mic icon.
@@ -311,7 +281,7 @@ function paint(now) {
   const target = pointer.seen ? { x: Math.max(-1, Math.min(1, (pointer.x / cssW - .5) * 2)) * .6, y: Math.max(-1, Math.min(1, (pointer.y / cssH - .5) * -2)) * .35 } : { x: 0, y: 0 };
   gaze = { x: gaze.x + (target.x - gaze.x) * .08, y: gaze.y + (target.y - gaze.y) * .08 };
   const expression = { smile: .35, ...(avatar.motion ? avatar.motion.expression(now, reduce) : {}) };
-  const state = { reduce, viseme: currentViseme, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, gaze, audienceContact: !avatar.options?.enabled('followCursor'), speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
+  const state = { reduce, viseme: currentViseme, visemeWeights: audioSignal.visemeWeights, lipSyncSource: audioSignal.lipSyncSource, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, gaze, audienceContact: !avatar.options?.enabled('followCursor'), speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
   const image = avatar.render(now, state, view);
   // Geometry, reactions and bubble placement never wait on drawing: a texture
   // swap right after the window grows must not leave stale small-window
@@ -499,7 +469,7 @@ async function beginWalk(action) {
   if (destination) companion.destination = { ...destination, y: Math.max(.26, destination.y) };
   wake();
 }
-window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID, speaking, viseme: currentViseme, relative: Number(audioSignal.relative.toFixed(2)),
+window.gla_debug = () => ({ state: live.state, latestUser, assistantTurn, turnID, speaking, viseme: currentViseme, lipSync: audioSignal.lipSyncSource, relative: Number(audioSignal.relative.toFixed(2)),
   pending: companion && companion.pendingReaction && { kind: companion.pendingReaction.kind, clipID: companion.pendingReaction.clipID, action: companion.pendingReaction.action },
   motionActive: avatar && avatar.motion && avatar.motion.active && avatar.motion.active.id, clips: avatar && avatar.motion ? avatar.motion.clips.size : 0, status: document.querySelector('#status').textContent, played: window.gla_played,
   stage: stage && { anchor: stage.anchor, scale: Number(stage.scale.toFixed(3)), walking: Boolean(stage.studio), travelClip: stage.travelClip }, window: [innerWidth, innerHeight],
@@ -595,6 +565,7 @@ const preview = new VoicePreview({ createSession: (sdp, options) => gla.createLi
   notify: state => { gla.reportVoicePreview(state); if (state.error) toast(state.error, 6000); else if (state.state !== 'idle') toast(`${state.state === 'connecting' ? 'Loading' : 'Playing'} ${state.voice} voice preview…`, 3000); } });
 addEventListener('pagehide', () => preview.stop());
 window.gla_live = live; // debug handle
+Object.defineProperty(window,'gla_speech',{get:()=>speechOutput}); // QA: output timing, no credentials
 window.gla_preview = preview; // QA: inspect preview transport without exposing credentials
 Object.defineProperty(window, 'gla_avatar', { get: () => avatar }); // debug handle
 live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
@@ -603,7 +574,8 @@ let assistantTurn = ''; let usage = null;
 const ENDED_REASONS = { user: 'Conversation ended.', close_requested: 'Conversation ended.', hidden: 'Ended: Tia was hidden for 15 seconds.', silence: 'Ended after 5 minutes without you speaking.', quit: 'Conversation ended.', unload: 'Conversation ended.' };
 live.addEventListener('state', ({ detail }) => {
   const s = detail.state;
-  if (s === 'idle') { setStatus(ENDED_REASONS[detail.reason] || `Ended (${detail.reason}).`, '', 4000); analyser = null; audio.srcObject = null; currentViseme = 'sil'; speaking = false; $('#muteBtn').classList.remove('active'); }
+  conversationSounds.transition(s,{...detail,resumed:s==='connecting'&&live.resumed||detail.resumed});
+  if (s === 'idle') { setStatus(ENDED_REASONS[detail.reason] || `Ended (${detail.reason}).`, '', 4000); speechOutput?.close(); speechOutput = null; audioSignal = silentSpeech(); currentViseme = 'sil'; speaking = false; $('#muteBtn').classList.remove('active'); }
   if (s === 'connecting') { setStatus(live.resumed ? 'Switching voice…' : 'Connecting to GPT-Live…', 'connecting'); if (!live.resumed) { $('#lineUser').textContent = ''; $('#lineAssistant').textContent = ''; } }
   if (s === 'connected') { setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; lastUserActivity = performance.now(); if (detail.resumed) live.appendInstructions('The connection settings changed. Continue the previous conversation and wait for their next message. Do not repeat the greeting or previous answer.'); else live.appendCommentary('Greet the user warmly in one short sentence right now, then pause and listen.'); }
   gla.live.heartbeat(s !== 'idle');

@@ -958,7 +958,8 @@ class Avatar3D {
       const target = state.visemeWeights && typeof state.visemeWeights === 'object'
         ? clamp(Number(state.visemeWeights[viseme]) || 0, 0, 1)
         : viseme === wanted && wanted !== 'sil' ? 1 : 0;
-      const tau = target > this.visemeWeights[viseme] ? 38 : 64;
+      // Recognized consonants need quick closure; a long vowel tail hides PP/FF.
+      const tau = state.lipSyncSource==='audio-model' ? (target>this.visemeWeights[viseme]?22:32) : (target>this.visemeWeights[viseme]?38:64);
       this.visemeWeights[viseme] = approach(this.visemeWeights[viseme], target, elapsed, tau);
       const weight = this.visemeWeights[viseme];
       if (weight < .002 || viseme === 'sil') continue;

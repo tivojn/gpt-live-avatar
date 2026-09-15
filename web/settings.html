@@ -58,6 +58,8 @@
     <div class="row"><select id="voice"></select><button id="previewVoice" type="button">Preview</button><button id="useVoice" type="button" class="pri">Use voice</button></div>
     <p class="note">Listen before choosing. Changing voice briefly reconnects a live conversation and keeps the recent transcript. Previews use GPT-Live without the microphone.</p>
     <p class="state" id="voiceState" aria-live="polite"></p>
+    <label><input id="conversationSounds" type="checkbox"> Conversation sounds</label>
+    <p class="note">Soft sci-fi cues when connecting, ready, and ending. Applies to solo and Together.</p>
   </section>
 
   <section>
@@ -160,6 +162,7 @@
     if (!voiceDraft || previousVoice !== settings.voice) voiceDraft = settings.voice;
     $('#voice').innerHTML = settings.voices.map(v => `<option value="${v}" ${v === voiceDraft ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}${v === 'marin' ? ' · default' : ''}</option>`).join('');
     updateVoiceState();
+    $('#conversationSounds').checked=settings.conversationSounds!==false;
     $('#personaName').value = settings.personaName || '';
     $('#persona').value = settings.persona || '';
     $('#avatarDir').value = settings.avatarDir || '';
@@ -285,6 +288,7 @@
   $('#agentAccess').onchange=()=>save({agentAccess:$('#agentAccess').value});
   $('#codexSaveModel').onclick=()=>{const model=modelValue('agentCodexModel');if(model&&!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(model)){setState($('#codexStatus'),'Enter a valid model ID.','bad');return;}return save({agentCodexModel:model});};
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
+  $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
   $('#agentEnabled').onchange=()=>save({agentEnabled:$('#agentEnabled').checked});
   $('#agentBrowser').onchange=()=>save({agentBrowser:$('#agentBrowser').value});
   $('#agentChooseFolder').onclick=async()=>{await gla.agent.chooseFolder();render(await gla.getSettings());};
