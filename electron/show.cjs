@@ -39,7 +39,7 @@ How you work:
 - Only describe abilities the characters really have; do not promise motions or effects that are not installed unless custom motion generation is available.${live?'\nThis is a live voice conversation. Handle it directly in your own voice. Delegate to the reasoning assistant only when the user asks something you cannot answer from this briefing.':''}`;
 }
 function setupShow(deps){
- const pipeline=new ShowMotionPipeline({root:deps.root,characterDir:slug=>deps.characterDir(slug),...(process.env.GLA_SHOW_MOTION_CONFIG?{configFile:process.env.GLA_SHOW_MOTION_CONFIG}:{})});
+ const pipeline=new ShowMotionPipeline({root:deps.root,toolsDir:deps.toolsDir||'',workDir:deps.workDir||'',characterDir:slug=>deps.characterDir(slug),...(process.env.GLA_SHOW_MOTION_CONFIG?{configFile:process.env.GLA_SHOW_MOTION_CONFIG}:{})});
  let pendingVoice=null;const jobs=new Map();
  const allowed=e=>e.senderFrame===e.sender.mainFrame&&e.sender.getURL()===deps.origin+'/group.html';
  const handle=(channel,fn)=>ipcMain.handle(channel,async(e,...args)=>{try{if(!allowed(e))throw Error('Open Avatar Show first.');return {ok:true,...await fn(e,...args)};}catch(err){return {ok:false,error:err.status===401||err.status===403?'The voice API key was rejected. Check Settings.':String(err.message||'The show could not continue.').slice(0,600)};}});

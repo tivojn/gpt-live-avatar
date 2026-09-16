@@ -16,8 +16,12 @@ function exists(p){try{return Boolean(p)&&fs.existsSync(p);}catch{return false;}
 function line(text){return String(text||'').split('\n').filter(Boolean).at(-1)||'';}
 
 class ShowMotionPipeline {
- constructor({root,configFile=path.join(os.homedir(),'.config','gpt-live-avatar','show-motion.json'),characterDir=()=>'',workDir='',env=process.env}={}){
-  Object.assign(this,{root,configFile,characterDir,env});this.workDir=workDir||path.join(root,'build','show-motions');this.jobs=new Map();
+ constructor({root,configFile=path.join(os.homedir(),'.config','gpt-live-avatar','show-motion.json'),characterDir=()=>'',workDir='',toolsDir='',env=process.env}={}){
+  Object.assign(this,{root,configFile,characterDir,env});
+  // Packaged builds ship the tools beside the app and keep every written clip
+  // in the user's data folder; a checkout keeps both inside the repository.
+  this.toolsDir=toolsDir||path.join(root,'tools');
+  this.workDir=workDir||path.join(root,'build','show-motions');this.jobs=new Map();
  }
  config(){
   const file=readConfig(this.configFile),dev=path.join(this.root,'build','motion-audit');
@@ -36,14 +40,15 @@ class ShowMotionPipeline {
   if(!exists(c.blend))problems.push('the rig source .blend (blend)');
   if(!c.uv)problems.push('uv (for numpy and pillow)');
   if(!this.characterDir(c.donor)||!exists(donorModel))problems.push('the donor character '+c.donor+' installed locally');
-  // The pipeline writes clips and character libraries next to a developer
-  // checkout; a packaged app (read-only app.asar, no tools/) cannot host it.
-  if(/\.asar([\/]|$)/.test(this.root)||!exists(this.tool()))problems.push('a developer checkout with tools/show-motion.py (not available in the packaged app)');
+  if(!exists(this.tool()))problems.push('the motion tools (show-motion.py) beside the app');
   return {available:problems.length===0,problems,configFile:this.configFile,workDir:this.workDir,meshy:Boolean(c.token&&c.rig),blender:exists(c.blender),uv:Boolean(c.uv),blend:exists(c.blend)};
  }
  run(cmd,args,{signal,onProgress,env={}}){
   return new Promise((resolve,reject)=>{
-   const child=spawn(cmd,args,{cwd:this.root,env:{...this.env,...env},stdio:['ignore','pipe','pipe']});let out='',err='',result=null;
+   // Never run from inside the app bundle: the pipeline's scratch space has to
+   // be writable, and a signed bundle is not.
+   try{fs.mkdirSync(this.workDir,{recursive:true});}catch{}
+   const child=spawn(cmd,args,{cwd:this.workDir,env:{...this.env,...env},stdio:['ignore','pipe','pipe']});let out='',err='',result=null;
    const abort=()=>{child.kill('SIGTERM');};signal?.addEventListener('abort',abort,{once:true});
    child.stdout.on('data',d=>{out+=d;let i;while((i=out.indexOf('\n'))>=0){const text=out.slice(0,i).trim();out=out.slice(i+1);if(text.startsWith('PROGRESS ')){try{onProgress?.(JSON.parse(text.slice(9)));}catch{}}else if(text.startsWith('RESULT ')){try{result=JSON.parse(text.slice(7));}catch{}}}});
    child.stderr.on('data',d=>{err+=d;if(err.length>20000)err=err.slice(-20000);});
@@ -51,7 +56,7 @@ class ShowMotionPipeline {
    child.on('close',code=>{signal?.removeEventListener('abort',abort);if(signal?.aborted)return reject(Error('Motion preparation cancelled.'));if(result&&result.ok===false)return reject(Error(result.error||'The motion step failed.'));if(code!==0||!result)return reject(Error((line(err)||'The motion step failed (exit '+code+').').slice(0,600)));resolve(result);});
   });
  }
- tool(){return path.join(this.root,'tools','show-motion.py');}
+ tool(){return path.join(this.toolsDir,'show-motion.py');}
  async generate(motion,{slugs=[],signal,onProgress=()=>{},revision=''}={}){
   const status=this.status();if(!status.available)throw Error('Custom motions are not available: missing '+status.problems.join('; ')+'.');
   if(!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(motion?.id||''))throw Error('Invalid motion id.');

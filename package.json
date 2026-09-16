@@ -72,6 +72,17 @@
       {
         "from": "build/protected/starter/sarah/motions.gla",
         "to": "avatars/sarah/motions.gla"
+      },
+      {
+        "from": "tools",
+        "to": "tools",
+        "filter": [
+          "show-motion.py",
+          "show-motion-facing.py",
+          "retarget-meshy-motion.py",
+          "prepare-character.py",
+          "complete-sarah.py"
+        ]
       }
     ],
     "dmg": {

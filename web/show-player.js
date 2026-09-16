@@ -39,7 +39,11 @@ export class ShowPlayer {
     const motion=cue.motion?resolveMotion(cue.motion,performer):'';
     if(motion||Object.keys(cue.expression||{}).length)await this.stage.motion?.(performer,motion,cue.expression||{});
     if(!current())break;
-    try{heard=await this.stage.speak(cue,performer);}catch(e){if(!current())break;await this.stage.status?.(e.message||'The voice could not deliver that line.');}
+    const speaking=this.stage.speak(cue,performer);
+    // Open the next cue's voice session while this line is still being spoken,
+    // so the stage does not stand silent through a connection handshake.
+    if(nextCue&&next&&next!=='user')this.stage.prepare?.(nextCue,next);
+    try{heard=await speaking;}catch(e){if(!current())break;await this.stage.status?.(e.message||'The voice could not deliver that line.');}
     if(!current())break;
     this.stage.clear?.(performer);
     const text=cue.text,delivered=String(heard||'').trim();lines.push({speaker:performer,text,delivered,cue,forUser});this.stage.line?.({speaker:performer,text,delivered,cue,forUser});

@@ -414,9 +414,11 @@ export class Avatar3DOptions {
     }));
     // An authored playlist can opt into other poses. Without one, cycle
     // upright social poses; seated poses and weapon grips remain explicit.
-    this.playback = [...this.poses.values()].filter(pose => pose.group === 'body'
+    this.playbackAll = [...this.poses.values()].filter(pose => pose.group === 'body'
       && (Array.isArray(data.playback) ? data.playback.includes(pose.id)
         : /standing|heart/i.test(pose.label || pose.id)));
+    this.playback = this.playbackAll;
+    if (this.stageMode) this.setStageMode(true);
     this.outfits = (data.outfits || []).map(outfit=>{
       if(data.characterId==='sarah'&&outfit.id==='tactical')return {...outfit,bodyMasks:{...outfit.bodyMasks,
         // The shirt's sleeves and back are covered by the coat in this
@@ -712,6 +714,22 @@ export class Avatar3DOptions {
     this.transition={from:this.current.map(copy),target,start:now,
       fromBounds:this.avatar.bounds?.clone(),targetBounds};
     this.write(this.current);
+  }
+
+  // A play is not a chat. Idling through affectionate poses such as the heart
+  // reads as the performer breaking character, and a cast cycling in unison
+  // reads as machinery, so a staged show holds one stance and acts on cue.
+  setStageMode(on, now = performance.now()) {
+    this.stageMode = Boolean(on);
+    const all = this.playbackAll || this.playback || [];
+    const social = pose => /heart|love|cute|kiss|hug/i.test(pose.label || pose.id);
+    this.playback = this.stageMode ? [] : all;
+    this.playbackIndex = 0;
+    if (!this.stageMode) return;
+    const body = this.poses.get(this.selection?.body);
+    const stance = all.find(pose => !social(pose));
+    if (stance && body && social(body)) this.applyPose({...this.selection, body: stance.id,
+      hands: undefined, leftHand: undefined, rightHand: undefined}, now);
   }
 
   update(now, reduce=false) {
