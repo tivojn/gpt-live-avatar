@@ -6,9 +6,9 @@ export class GroupVoice {
  constructor(api){this.api=api;this.client=null;this.signal={rms:0,relative:0};this.generation=0;this.transcript='';}
  stop(){this.generation++;this.finish?.(new Error('Conversation stopped.'));this.finish=null;this.client?.stop('group_stop');this.client=null;this.output?.close();this.output=null;void this.context?.close();this.context=null;this.analyser=null;this.signal={rms:0,relative:0};void this.api.cancel();}
  sample(){this.signal=this.output?.sample()||silentSpeech();if(this.signal.rms>.008){this.heard=true;this.lastAudio=performance.now();}return this.signal;}
- async speak(text,voice,onText){
+ async speak(text,voice,onText,delivery=''){
   this.stop();const generation=this.generation;this.heard=false;this.lastAudio=0;this.lastText=performance.now();this.transcript='';this.peak=.025;
-  const client=this.client=new LiveClient({createSession:(sdp)=>this.api.voice({sdp,voice,text})});
+  const client=this.client=new LiveClient({createSession:(sdp)=>this.api.voice({sdp,voice,text,delivery})});
   return new Promise((resolve,reject)=>{
    let done=false,timer,deadline;const complete=error=>{if(done)return;done=true;clearInterval(timer);clearTimeout(deadline);this.finish=null;client.stop('group_turn_end');this.client=null;this.output?.close();this.output=null;void this.context?.close();this.context=null;this.analyser=null;this.signal={rms:0,relative:0};error?reject(error):resolve(this.transcript.trim());};this.finish=complete;
    client.addEventListener('remote-track',({detail})=>{if(generation!==this.generation)return;this.context=new AudioContext();this.output=new SpeechOutput(this.context,{onError:message=>this.onWarning?.(message)});this.output.attach(detail.stream);void this.context.resume().catch(()=>complete(Error('Click Start to allow playback.')));});

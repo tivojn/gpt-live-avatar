@@ -35,6 +35,7 @@ export class ShowPlayer {
      await this.stage.understudy?.(cue,performer,answer.result);if(!current())break;
     }else if(cue.speaker==='user'){performer=cue.understudy;forUser=true;if(!performer)continue;passes++;}
     this.stage.floor?.({speaker:performer,listener:next,cue});
+    if(cue.move){try{await this.stage.move?.(performer,cue.move);}catch{}if(!current())break;}
     const motion=cue.motion?resolveMotion(cue.motion,performer):'';
     if(motion||Object.keys(cue.expression||{}).length)await this.stage.motion?.(performer,motion,cue.expression||{});
     if(!current())break;

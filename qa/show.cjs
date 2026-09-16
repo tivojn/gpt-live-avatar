@@ -35,12 +35,13 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  // ---------------------------------------------------------------- parsing
  const raw={title:'The Lost Crown',synopsis:'A crown goes missing.',cast:[{slug:'tia',role:'Queen'},{slug:'iselda',role:'Guard'},{slug:'sarah',role:'Should be ignored'}],userRole:{role:'Jester'},
   wantedMotions:[{id:'juggle-air',label:'Juggle',prompt:'juggling three invisible balls',duration:4,fallback:'wave',expression:{smile:.8}},{id:'bow-courtly',label:'dup of installed'},{id:'Bad Id',label:'x'},{id:'unused-motion',label:'Unused',prompt:'x'}],
-  scenes:[{title:'Throne room',setting:'Morning.',lines:[{speaker:'tia',text:'Where is my crown?',motion:'plead-beg',expression:{surprise:1.4,anger:.2}},{speaker:'user',text:'Perhaps under the cushion, Majesty.'},{speaker:'iselda',text:'I will search at once!',motion:'juggle-air',note:'eager'},{speaker:'ghost',text:'ignored speaker'},{speaker:'sarah',text:'ignored: standby has no role'},{speaker:'tia',text:'Hurry.',motion:'not-installed'}]},{title:'Empty scene',lines:[]}]};
+  scenes:[{title:'Throne room',setting:'Morning.',lines:[{speaker:'tia',text:'Where is my crown?',motion:'plead-beg',expression:{surprise:1.4,anger:.2},delivery:'sharp, rising panic',move:'center'},{speaker:'user',text:'Perhaps under the cushion, Majesty.'},{speaker:'iselda',text:'I will search at once!',motion:'juggle-air',note:'eager',move:'backstage'},{speaker:'ghost',text:'ignored speaker'},{speaker:'sarah',text:'ignored: standby has no role'},{speaker:'tia',text:'Hurry.',motion:'not-installed'}]},{title:'Empty scene',lines:[]}]};
  const parsed=script.parseScript('Here is the script:\n```json\n'+JSON.stringify(raw)+'\n```',{characters,user:{enabled:true,name:'Adam'},understudy:'sarah'});
  assert.equal(parsed.title,'The Lost Crown');assert.equal(parsed.scenes.length,1);assert.equal(parsed.lineCount,4);
  assert.deepEqual(parsed.cast.map(c=>c.slug+':'+c.role),['tia:Queen','iselda:Guard']);
  assert.deepEqual(parsed.userRole,{name:'Adam',role:'Jester',understudy:'sarah',understudyName:'Sarah'});
  assert.deepEqual(parsed.scenes[0].lines[0].expression,{surprise:1,anger:.2});assert.equal(parsed.scenes[0].lines[3].motion,'','unknown motions are dropped');
+ assert.equal(parsed.scenes[0].lines[0].delivery,'sharp, rising panic');assert.equal(parsed.scenes[0].lines[0].move,'center');assert.equal(parsed.scenes[0].lines[2].move,'','unknown stage points are dropped');assert.equal(parsed.scenes[0].lines[2].delivery,'');
  assert.equal(parsed.scenes[0].lines[2].motion,'juggle-air');assert.deepEqual(parsed.wantedMotions.map(w=>w.id),['juggle-air'],'only wanted motions that are used survive');
  assert.equal(parsed.wantedMotions[0].fallback,'wave');assert.match(parsed.wantedMotions[0].prompt,/juggling/);
  const cues=script.cueSheet(parsed);assert.equal(cues.length,4);assert.equal(cues[1].understudy,'sarah');assert.equal(cues[0].understudy,'');
@@ -91,13 +92,13 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  const log=[];const stage=(human)=>({
   scene:(s,i)=>{log.push('scene:'+i);},floor:({speaker,listener})=>{log.push(`floor:${speaker}>${listener||'-'}`);},
   motion:(slug,id,expression)=>{log.push(`motion:${slug}:${id||'-'}:${Object.keys(expression).join(',')||'-'}`);},
-  speak:async(cue,slug)=>{log.push(`speak:${slug}:${cue.text}`);return 'heard '+cue.text;},clear:slug=>{log.push('clear:'+slug);},
+  move:async(slug,destination)=>{log.push(`move:${slug}:${destination}`);},speak:async(cue,slug)=>{log.push(`speak:${slug}:${cue.text}${cue.delivery?' ('+cue.delivery+')':''}`);return 'heard '+cue.text;},clear:slug=>{log.push('clear:'+slug);},
   human:async(cue)=>{log.push('human:'+cue.text);return human(cue);},understudy:(cue,slug,reason)=>{log.push(`understudy:${slug}:${reason}`);},
   line:l=>{log.push(`line:${l.speaker}${l.forUser?'*':''}:${l.text}`);},status:m=>{log.push('status:'+m);},stop:()=>{log.push('stop');},
  });
  let result=await new ShowPlayer(stage(async()=>({result:'spoken',text:'Under the cushion!'}))).run(parsed,{resolveMotion:id=>id==='juggle-air'?'wave':id});
  assert.equal(result.finished,true);assert.equal(result.passes,0);assert.equal(result.lines.length,4);
- assert.deepEqual(log,['scene:0','floor:tia>user','motion:tia:plead-beg:surprise,anger','speak:tia:Where is my crown?','clear:tia','line:tia:Where is my crown?','floor:user>iselda','human:Perhaps under the cushion, Majesty.','line:user:Under the cushion!','floor:iselda>tia','motion:iselda:wave:-','speak:iselda:I will search at once!','clear:iselda','line:iselda:I will search at once!','floor:tia>-','speak:tia:Hurry.','clear:tia','line:tia:Hurry.']);
+ assert.deepEqual(log,['scene:0','floor:tia>user','move:tia:center','motion:tia:plead-beg:surprise,anger','speak:tia:Where is my crown? (sharp, rising panic)','clear:tia','line:tia:Where is my crown?','floor:user>iselda','human:Perhaps under the cushion, Majesty.','line:user:Under the cushion!','floor:iselda>tia','motion:iselda:wave:-','speak:iselda:I will search at once!','clear:iselda','line:iselda:I will search at once!','floor:tia>-','speak:tia:Hurry.','clear:tia','line:tia:Hurry.']);
  log.length=0;result=await new ShowPlayer(stage(async()=>({result:'pass'}))).run(parsed);
  assert.equal(result.passes,1);assert.ok(log.includes('understudy:sarah:pass'));assert.ok(log.includes('speak:sarah:Perhaps under the cushion, Majesty.'));assert.ok(log.includes('line:sarah*:Perhaps under the cushion, Majesty.'));
  // Timeout falls back to a pass; an explicit button pass wins over a slow human.

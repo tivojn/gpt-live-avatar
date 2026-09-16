@@ -1,6 +1,8 @@
 # Meshy motion audit · September 15, 2026
 
-Version 0.2.13 uses motion revision `meshy-v11-20260915`. Use the matching
+Version 0.2.13 introduced motion revision `meshy-v11-20260915`; version 0.2.16
+ships `show-20260916`, the same bake plus the theatre and stage clips (78 per
+character) delivered as a motion-only overlay. Use the matching
 [release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.13)
 to confirm installer availability and checksums. Earlier release findings
 remain below as history.

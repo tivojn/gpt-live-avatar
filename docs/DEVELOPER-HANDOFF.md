@@ -223,11 +223,11 @@ superseded by the v0.2.13 changes below; retain this section as release history.
   adjustment. The existing four lights, one shadow map and rendering budgets
   remain the same. The v0.2.12 calibration is the rollback reference; see
   [Studio lighting](STUDIO-LIGHTING.md).
-- **Motions:** use `meshy-v11-20260915` on all five avatars. The bake corrects
-  anatomical pelvis alignment, including secondary character retargeting, and
-  Ming-Mei/Iselda’s spine aliases. It retains the established in-place spin,
-  foot articulation and stable framing. The library still contains 65 clips per
-  character. See [Motion audit](MOTION-AUDIT.md) for measured scope.
+- **Motions:** use `show-20260916` on all five avatars. It keeps the
+  `meshy-v11-20260915` bake (anatomical pelvis alignment, secondary character
+  retargeting, Ming-Mei/Iselda’s spine aliases, in-place spin, foot
+  articulation and stable framing) and adds the theatre set for Avatar Show:
+  78 clips per character. See [Motion audit](MOTION-AUDIT.md) for measured scope.
 - **Sarah:** use the new immutable `sarah-wardrobe-v9` asset combination. The
   derived body has a localized internal-component/topology and skin-weight
   repair; original vertex positions remain intact. New body-fitted underwear

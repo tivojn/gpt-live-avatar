@@ -6,8 +6,10 @@
   "highlights": [
     "Director: a persistent GPT-Live voice session plus text input that discusses the show, prepares it and asks for feedback.",
     "Playwright: your reasoning account writes scenes, lines, motions and expressions from the characters' installed motion libraries.",
+    "Stage blocking and acting notes: the Playwright marks where each actor walks (they cross the stage in their walking clip) and how every line is delivered, and the voice performs it with that emotion.",
     "Missing motions can be generated with Meshy text-to-motion, facing-checked, retargeted in Blender and installed for every character when configured.",
     "Act a role with a prompter: read the line, type it, or press I'll pass and the standby character delivers it.",
-    "Revise the script from feedback or play the show again; Improvise together remains available as a format."
+    "Revise the script from feedback or play the show again; Improvise together remains available as a format.",
+    "Eleven theatre motions for every character (courtly bow, kneel and pray, soliloquy, brood, weep, plead, accuse, recoil in horror, collapse in grief, proclaim, madness drift) plus two stage moves arrive as a small motion-only download."
   ]
 }
