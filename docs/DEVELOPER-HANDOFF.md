@@ -49,7 +49,11 @@ hooks; there is still no completed EnConvo adapter. Map music capture and
 session lifecycle to EnConvo's host permissions before exposing these controls.
 
 Validation: the full `npm test` suite, pelvis fingerprint/geometry checks and
-idempotent retrofit pass. `qa/music-controls-app.cjs` exercises the real solo
+idempotent retrofit pass. The notarized packaged app unlocks bundled Sarah
+with a fresh profile and downloads Tia plus matching motions from the live
+gateway. An existing-profile fixture with the previous encrypted Sarah and
+cached catalogue selects the repaired bundle and preserves its tactical outfit.
+The installed DMG retains existing settings and credential files. `qa/music-controls-app.cjs` exercises the real solo
 and Together windows with stubbed music requests; session and native-menu
 regressions separately cover scoped startup/stop and routing. See
 [Singing QA](SING-ALONG-QA.md), [Vocal detector QA](SINGING-DETECTOR-QA.md),

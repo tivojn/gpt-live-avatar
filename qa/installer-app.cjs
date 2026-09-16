@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),cp=require('child_process'),assert=require('assert/strict'),crypto=require('crypto');
 const repo=path.resolve(__dirname,'..'),out=process.env.GLA_QA_OUTPUT||repo+'/build/qa-installer';fs.mkdirSync(out,{recursive:true});
-const bundle=process.argv[2]||repo+'/dist/mac-arm64/GPT-Live Avatar.app',upgrade=process.argv.includes('--upgrade'),port=19453;
+const bundle=process.argv.slice(2).find(arg=>!arg.startsWith('--'))||repo+'/dist/mac-arm64/GPT-Live Avatar.app',upgrade=process.argv.includes('--upgrade'),port=19453;
 const profile=out+(upgrade?'/upgrade-profile':'/fresh-profile');fs.mkdirSync(profile,{recursive:true});
 fs.writeFileSync(profile+'/config.json',JSON.stringify(upgrade?{avatar:'sarah',voice:'gleam',bubbleMode:'always',quality:'friendly',conversationSounds:false,avatarLooks:{sarah:{outfit:'tactical',body:'Ps007.stand',prop:''}}}:{quality:'friendly',bubbleMode:'always',conversationSounds:false}));
 if(upgrade){
