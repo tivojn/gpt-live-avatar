@@ -63,9 +63,20 @@ const agentUI=installAgentUI({api:{...window.gla.agent,run:runAgentRequest},onSt
 // Stage blocking: the actor walks (in the walking clip) to a named stage
 // point. Shared by agent moves and show scripts; interrupted by drags.
 const STAGE_POINTS={'upper-left':[0,0],'upper-right':[1,0],'lower-left':[0,1],'lower-right':[1,1],center:[.5,.5],left:[0,.5],right:[1,.5],top:[.5,0],bottom:[.5,1]};
+// Prefer a free spot near the requested point so actors stand beside each
+// other instead of stacking; the stage edge and the request itself are fallbacks.
+function freeSpot(actor,to){
+ const others=[...actors.values()].filter(a=>a!==actor);
+ const overlap=x=>others.reduce((m,a)=>{const w=Math.min(x+actor.w,a.x+a.w)-Math.max(x,a.x),h=Math.min(to.y+actor.h,a.y+a.h)-Math.max(to.y,a.y);return Math.max(m,w>0&&h>0?w/Math.min(actor.w,a.w):0);},0);
+ if(overlap(to.x)<.45)return to;
+ const step=actor.w*.8,maxX=innerWidth-actor.w;
+ const candidates=[1,-1,2,-2,3,-3].map(k=>Math.max(0,Math.min(maxX,to.x+k*step))).filter((x,i,arr)=>arr.indexOf(x)===i);
+ const free=candidates.find(x=>overlap(x)<.45);
+ return free===undefined?to:{x:free,y:to.y};
+}
 async function walkActor(actor,destination,cancelled=()=>false){
  const p=STAGE_POINTS[destination];if(!p)throw Error('Unknown destination.');
- const from={x:actor.x,y:actor.y},to={x:(innerWidth-actor.w)*p[0],y:70+(innerHeight-actor.h-70)*p[1]};
+ const from={x:actor.x,y:actor.y},to=freeSpot(actor,{x:(innerWidth-actor.w)*p[0],y:70+(innerHeight-actor.h-70)*p[1]});
  const distance=Math.hypot(to.x-from.x,to.y-from.y);if(distance<12)return;
  const duration=Math.max(900,Math.min(3200,distance*3.2)),start=performance.now();
  await actor.avatar.motion.play(actor.avatar.options.walkingClip(),{loop:true});
@@ -350,4 +361,4 @@ api.onReset(arrange);api.onStop(()=>stop('Conversation ended because the group w
 (async()=>{try{catalogue=await api.catalogue();if(!catalogue.ok)throw Error(catalogue.error);helpCharacter=catalogue.selected||catalogue.avatars[0]?.slug||'';const preferred=[catalogue.selected,...catalogue.avatars.map(x=>x.slug)].filter((x,i,arr)=>arr.indexOf(x)===i).slice(0,2);catalogue.avatars.forEach((info,i)=>{const row=document.createElement('label');row.className='choice';const check=document.createElement('input');check.type='checkbox';check.value=info.slug;check.checked=preferred.includes(info.slug);check.onchange=()=>{if(selected().length>5){check.checked=false;return;}void loadCast();};const voices=document.createElement('select');voices.dataset.voice=info.slug;voices.setAttribute('aria-label',info.name+' voice');for(const v of catalogue.voices){const option=document.createElement('option');option.value=v;option.textContent=v;voices.append(option);}voices.value=catalogue.groupVoices?.[info.slug]||({tia:'marin',sarah:'gleam',iselda:'quartz','ming-mei':'willow',seraphim:'bossa'}[info.slug])||'marin';voices.onchange=()=>{void gla.setSettings({groupVoices:{...catalogue.groupVoices,[info.slug]:voices.value}}).then(next=>{catalogue.groupVoices=next.groupVoices;});};row.append(check,document.createTextNode(info.name),voices);$('#cast').append(row);});show=installShow({api:gla.show,voice,actors,catalogue:()=>catalogue,hooks:{selected,voiceFor:slug=>document.querySelector(`[data-voice="${slug}"]`)?.value||'marin',human:()=>({enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'}),topic:()=>$('#topic').value.trim(),loading:()=>loading,controls,compact,minimize:v=>panel.setMinimized(v),setBubble,appendLine,setIgnoreMouse:value=>{api.setIgnoreMouse(value);ignore=value;},setFloor:(s,l)=>{speaker=s;listener=l;},walk:walkActor,beginShow:()=>{if(running)stop('Starting the show…',true);running=true;conversationSounds.transition('live');human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};$('#transcript').replaceChildren();controls();},endShow:()=>{running=false;speaker='';listener='';conversationSounds.transition('idle');controls();},rest:message=>stop(message)}});
  await loadCast();show.ready();requestAnimationFrame(animate);}catch(e){status(e.message,true);}})();
 // Read-only diagnostics are useful for installation verification.
-window.gla_group={openComposer,walkActor,startActorVoice,headAt,closeupActor,actors,voice,microphone,liveGroup,actorAt,actorCatalogue,actorMenuAction,actOnSpeech,start,stop,arrange,loadCast,get show(){return show;},get state(){return {running,loading,speaker,listener,history:[...history],generation:runGeneration,waitingHuman,wantsTurn,human:{...human},currentTurn,totalTurns};}};
+window.gla_group={openComposer,walkActor,freeSpot,startActorVoice,headAt,closeupActor,actors,voice,microphone,liveGroup,actorAt,actorCatalogue,actorMenuAction,actOnSpeech,start,stop,arrange,loadCast,get show(){return show;},get state(){return {running,loading,speaker,listener,history:[...history],generation:runGeneration,waitingHuman,wantsTurn,human:{...human},currentTurn,totalTurns};}};

@@ -67,6 +67,10 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  fs.writeFileSync(path.join(work,'cfg.json'),JSON.stringify({meshyApiKey:'k',rigTaskId:'r',blender:'/nonexistent/Blender',uv:'/nonexistent/uv',blend:'/nonexistent.blend'}));
  const configured=new ShowMotionPipeline({root:work,configFile:path.join(work,'cfg.json'),characterDir:()=>'',workDir:work,env:{PATH:'/nonexistent',HOME:work}}).status();
  assert.equal(configured.meshy,true);assert.ok(configured.problems.some(p=>/Blender/.test(p)));
+ assert.ok(configured.problems.some(p=>/developer checkout/.test(p)),'a root without tools/show-motion.py is not a developer checkout');
+ const packaged=new ShowMotionPipeline({root:path.join(work,'GPT-Live Avatar.app','Contents','Resources','app.asar'),configFile:path.join(work,'cfg.json'),characterDir:()=>'',workDir:work,env:{PATH:'/nonexistent',HOME:work}}).status();
+ assert.ok(packaged.problems.some(p=>/packaged app/.test(p)),'packaged apps never offer the custom motion pipeline');
+ assert.ok(!new ShowMotionPipeline({root,configFile:path.join(work,'cfg.json'),characterDir:()=>'',workDir:work,env:{PATH:'/nonexistent',HOME:work}}).status().problems.some(p=>/developer checkout/.test(p)),'the repository root has the tool');
  assert.match(frontFacing('waves happily'),/facing the camera/);assert.match(frontFacing('waves happily',true),/never turn/i);
  await assert.rejects(pipeline.run('/nonexistent/binary',[],{}),/Could not start/);
  fs.rmSync(work,{recursive:true,force:true});

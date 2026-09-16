@@ -36,6 +36,9 @@ class ShowMotionPipeline {
   if(!exists(c.blend))problems.push('the rig source .blend (blend)');
   if(!c.uv)problems.push('uv (for numpy and pillow)');
   if(!this.characterDir(c.donor)||!exists(donorModel))problems.push('the donor character '+c.donor+' installed locally');
+  // The pipeline writes clips and character libraries next to a developer
+  // checkout; a packaged app (read-only app.asar, no tools/) cannot host it.
+  if(/\.asar([\/]|$)/.test(this.root)||!exists(this.tool()))problems.push('a developer checkout with tools/show-motion.py (not available in the packaged app)');
   return {available:problems.length===0,problems,configFile:this.configFile,workDir:this.workDir,meshy:Boolean(c.token&&c.rig),blender:exists(c.blender),uv:Boolean(c.uv),blend:exists(c.blend)};
  }
  run(cmd,args,{signal,onProgress,env={}}){

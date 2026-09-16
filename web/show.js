@@ -135,7 +135,7 @@ export function installShow({api,voice,actors,catalogue,hooks}){
   const actorOf=slug=>actors.get(slug);
   return {
    scene:async(scene,i)=>{setStatus(`Scene ${i+1}: ${scene.title}`);await pause(700);},
-   floor:({speaker,listener,cue})=>{hooks.setFloor(speaker==='user'?'_human':speaker,listener==='user'?'_human':listener);for(const a of actors.values())a.el.classList.toggle('speaking',a.slug===speaker);document.querySelectorAll('#showScriptBody p.current').forEach(p=>p.classList.remove('current'));const p=document.querySelector(`#showScriptBody p[data-cue="${cue.scene}:${cue.index}"]`);if(p){p.classList.add('current');p.scrollIntoView({block:'nearest'});}},
+   floor:({speaker,listener,cue})=>{hooks.setFloor(speaker==='user'?'_human':speaker,listener==='user'?'_human':listener);for(const a of actors.values()){a.el.classList.toggle('speaking',a.slug===speaker);if(!a.closeup&&!a.composerOpen)a.el.style.zIndex=a.slug===speaker?'2':'';}document.querySelectorAll('#showScriptBody p.current').forEach(p=>p.classList.remove('current'));const p=document.querySelector(`#showScriptBody p[data-cue="${cue.scene}:${cue.index}"]`);if(p){p.classList.add('current');p.scrollIntoView({block:'nearest'});}},
    motion:async(slug,id,expression)=>{const a=actorOf(slug);if(!a)return;a.showMood=Object.keys(expression).length?expression:null;if(id&&a.avatar.motion?.clips.has(id)){a.el.classList.remove('standby');void a.avatar.motion.play(id,{loop:false}).catch(()=>{});}},
    move:async(slug,destination)=>{const a=actorOf(slug);if(!a)return;a.el.classList.remove('standby');await hooks.walk(a,destination,()=>phase!=='performing');},
    speak:async(cue,slug)=>{const a=actorOf(slug);if(!a)throw Error('That character left the stage.');a.el.classList.remove('standby');const heard=await voice.speak(cue.text,hooks.voiceFor(slug),text=>hooks.setBubble(a,text),cue.delivery||'');await pause(350);return heard;},
@@ -144,7 +144,7 @@ export function installShow({api,voice,actors,catalogue,hooks}){
    understudy:async(cue,slug,reason)=>{const a=actorOf(slug);hidePrompter();setStatus(`${a?.info.name||'The standby'} steps in for ${script.userRole?.role||'you'}${reason==='takeover'?' for the rest of the show':''}.`);hooks.appendLine({info:{name:'Director'}},`${a?.info.name||'The standby'} takes the line for ${script.userRole?.role||hooks.human().name}.`);await pause(500);},
    line:({speaker,text,cue,forUser,skipped})=>{const role=speaker==='user'?`${script.userRole?.role||'You'} (${hooks.human().name})`:`${script.cast.find(c=>c.slug===speaker)?.role||actors.get(speaker)?.info.name||speaker}${forUser?' · standby as '+(script.userRole?.role||'you'):''}`;hooks.appendLine({info:{name:role}},skipped?'(line skipped) '+text:text);},
    status:async message=>{setStatus(message,true);await pause(600);},
-   stop:()=>{voice.stop();hidePrompter();for(const a of actors.values()){a.showMood=null;a.el.classList.remove('speaking');hooks.setBubble(a,'');}},
+   stop:()=>{voice.stop();hidePrompter();for(const a of actors.values()){a.showMood=null;a.el.classList.remove('speaking');if(!a.closeup&&!a.composerOpen)a.el.style.zIndex='';hooks.setBubble(a,'');}},
   };
  }
  const pause=ms=>new Promise(r=>setTimeout(r,ms));
