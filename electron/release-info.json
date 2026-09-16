@@ -1,13 +1,13 @@
 {
-  "version": "0.2.15",
+  "version": "0.2.16",
   "date": "2026-09-16",
-  "title": "Sarah as your default companion",
-  "description": "Fresh installs open with Sarah wearing her tie top, long chain pants and sandals, without a coat.",
+  "title": "Avatar Show · Playwright & Director",
+  "description": "The Together window becomes an Avatar Show: brief the Director by voice or text, the Playwright writes the script, the characters perform it, and you can act a role with a standby ready to take any line.",
   "highlights": [
-    "Sarah is the default avatar, with her Gleam voice.",
-    "Her default look is Tie top, chain pants & sandals, with no prop.",
-    "The installer includes encrypted Sarah and her motions; first launch briefly connects to unlock her.",
-    "Existing saved character choices and appearances are retained.",
-    "Includes the overhead input, microphone controls and independent group task updates from v0.2.14."
+    "Director: a persistent GPT-Live voice session plus text input that discusses the show, prepares it and asks for feedback.",
+    "Playwright: your reasoning account writes scenes, lines, motions and expressions from the characters' installed motion libraries.",
+    "Missing motions can be generated with Meshy text-to-motion, facing-checked, retargeted in Blender and installed for every character when configured.",
+    "Act a role with a prompter: read the line, type it, or press I'll pass and the standby character delivers it.",
+    "Revise the script from feedback or play the show again; Improvise together remains available as a format."
   ]
 }

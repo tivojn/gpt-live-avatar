@@ -42,9 +42,32 @@ Existing local packages still work. The iOS source requires a protected-loader
 port before a new public iOS release; its old GitHub download URLs are not a
 supported distribution path.
 
+## Avatar Show · Playwright & Director
+
+The Avatar Show window puts on a play. Tell the **Director** what you want, by
+voice (a GPT-Live session) or text. When you are ready, the **Playwright**
+(your selected reasoning account) writes a structured script: scenes, roles,
+lines, and a motion plus facial expression for every line, chosen from the
+characters' installed motion libraries. Motions the script needs but no
+character has are generated with Meshy text-to-motion, checked for facing,
+retargeted in Blender and installed into every character's library, when
+`~/.config/gpt-live-avatar/show-motion.json` provides `meshyApiKey`,
+`rigTaskId`, `blend` and the Blender and `uv` paths; otherwise the Director
+uses the closest installed motion and says so. The characters then perform
+with their GPT-Live voices, and the Director asks for feedback; the script can
+be revised or played again.
+
+Tick **I'll act a role** to be cast yourself. A prompter shows each of your
+lines; read it aloud into the microphone, type it, or press **I'll pass** (or
+simply wait) and the standby character delivers it. Choose three or more
+characters when you act, so the play keeps several performers plus a standby.
+See [Avatar Show details](docs/AVATAR-SHOW.md).
+
 ## Together live conversations
 
-Right-click an avatar and choose **Bring Characters Together**. Each character
+Right-click an avatar and choose **Avatar Show · Playwright & Director**. The
+window opens with the show format selected; choose **Improvise together** for
+the earlier free conversation. Each character
 keeps independent drag, pinch, rotation and right-click controls. Transparent
 spaces let clicks reach the app underneath. Drag the Together title bar, resize
 its bottom-right corner, or minimize it to a title bar while talk continues.

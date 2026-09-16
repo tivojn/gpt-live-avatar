@@ -1,6 +1,6 @@
 # Characters together
 
-Right-click the desktop avatar and choose **Bring Characters Together…** (also in View). Choose two to five installed characters and their voices. Pick conversation, collaborative story, friendly debate or Would you rather, then personalize the topic.
+Right-click the desktop avatar and choose **Avatar Show · Playwright & Director…** (also in View), then pick the **Improvise together** format; the default *Put on a show* format is described in [AVATAR-SHOW.md](AVATAR-SHOW.md). Choose two to five installed characters and their voices. Pick conversation, collaborative story, friendly debate or Would you rather, then personalize the topic.
 
 **Live talk** is on by default. With **Join as yourself** checked, **Start live talk** opens the microphone and you can speak at any time. Your speech interrupts the active character. The characters share attributed dialogue and respond to your actual contribution through persistent voice connections. They are instructed never to invent your answer or speak for you. Leave Join unchecked to watch without opening the microphone. You can also type a contribution during live talk.
 

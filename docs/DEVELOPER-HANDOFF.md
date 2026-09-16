@@ -306,3 +306,34 @@ The installer embeds Sarah’s existing 579,546,579-byte encrypted base and
 are unchanged; no asset repack or new upload is needed. Tia remains available
 from Settings → Avatar. Earlier release sections above describe their original
 Tia starter and remain as history.
+
+### 0.2.16 Avatar Show · Playwright & Director
+
+The Together window is now **Avatar Show · Playwright & Director** (menu item,
+window title, `web/group.html`). Its default format is *Put on a show*; the
+earlier free conversation remains as *Improvise together*.
+
+- `electron/show.cjs` registers the `gla:show:*` IPC (Playwright, text
+  Director, live Director session, motion pipeline status, generation and
+  cancel); `electron/show-script.cjs` is the pure casting, brief, parser and
+  cue-sheet module; `electron/show-motions.cjs` drives
+  `tools/show-motion.py` (Meshy text-to-motion → `tools/show-motion-facing.py`
+  facing gate → `tools/retarget-meshy-motion.py` → library integration for all
+  installed characters, backups under `build/show-motions/backup`).
+- Renderer: `web/show.js` (Director chat, preparation, prompter, revision),
+  `web/show-player.js` (line-by-line performance with standby takeover),
+  `web/show-director.js` (persistent GPT-Live Director session),
+  `web/show-cues.js` (spoken cue phrases, English and Chinese).
+- Custom motions need `~/.config/gpt-live-avatar/show-motion.json`:
+  `{"meshyApiKey","rigTaskId","blender","uv","blend","python","donor"}`.
+  `GLA_SHOW_MOTION_CONFIG` overrides the path (QA points it at a missing file
+  so tests never spend Meshy credits). Without a usable configuration the
+  Director reports the problem and substitutes the script's fallback motion.
+- QA: `qa/show.cjs` (pure modules, in `npm test`), `qa/show-app.cjs`
+  (Electron flow with stubbed reasoning: briefing, cue, script, prompter, pass,
+  standby, revision, replay), `qa/show-live.cjs --live` (real reasoning,
+  voices and, when the script asks, the real Meshy pipeline; writes a review
+  video under `build/qa-show-live`).
+- Bundled dev characters gained two Director-made *Show* clips
+  (`applause-cheer`, `juggle-invisible`); installed app characters receive new
+  clips only through a protected-asset release.

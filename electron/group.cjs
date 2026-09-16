@@ -29,7 +29,7 @@ function setupGroup(deps){
   if(window&&!window.isDestroyed()){window.show();window.focus();return true;}
   closing=false;shared=new GroupContext();const primary=deps.getAvatar(),display=screen.getDisplayMatching(primary?.getBounds()||screen.getPrimaryDisplay().workArea);
   primary?.webContents.send('gla:menu-action','end:hidden');primary?.webContents.send('gla:avatar:suspended',true);primary?.hide();
-  window=new BrowserWindow({...display.workArea,show:false,transparent:true,frame:false,hasShadow:false,resizable:false,minimizable:false,fullscreenable:false,alwaysOnTop:true,skipTaskbar:true,backgroundColor:'#00000000',title:'GPT-Live Avatar · Together',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:false,backgroundThrottling:false}});
+  window=new BrowserWindow({...display.workArea,show:false,transparent:true,frame:false,hasShadow:false,resizable:false,minimizable:false,fullscreenable:false,alwaysOnTop:true,skipTaskbar:true,backgroundColor:'#00000000',title:'GPT-Live Avatar · Avatar Show',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:false,backgroundThrottling:false}});
   window.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});window.setAlwaysOnTop(true,'floating');window.loadURL(deps.origin+'/group.html');
   window.once('ready-to-show',()=>window?.show());window.on('close',cancel);window.on('closed',()=>{window=null;if(!closing){deps.getAvatar()?.webContents.send('gla:avatar:suspended',false);deps.getAvatar()?.showInactive();}});
   window.webContents.on('render-process-gone',()=>{cancel();window?.close();});

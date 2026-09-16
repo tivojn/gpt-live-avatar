@@ -16,7 +16,7 @@ const { ENGINES, permissions, permissionPatch, installed:installedEngines, provi
 const { historyItems } = require('./live-config.cjs');
 const { DelegateAuth } = require('./delegate-auth.cjs');
 const { DelegateBackend, normalizeDelegate, selected, usesCodexServer, usesCodexActions, reasoningEngine, actionEngine, MODEL_CHOICES } = require('./delegate.cjs');
-let delegateAuth, delegateBackend, groupManager, agentManager, appInfo;
+let delegateAuth, delegateBackend, groupManager, showManager, agentManager, appInfo;
 const appearanceDefaults = require('./default-appearance.json');
 const defaultAvatar = require('./default-avatar.json');
 const voiceDefaults = require('./default-voices.json');
@@ -350,7 +350,7 @@ function installApplicationMenu(){
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [...appInfo.menu(), { type: 'separator' }, { label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: 'View', submenu: [{ label: 'Bring Characters Together…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:avatarShortcuts?.values.recover||DEFAULT_SHORTCUTS.recover, registerAccelerator:false, click:requestAvatarRecovery }, {label:'Avatar Close-up',accelerator:avatarShortcuts?.values.closeup||DEFAULT_SHORTCUTS.closeup,registerAccelerator:false,click:requestAvatarCloseup}, { role: 'reload' }, ...(!app.isPackaged?[{role:'toggleDevTools'}]:[])] },
+    { label: 'View', submenu: [{ label: 'Avatar Show · Playwright & Director…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:avatarShortcuts?.values.recover||DEFAULT_SHORTCUTS.recover, registerAccelerator:false, click:requestAvatarRecovery }, {label:'Avatar Close-up',accelerator:avatarShortcuts?.values.closeup||DEFAULT_SHORTCUTS.closeup,registerAccelerator:false,click:requestAvatarCloseup}, { role: 'reload' }, ...(!app.isPackaged?[{role:'toggleDevTools'}]:[])] },
   ]));
 }
 
@@ -573,7 +573,7 @@ function showAvatarMenu(state) {
     { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
     { type: 'separator' },
     { label: 'Avatar', submenu: (assets?.avatars() || []).map(a => ({ label: a.name + (a.installed ? '' : ' · download in Settings'), type: 'radio', checked: !config.avatarDir && config.avatar === a.slug, enabled: a.installed, click: send('avatar:' + a.slug) })) },
-    { label: 'Bring Characters Together…', click: () => groupManager.open() },
+    { label: 'Avatar Show · Playwright & Director…', click: () => groupManager.open() },
     { label: 'Voice', submenu: [
       { label: 'Changing voice briefly reconnects a live conversation', enabled: false },
       ...VOICES.map(v => ({ label: v[0].toUpperCase() + v.slice(1) + (v === config.voice ? ' ✓' : ''), submenu: [
@@ -677,6 +677,7 @@ app.whenReady().then(async () => {
   });
   agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();agentManager?.cancelAll();config.agentFolder=folder;config.agentFolderDefaultVersion=1;saveConfig();broadcastSettings();}});
   groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, avatarPermissionsMenu, avatarReasoningMenu, requestAvatarRecovery, shortcuts:()=>avatarShortcuts?.values||DEFAULT_SHORTCUTS, appInfoMenu:()=>appInfo.menu(), openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
+  showManager = require('./show.cjs').setupShow({getConfig:()=>config, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, voices:VOICES, root:path.join(__dirname,'..'), characterDir:slug=>{const info=avatarInfo({...config,avatar:slug,avatarDir:''});return info.ok&&info.slug===slug?info.dir:'';}});
   avatarShortcuts=new AvatarShortcuts(globalShortcut,{recover:requestAvatarRecovery,closeup:requestAvatarCloseup});
   avatarShortcuts.start(config.shortcuts);
   installApplicationMenu();
@@ -684,7 +685,7 @@ app.whenReady().then(async () => {
   if (!hasApiKey() || !avatarInfo().ok) openSettingsWindow();
   app.on('activate', () => { if (!avatarWindow) createAvatarWindow(); });
 });
-app.on('before-quit', () => { globalShortcut.unregisterAll();appInfo?.dispose();agentManager?.dispose();groupManager?.dispose();delegateBackend?.cancelAll();delegateAuth?.close();if(configSaveTimer)saveConfig(); });
+app.on('before-quit', () => { globalShortcut.unregisterAll();appInfo?.dispose();agentManager?.dispose();showManager?.cancelAll();groupManager?.dispose();delegateBackend?.cancelAll();delegateAuth?.close();if(configSaveTimer)saveConfig(); });
 app.on('window-all-closed', () => app.quit());
 app.on('web-contents-created', (_event, contents) => {
   const owner=contents.id;

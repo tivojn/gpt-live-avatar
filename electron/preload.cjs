@@ -40,6 +40,16 @@ contextBridge.exposeInMainWorld('gla', {
     showMenu: request => ipcRenderer.invoke('gla:group:menu', request),
     onMenuAction: callback => subscribe('gla:group:menu-action', callback),
   },
+  // Avatar Show · Playwright and Director (used by the Together window)
+  show: {
+    playwright: request => ipcRenderer.invoke('gla:show:playwright', request),
+    director: request => ipcRenderer.invoke('gla:show:director', request),
+    directorLive: request => ipcRenderer.invoke('gla:show:director-live', request),
+    pipeline: () => ipcRenderer.invoke('gla:show:pipeline'),
+    generate: request => ipcRenderer.invoke('gla:show:generate', request),
+    cancel: () => ipcRenderer.invoke('gla:show:cancel'),
+    onProgress: callback => subscribe('gla:show:progress', callback),
+  },
   // settings and secrets
   shortcuts:{set:values=>ipcRenderer.invoke('gla:shortcuts:set',values),capture:value=>ipcRenderer.send('gla:shortcuts:capture',value===true)},
   getSettings: () => ipcRenderer.invoke('gla:settings:get'),
