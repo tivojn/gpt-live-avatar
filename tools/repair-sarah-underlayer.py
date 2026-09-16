@@ -84,7 +84,11 @@ for k,bone in enumerate(bones):np.add.at(dense[:,k],weld,(bw*(bj==bone)).sum(1))
 dense/=counts[:,None];starts=edges[:,0];ends=edges[:,1];degree=np.bincount(starts,minlength=nw);unknown=unknown[degree[unknown]>0]
 for _ in range(400):
  acc=np.zeros_like(dense);np.add.at(acc,starts,dense[ends]);dense[unknown]=acc[unknown]/degree[unknown,None]
-old_j=bj.copy();old_w=bw.copy();changed=np.flatnonzero(mask[weld]&~internal&(degree[weld]>0))
+# The legacy harmonic blend compensated for discarded pelvis-control weights.
+# Keep the authored distribution after those weights are restored; reapplying
+# the old blend brings back the pinched lower brief in a wide squat.
+authored_pelvis=doc.get('extras',{}).get('avatarSarahPelvisWeights',{}).get('version',0)>=1
+old_j=bj.copy();old_w=bw.copy();changed=np.array([],dtype=int) if authored_pelvis else np.flatnonzero(mask[weld]&~internal&(degree[weld]>0))
 for v in changed:
  d=dense[weld[v]];top=np.argsort(d)[-4:][::-1];bj[v]=bones[top];bw[v]=d[top]/d[top].sum()
 assert np.isfinite(bw).all() and np.max(np.abs(bw.sum(1)-1))<1e-4
@@ -120,7 +124,7 @@ if targets:mesh['extras']['targetNames']=[t['name']for t in target_records];mesh
 doc['meshes'][panel['mesh']]=mesh;panel.setdefault('extras',{})['avatarBodyFittedUnderlayer']=True
 for outfit in doc['extras']['openclamAvatar']['outfits']:
  if outfit['id']in ['dress','dress-straps']:outfit['nodes'].append(panel['name'])
-assert len(removed)==6 and int(internal.sum())==1393 and len(caps)==2 and len(changed)==706,'Source topology changed: review the bounded repair before exporting'
-doc.setdefault('extras',{})['avatarSarahSurfaceRepair']={'version':1,'sourceModelSHA256':hashlib.sha256(path.read_bytes()).hexdigest(),'removedInternalVertices':1393,'smoothedWeightVertices':706}
+assert len(removed)==6 and int(internal.sum())==1393 and len(caps)==2 and len(changed)==(0 if authored_pelvis else 706),'Source topology changed: review the bounded repair before exporting'
+doc.setdefault('extras',{})['avatarSarahSurfaceRepair']={'version':1,'sourceModelSHA256':hashlib.sha256(path.read_bytes()).hexdigest(),'removedInternalVertices':1393,'smoothedWeightVertices':len(changed),'authoredPelvisWeights':authored_pelvis}
 file='body-fitted-brief-v5.bin';(out/file).write_bytes(payload);doc['buffers'].append({'uri':file,'byteLength':len(payload)});(out/'body-fitted-model-v5.gltf').write_text(json.dumps(doc,separators=(',',':')))
-report={'vertices':len(positions),'removedInternalComponents':removed,'removedInternalVertices':int(internal.sum()),'bodyTrianglesBefore':len(all_triangles),'bodyTrianglesAfter':len(body_triangles),'gussets':len(caps),'boundaryLoops':loops,'triangles':len(triangles),'bytes':len(payload),'bodyPrimitiveVertices':len(position),'morphTargets':target_records,'identityWeights':True,'smoothedWeightVertices':len(changed),'normalRepairVertices':len(normal_vertices),'smoothRegionMin':position[changed].min(0).tolist(),'smoothRegionMax':position[changed].max(0).tolist()};(out/'body-brief-report-v5.json').write_text(json.dumps(report,indent=2));print(report)
+report={'vertices':len(positions),'removedInternalComponents':removed,'removedInternalVertices':int(internal.sum()),'bodyTrianglesBefore':len(all_triangles),'bodyTrianglesAfter':len(body_triangles),'gussets':len(caps),'boundaryLoops':loops,'triangles':len(triangles),'bytes':len(payload),'bodyPrimitiveVertices':len(position),'morphTargets':target_records,'identityWeights':True,'smoothedWeightVertices':len(changed),'normalRepairVertices':len(normal_vertices),'smoothRegionMin':position[changed].min(0).tolist() if len(changed) else None,'smoothRegionMax':position[changed].max(0).tolist() if len(changed) else None};(out/'body-brief-report-v5.json').write_text(json.dumps(report,indent=2));print(report)

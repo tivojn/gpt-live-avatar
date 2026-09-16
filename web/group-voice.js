@@ -14,17 +14,17 @@ export class GroupVoice {
  // A full stop also drops whatever was being warmed up for the next cue.
  stopAll(){this.dropWarm();this.generation++;this.finish?.(new Error('Conversation stopped.'));this.finish=null;this.client?.stop('group_stop');this.client=null;this.output?.close();this.output=null;void this.context?.close();this.context=null;this.analyser=null;this.signal={rms:0,relative:0};void this.api.cancel();}
  sample(){this.signal=this.output?.sample()||silentSpeech();if(this.signal.rms>.008){this.heard=true;this.lastAudio=performance.now();}return this.signal;}
- cueKey(text,voice,delivery){return JSON.stringify([voice||'',delivery||'',String(text||'')]);}
+ cueKey(text,voice,delivery,context){return JSON.stringify([voice||'',delivery||'',context||null,String(text||'')]);}
  dropWarm(reason='group_warm_drop'){const warm=this.warm;this.warm=null;if(warm){try{warm.client.stop(reason);}catch{}}}
  // Connect the session for a line that has not been reached yet. The voice is
  // told to wait for its cue, so nothing is spoken until speak() asks for it.
- prepare(text,voice,delivery=''){
+ prepare(text,voice,delivery='',context=null){
   if(!String(text||'').trim()||!voice)return;
-  const key=this.cueKey(text,voice,delivery);
+  const key=this.cueKey(text,voice,delivery,context);
   if(this.warm?.key===key)return;
   this.dropWarm();
   const warm={key,segments:new Map(),transcript:'',connected:false,dead:false,error:null,track:null};
-  warm.client=new LiveClient({createSession:sdp=>this.api.voice({sdp,voice,text,delivery,slot:'prepare'})});
+  warm.client=new LiveClient({createSession:sdp=>this.api.voice({sdp,voice,text,delivery,context,slot:'prepare'})});
   warm.client.addEventListener('remote-track',({detail})=>{warm.track=detail.stream;});
   warm.client.addEventListener('transcript',({detail})=>{if(detail.role!=='assistant')return;warm.segments.set(detail.id,detail.text);warm.transcript=[...warm.segments.values()].join(' ');});
   warm.client.addEventListener('state',({detail})=>{if(detail.state==='connected')warm.connected=true;else if(detail.state==='idle')warm.dead=true;});
@@ -33,13 +33,13 @@ export class GroupVoice {
   try{Promise.resolve(warm.client.start({receiveOnly:true,voice})).catch(error=>{warm.error=error;});}
   catch(error){warm.error=error;}
  }
- async speak(text,voice,onText,delivery=''){
-  const key=this.cueKey(text,voice,delivery),warm=this.warm;
+ async speak(text,voice,onText,delivery='',context=null){
+  const key=this.cueKey(text,voice,delivery,context),warm=this.warm;
   // A session that spoke before its cue cannot be trusted with the line.
   const ready=Boolean(warm&&warm.key===key&&warm.connected&&!warm.dead&&!warm.error&&!plain(warm.transcript));
   if(ready)this.warm=null;
   this.stop({keepWarm:true});const generation=this.generation;this.heard=false;this.lastAudio=0;this.lastText=performance.now();this.transcript='';this.peak=.025;
-  const client=this.client=ready?warm.client:new LiveClient({createSession:(sdp)=>this.api.voice({sdp,voice,text,delivery,slot:'speak'})});
+  const client=this.client=ready?warm.client:new LiveClient({createSession:(sdp)=>this.api.voice({sdp,voice,text,delivery,context,slot:'speak'})});
   const expected=plain(text);
   return new Promise((resolve,reject)=>{
    let done=false,timer,deadline;const complete=error=>{if(done)return;done=true;clearInterval(timer);clearTimeout(deadline);this.finish=null;client.stop('group_turn_end');this.client=null;this.output?.close();this.output=null;void this.context?.close();this.context=null;this.analyser=null;this.signal={rms:0,relative:0};error?reject(error):resolve(this.transcript.trim());};this.finish=complete;

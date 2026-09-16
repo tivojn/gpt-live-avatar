@@ -426,6 +426,18 @@ export class Avatar3DOptions {
         Top_Ac_Tshtt:[{min:[.095,1.21,-1],max:[1,2,1]},
           {min:[-1,1.21,-1],max:[-.095,2,1]},
           {min:[-1,1.21,-1],max:[1,2,-.015]}]}};
+      if(data.characterId==='sarah'&&outfit.id==='casual'){
+        // Body masks are rest-space, so a floor tuned against the trouser hem
+        // in the rest pose cuts visible skin once the ankle swings away from
+        // it. The authored floor sits 0.011 above the hem, which necks the
+        // ankle down to a stub and reads as a detached foot. Lift it clear of
+        // the ankle; the band it exposes stays inside the trouser leg.
+        const ANKLE_FLOOR=.26;
+        const masks=Object.fromEntries(Object.entries(outfit.bodyMasks||{}).map(([material,boxes])=>[material,
+          (boxes||[]).map(box=>box.min?.[1]<ANKLE_FLOOR&&box.max?.[1]>ANKLE_FLOOR
+            ?{...box,min:[box.min[0],ANKLE_FLOOR,box.min[2]]}:box)]));
+        return {...outfit,bodyMasks:masks};
+      }
       if(data.characterId!=='seraphim')return outfit;
       // Older encrypted packs hide broad slices of the pilot to avoid armor
       // intersections. Open cockpit outfits need the complete clothed pilot;
@@ -435,7 +447,19 @@ export class Avatar3DOptions {
         headClearance:'helmet'};
       return outfit.id==='robot-armor'?{...outfit,headClearance:'helmet'}:outfit;
     });
-    this.props = data.props || [];
+    // Props are authored into the character's own model extras, so the bag
+    // cannot be taken out without re-exporting a half-gigabyte GLB. Retire it
+    // on read instead. Scoped by character because a prop id is only unique
+    // within the model that declares it. The rest-swing correction below is
+    // left in place: it is keyed by node name, costs nothing while the prop is
+    // unselectable, and is still right if the bag is ever brought back.
+    //
+    // A retired prop still has a mesh in the scene, and that mesh is only ever
+    // hidden by the pass that walks this list. So it stays on the list, marked,
+    // and is dropped from the catalogue and refused as a selection instead -
+    // removed from the list outright, the bag rendered permanently.
+    const retiredProps = data.characterId==='sarah' ? new Set(['bag']) : new Set();
+    this.props = (data.props || []).map(prop => retiredProps.has(prop.id) ? {...prop, retired:true} : prop);
     // An accessory's authoring origin can be displaced from the hand it is
     // bound to. Correct its bind-space attachment without changing the
     // mesh, skeleton, or the inverse transform used after skinning.
@@ -445,6 +469,33 @@ export class Avatar3DOptions {
       const translation=new THREE.Matrix4().makeTranslation(...offset);
       for(const root of this.nodes.get(name)||[])root.traverse(node=>{
         if(node.isSkinnedMesh&&!adjusted.has(node)){node.bindMatrix.premultiply(translation);adjusted.add(node);}
+      });
+    }
+    // Some props are authored resting inside the body instead of against it.
+    // The Tommy bag is rigidly weighted to shoulder.r, and its pouch is
+    // authored far enough inboard that it hangs through the right hip. A
+    // translation would drag the strap off the shoulder with it, so swing the
+    // prop out and forward about its own anchor bone instead. Bind-space only,
+    // exactly like propRestOffsets above: mesh, skeleton and the inverse used
+    // after skinning are all untouched.
+    const restSwings={Ac_Tommy_Bag:{bone:'shoulder.r',z:-9,x:-7},...(data.propRestSwings||{})};
+    const swung=new Set();
+    for(const [name,swing] of Object.entries(restSwings)){
+      if(!Number.isFinite(swing.z)||!Number.isFinite(swing.x)||Math.abs(swing.z)>45||Math.abs(swing.x)>45)throw Error('Invalid prop swing');
+      for(const root of this.nodes.get(name)||[])root.traverse(node=>{
+        if(!node.isSkinnedMesh||swung.has(node))return;
+        const index=node.skeleton.bones.findIndex(b=>nameOf(b)===swing.bone);
+        if(index<0)return;
+        // Bind position of the anchor bone = inverse of its inverse-bind matrix.
+        const pivot=new THREE.Vector3().setFromMatrixPosition(
+          new THREE.Matrix4().copy(node.skeleton.boneInverses[index]).invert());
+        const rad=d=>d*Math.PI/180;
+        const m=new THREE.Matrix4().makeTranslation(pivot.x,pivot.y,pivot.z)
+          .multiply(new THREE.Matrix4().makeRotationX(rad(swing.x)))
+          .multiply(new THREE.Matrix4().makeRotationZ(rad(swing.z)))
+          .multiply(new THREE.Matrix4().makeTranslation(-pivot.x,-pivot.y,-pivot.z));
+        node.bindMatrix.premultiply(m);
+        swung.add(node);
       });
     }
     this.heldProps = new Map();
@@ -459,7 +510,7 @@ export class Avatar3DOptions {
 
   catalogue() {
     const choices = list => list.map(({id,label,group,pose})=>({id,label:String(label||id).slice(0,80),...(group?{group}:{}),...(pose?{pose}:{})}));
-    return {poses:choices([...this.poses.values()]),outfits:choices(this.outfits),props:choices(this.props),accessories:choices(this.accessories),
+    return {poses:choices([...this.poses.values()]),outfits:choices(this.outfits),props:choices(this.props.filter(p=>!p.retired)),accessories:choices(this.accessories),
       walkingStyles:[{id:'walking-woman',label:'Walking Woman'},{id:'walk',label:'Natural walk'},{id:'casual-walk',label:'Casual stroll'},{id:'stage-walk',label:'Runway walk'}].filter(x=>this.avatar.motion?.clips.has(x.id)),
       expressions:choices(this.avatar.appearance?.choices()||[]),
       lighting:[{id:'studio',label:'Studio portrait'},{id:'soft',label:'Soft studio'},{id:'classic',label:'Classic'}],
@@ -472,7 +523,7 @@ export class Avatar3DOptions {
     this.current = this.idle.map(copy);
   }
 
-  heldProp() { return this.props.find(p=>p.id===this.selection.prop && p.pose); }
+  heldProp() { return this.props.find(p=>p.id===this.selection.prop && p.pose && !p.retired); }
 
   // Keep the authored two-handed grip relative to the moving chest. These
   // exports flatten the arm bones, so preserving fingers alone lets an idle
@@ -599,7 +650,8 @@ export class Avatar3DOptions {
       for (const name of new Set(choices.flatMap(choice=>choice.nodes||[]))) {
         for (const node of this.nodes.get(name)||[]) node.visible = false;
       }
-      for (const name of choices.find(choice=>choice.id===id)?.nodes||[]) {
+      const chosen=choices.find(choice=>choice.id===id);
+      for (const name of (chosen&&!chosen.retired?chosen.nodes:null)||[]) {
         for (const node of this.nodes.get(name)||[]) node.visible = true;
       }
     };
@@ -653,7 +705,7 @@ export class Avatar3DOptions {
       if (pose?.group === group) next[group]=pose.id;
     }
     for (const [key,choices] of [['outfit',this.outfits],['prop',this.props],['accessory',this.accessories]]) {
-      if (choices.some(choice=>choice.id===value[key])) next[key]=value[key];
+      if (choices.some(choice=>choice.id===value[key]&&!choice.retired)) next[key]=value[key];
     }
     for (const key of ['playTransitions','followCursor']) {
       if (value[key] === false || value[key] === 'false') next[key] = 'false';

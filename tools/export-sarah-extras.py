@@ -5,6 +5,8 @@ Exports missing wardrobe/props in the same rest space as the existing Sarah GLB.
 """
 import bpy, json, sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sarah_pelvis_weights import mark_glb
 from mathutils import Matrix
 
 out = Path(sys.argv[sys.argv.index('--') + 1]).resolve()
@@ -46,7 +48,17 @@ for name, rigid_bone in spec.items():
     mesh = bpy.data.meshes.new_from_object(evaluated, preserve_all_data_layers=True, depsgraph=bpy.context.evaluated_depsgraph_get())
     old_names = {g.index: g.name for g in obj.vertex_groups}
     # Capture evaluated weights before removing the source groups.
-    weights = [[(old_names[g.group], g.weight) for g in v.groups if old_names.get(g.group) in deform and g.weight > 0] for v in mesh.vertices]
+    # Keep authored pelvis support even though its control is not a glTF
+    # deform bone. root.x receives the same root transform in exported clips.
+    weights = []
+    for vertex in mesh.vertices:
+        merged = {}
+        for group in vertex.groups:
+            source = old_names.get(group.group)
+            target = 'root.x' if source == 'c_root_bend.x' else source
+            if target in deform and group.weight > 0:
+                merged[target] = merged.get(target, 0) + group.weight
+        weights.append(list(merged.items()))
     obj.modifiers.clear(); obj.parent = None; obj.constraints.clear()
     obj.data = mesh; obj.matrix_world = world
     obj.vertex_groups.clear()
@@ -105,5 +117,6 @@ bpy.context.view_layer.objects.active = rig
 bpy.ops.export_scene.gltf(filepath=str(out), export_format='GLB', use_selection=True,
     export_animations=False, export_def_bones=True, export_rest_position_armature=True,
     export_extras=False, export_morph=False, export_apply=False)
+mark_glb(out)
 out.with_suffix('.json').write_text(json.dumps(report, indent=2))
 print('SARAH EXTRAS', json.dumps(report))

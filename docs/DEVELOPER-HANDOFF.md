@@ -8,10 +8,53 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 16, 2026 for **v0.2.15**. Use the matching
-[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.15)
+Updated September 17, 2026 for **v0.2.19**. Use the matching
+[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.19)
 to confirm Apple Silicon installer availability and checksums. Use the release
 tag and matching checksums for a reproducible reference.
+
+
+## 0.2.19 music, input and deformation update
+
+- Right-click **Sing Along to Current Song**, **Dance Along to Current Song** or
+  **Stop Singing & Dancing** in solo or Together. Together uses the clicked
+  character; stopping one leaves the other performers running. Stop also
+  cancels pending startup. Music controls need neither a voice API key nor an
+  external agent, but require macOS 14.4 or newer, audible music and audio-capture permission.
+- Every visible overhead bubble includes input, microphone and send controls,
+  including after live conversation ends. Focusing the field keeps it open.
+  Ordinary bubbles hide during motions/music and return afterward; explicitly
+  reopened input and agent questions remain accessible during a performance.
+- `web/music-command.js` recognizes direct typed/spoken requests;
+  `web/sing.js` manages music sessions and per-character output;
+  `electron/audio-tap-owner.cjs` owns the shared native capture helper.
+  `electron/music-menu.cjs` supplies both menus. Reuse the existing request
+  route and keep music audio separate from conversational voice output.
+- Local bundled vocal-activity detection reduces mouth motion during
+  instrumental passages. Music visemes are estimates; this is not exact lyric
+  alignment or separated vocals. Dance-only mode keeps mouth output silent.
+- Sarah's immutable `sarah-wardrobe-v10` packages restore authored pelvis
+  weights on body, fitted brief, side ties, pants, belt and dress. Geometry and
+  morphs are unchanged. All five characters use motion overlay
+  `music-pelvis-20260917`; previous immutable download URLs remain available. Signed catalogue publication
+  times let a new installer supersede stale cached catalogues; an older
+  downloaded Sarah package cannot override the repaired bundled starter.
+- The renderer preserves real finger tracks when present. The audited Meshy
+  sources contain wrist motion but no changing finger animation. Root drift,
+  arm volume and hair clearance repairs are included in this release.
+
+EnConvo continues to own credentials, voice sessions, reasoning, tools and
+permissions. The avatar components provide rendering and attributed UI/audio
+hooks; there is still no completed EnConvo adapter. Map music capture and
+session lifecycle to EnConvo's host permissions before exposing these controls.
+
+Validation: the full `npm test` suite, pelvis fingerprint/geometry checks and
+idempotent retrofit pass. `qa/music-controls-app.cjs` exercises the real solo
+and Together windows with stubbed music requests; session and native-menu
+regressions separately cover scoped startup/stop and routing. See
+[Singing QA](SING-ALONG-QA.md), [Vocal detector QA](SINGING-DETECTOR-QA.md),
+[Pelvis weight QA](PELVIS-WEIGHT-QA.md), [Motion deformation QA](MOTION-DEFORMATION-QA.md)
+and [Finger audit](MESHY-HAND-AUDIT.md) for measured scope and limitations.
 
 ## First successful run
 
@@ -19,8 +62,8 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Confirm availability on the matching release page, then download the official
-   signed v0.2.15 installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.15/GPT-Live.Avatar-0.2.15-arm64.dmg
+   signed v0.2.19 installer:
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.19/GPT-Live.Avatar-0.2.19-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Sarah appears in her tie top, chain pants and sandals, without a coat. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:

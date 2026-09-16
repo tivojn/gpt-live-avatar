@@ -17,6 +17,16 @@ export class ShowPlayer {
   const cues=cueSheet(script);if(!cues.length)throw Error('The script has no lines.');
   const generation=++this.generation,current=()=>generation===this.generation;
   this.running=true;this.takenOver=false;const lines=[];let passes=0,scene=-1,finished=false;
+  // A voice acts far better when it knows who it is, where it stands, who it
+  // is speaking to and what was just said to it, so every cue carries a short
+  // scene note into its session.
+  const roles=new Map((script?.cast||[]).map(c=>[c.slug,c.role||c.name||c.slug]));
+  if(script?.userRole)roles.set('user',script.userRole.role||script.userRole.name||'the visitor');
+  const sceneOf=c=>{const s=script?.scenes?.[c.scene];return [c.sceneTitle||s?.title||'',s?.setting||''].filter(Boolean).join(' - ');};
+  const speakerAt=i=>{const c=cues[i];if(!c)return '';return c.speaker==='user'?(this.takenOver?c.understudy:'user'):c.speaker;};
+  const cueContext=(i,who)=>{const c=cues[i];if(!c)return null;const prev=cues[i-1];
+   return {role:roles.get(who)||who,scene:sceneOf(c),to:roles.get(speakerAt(i+1))||'',
+    after:prev?(roles.get(prev.speaker)||prev.speaker)+': '+prev.text:'',note:c.note||''};};
   try{
    for(let i=0;i<cues.length;i++){
     if(!current())break;const cue=cues[i];
@@ -35,15 +45,21 @@ export class ShowPlayer {
      await this.stage.understudy?.(cue,performer,answer.result);if(!current())break;
     }else if(cue.speaker==='user'){performer=cue.understudy;forUser=true;if(!performer)continue;passes++;}
     this.stage.floor?.({speaker:performer,listener:next,cue});
-    if(cue.move){try{await this.stage.move?.(performer,cue.move);}catch{}if(!current())break;}
-    const motion=cue.motion?resolveMotion(cue.motion,performer):'';
-    if(motion||Object.keys(cue.expression||{}).length)await this.stage.motion?.(performer,motion,cue.expression||{});
+    // An actor does not cross the stage in silence and only then begin: the
+    // line carries the walk. The move runs underneath the speech, and the
+    // cue's gesture waits for the feet to stop so a gait and a gesture never
+    // fight over the same body.
+    const gesture=()=>{const motion=cue.motion?resolveMotion(cue.motion,performer):'';
+     if(motion||Object.keys(cue.expression||{}).length)return this.stage.motion?.(performer,motion,cue.expression||{});};
+    const walking=cue.move?Promise.resolve(this.stage.move?.(performer,cue.move)).catch(()=>{}):null;
+    const staging=Promise.resolve(walking?walking.then(gesture):gesture()).catch(()=>{});
     if(!current())break;
-    const speaking=this.stage.speak(cue,performer);
+    const speaking=this.stage.speak(cue,performer,cueContext(i,performer));
     // Open the next cue's voice session while this line is still being spoken,
     // so the stage does not stand silent through a connection handshake.
-    if(nextCue&&next&&next!=='user')this.stage.prepare?.(nextCue,next);
+    if(nextCue&&next&&next!=='user')this.stage.prepare?.(nextCue,next,cueContext(i+1,next));
     try{heard=await speaking;}catch(e){if(!current())break;await this.stage.status?.(e.message||'The voice could not deliver that line.');}
+    await staging;
     if(!current())break;
     this.stage.clear?.(performer);
     const text=cue.text,delivered=String(heard||'').trim();lines.push({speaker:performer,text,delivered,cue,forUser});this.stage.line?.({speaker:performer,text,delivered,cue,forUser});

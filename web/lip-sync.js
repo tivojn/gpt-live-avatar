@@ -31,8 +31,8 @@ export class VisemeTimeline {
 // One output graph owns both recognition and playback. It never sees the mic
 // or connection sounds. All peers share the bundled model/module per context.
 export class SpeechOutput {
-  constructor(context,{onError=()=>{},monitor=true}={}){
-    this.context=context;this.monitor=monitor;this.active=true;this._muted=false;this.closed=false;this.epoch=0;this.peak=.025;
+  constructor(context,{onError=()=>{},monitor=true,analysisOnly=false}={}){
+    this.context=context;this.analysisOnly=analysisOnly;this.monitor=analysisOnly?false:monitor;this.active=true;this._muted=false;this.closed=false;this.epoch=0;this.peak=.025;
     this.timeline=new VisemeTimeline();this.input=context.createGain();this.volume=context.createGain();
     this.analyser=context.createAnalyser();this.analyser.fftSize=512;this.samples=new Float32Array(512);
     this.volume.connect(context.destination);this.analyser.connect(this.volume);this.rebuildDelay();this.volume.gain.value=0;
@@ -46,7 +46,7 @@ export class SpeechOutput {
   }
   rebuildDelay(){
     if(this.delay){try{this.input.disconnect(this.delay);this.delay.disconnect();}catch{}}
-    this.delay=this.context.createDelay(.2);this.delay.delayTime.value=LIP_SYNC_DELAY;this.input.connect(this.delay);this.delay.connect(this.analyser);
+    this.delay=this.context.createDelay(.2);this.delay.delayTime.value=this.analysisOnly?0:LIP_SYNC_DELAY;this.input.connect(this.delay);this.delay.connect(this.analyser);
   }
   attach(stream){
     if(this.closed)return;
@@ -71,7 +71,7 @@ export class SpeechOutput {
     // Mouth targets lead their audible timestamp by 25 ms for morph blending.
     const stamp=this.context.getOutputTimestamp?.();
     const audible=stamp?.contextTime>0?stamp.contextTime+(performance.now()-stamp.performanceTime)/1000:this.context.currentTime-(this.context.outputLatency||0);
-    const viseme=this.failed?(rms>.008?'aa':'sil'):this.timeline.sample(audible-LIP_SYNC_DELAY+.025);
+    const viseme=this.failed?(rms>.008?'aa':'sil'):this.timeline.sample(this.analysisOnly?this.context.currentTime:audible-LIP_SYNC_DELAY+.025);
     return {rms,relative,viseme,visemeWeights:viseme==='sil'?{}:{[viseme]:1},speaking:viseme!=='sil'||rms>.008,lipSyncSource:this.failed?'fallback':'audio-model'};
   }
   close(){

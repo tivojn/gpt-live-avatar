@@ -108,6 +108,15 @@ contextBridge.exposeInMainWorld('gla', {
     setIgnoreMouse: ignore => ipcRenderer.send('gla:window:ignore-mouse', Boolean(ignore)),
   },
   openSettings: () => ipcRenderer.invoke('gla:open-settings'),
+  // Hearing another application, so she can sing along to what is playing.
+  tap: {
+    available: () => ipcRenderer.invoke('gla:tap:available'),
+    list: () => ipcRenderer.invoke('gla:tap:list'),
+    playing: player => ipcRenderer.invoke('gla:tap:playing', player),
+    control: (player, command) => ipcRenderer.invoke('gla:tap:control', { player, command }),
+    start: request => ipcRenderer.invoke('gla:tap:start', request || {}),
+    stop: token => ipcRenderer.invoke('gla:tap:stop', token),
+  },
   mic: {
     status: () => ipcRenderer.invoke('gla:mic:status'),
     ask: () => ipcRenderer.invoke('gla:mic:ask'),

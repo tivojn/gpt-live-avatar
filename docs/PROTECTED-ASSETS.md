@@ -1,14 +1,15 @@
 # Protected character delivery
 
 The Mac app uses a private Cloudflare R2 Standard bucket and a narrow Worker
-endpoint. The v0.2.15 installer includes encrypted Sarah with her appearance
+endpoint. The v0.2.19 installer includes encrypted Sarah with her appearance
 controls and motions, so first launch needs only a brief online unlock. Sarah
-then works offline.
-Other characters and larger texture tiers download from R2.
+then works offline. Other characters and larger texture tiers download from R2.
 
-The Sarah starter reuses the existing 579,546,579-byte base and 53,459,437-byte
-matching motion overlay. Choosing Sarah as the default adds no new R2 packages
-and does not change the signed catalogue or asset revisions.
+The current signed catalogue is `music-pelvis-20260917`. Sarah uses
+`sarah-wardrobe-v10`; the other four model/texture revisions are unchanged.
+All five motion overlays use `music-pelvis-20260917`. Sarah's bundled encrypted
+base is 588,233,232 bytes and her matching overlay is 60,108,916 bytes.
+Earlier immutable parts remain in the gateway allowlist for existing releases.
 
 GitHub hosts source and the installer; purchased character files are
 not source-code dependencies and must not be uploaded to public releases as
@@ -75,8 +76,8 @@ uploads or changing to Workers Paid can bypass these cost assumptions. Keep
 `r2.dev` and public custom bucket domains disabled. The Worker needs only GET;
 do not add listing, upload, transcoding, AI or other billable routes.
 
-Current release input: five characters × three tiers, 15 logical archives,
-95 ciphertext parts plus the signed catalogue, **5,986,682,229 bytes** total.
+Current inventory includes the new packages and retained previous release parts:
+**7,999,497,171 bytes** across 130 objects, including the signed catalogue.
 Whole local `.gla` files are not uploaded as additional objects.
 
 Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),

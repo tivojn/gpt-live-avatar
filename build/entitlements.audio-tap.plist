@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- The process-tap helper. A Core Audio tap is refused without the
+       audio-input entitlement, and because the helper is a separate binary from
+       the app it cannot inherit the app's. Nothing else is granted: the helper
+       reads one process's audio and writes PCM to a pipe. -->
+  <key>com.apple.security.device.audio-input</key><true/>
+</dict>
+</plist>

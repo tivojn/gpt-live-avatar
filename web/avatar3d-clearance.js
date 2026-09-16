@@ -30,6 +30,63 @@ function installShaders(){
 #endif\n`+THREE.ShaderChunk.project_vertex;
 }
 const materials=n=>Array.isArray(n.material)?n.material:[n.material];
+
+// Hair in these packs is bound rigidly to the head - one bone, no strand chain -
+// so the entire length swings as a single solid body. Give the torso a real
+// rotation, which cardio-dance does, and the ends sweep straight through her
+// back and surface at her stomach. No amount of skinning fixes that, because
+// there is nothing in the rig to bend.
+//
+// The clearance shader above already solves this exact shape of problem for
+// garments, and it is safe to point at hair because of how the allowance works:
+// each vertex remembers how deep it sat inside the collider at rest, so the
+// correction can only prevent NEW penetration. The authored silhouette - hair
+// lying on her shoulders, against her back - is preserved by construction, and
+// a vertex is only ever pushed outwards, never pulled in.
+//
+// The collider is measured off the body rather than assumed, so it travels to
+// other characters. It is sized to the torso's front-to-back half depth, not to
+// its width: the job is to stop hair crossing through her, and a collider as
+// wide as her shoulders would shove the side strands out into open air.
+export function hairClearance(avatar){
+ const {hips,chest,neck,head}=avatar.bones||{};
+ if(!hips||!chest||!neck||!head)return null;
+ const hair=[],body=[];
+ avatar.model.traverse(n=>{
+  if(!n.isSkinnedMesh)return;
+  const name=n.userData.sourceName||n.name;
+  if(/hair/i.test(name))hair.push(name);else body.push(n);
+ });
+ if(!hair.length||!body.length)return null;
+ avatar.model.updateMatrixWorld(true);
+ const toModel=avatar.model.matrixWorld.clone().invert();
+ const at=bone=>new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld).applyMatrix4(toModel);
+ const low=at(hips),high=at(neck),span=high.y-low.y;
+ if(!(span>.05))return null;
+ const bands=[0,.34,.67,1].map(f=>({y:low.y+span*f,zmin:Infinity,zmax:-Infinity,n:0}));
+ const v=new THREE.Vector3();
+ for(const mesh of body){
+  const positions=mesh.geometry?.attributes?.position;if(!positions)continue;
+  for(let i=0;i<positions.count;i+=5){
+   v.fromBufferAttribute(positions,i);mesh.applyBoneTransform(i,v);
+   v.applyMatrix4(mesh.matrixWorld).applyMatrix4(toModel);
+   if(Math.abs(v.x)>span*.8)continue;                 // arms are not the torso
+   for(const band of bands)if(Math.abs(v.y-band.y)<span*.13){
+    band.n++;if(v.z<band.zmin)band.zmin=v.z;if(v.z>band.zmax)band.zmax=v.z;
+   }
+  }
+ }
+ if(bands.some(band=>band.n<40))return null;
+ // A little proud of the skin, so hair comes to rest against her and not in her.
+ const shape=bands.map(band=>({y:band.y,z:(band.zmin+band.zmax)/2,r:(band.zmax-band.zmin)/2+.012}));
+ const joint=i=>[0,shape[i].y,shape[i].z];
+ // Capsules are resolved against the rig's own bone names, not our aliases.
+ const of=bone=>bone.userData.sourceName||bone.name;
+ const segment=(from,to,i)=>({boneA:of(from),boneB:of(to),a:joint(i),b:joint(i+1),radiusA:shape[i].r,radiusB:shape[i+1].r});
+ if(new Set([hips,chest,neck,head].map(of)).size<4)return null;
+ return {garments:hair,blend:'all',capsules:[segment(hips,chest,0),segment(chest,neck,1),segment(neck,head,2)]};
+}
+
 export class AvatarClearance {
  constructor(avatar,config){
   this.avatar=avatar;this.config=config;this.records=[];this.depths=[];this.inverse=new THREE.Matrix4();
@@ -62,13 +119,15 @@ export class AvatarClearance {
  prepareGeometry(record){
   const g=record.node.geometry;if(g===record.geometry)return;record.geometry=g;
   const positions=g.attributes.position,values=new Float32Array(positions.count*4),p=new THREE.Vector3(),axis=new THREE.Vector3(),delta=new THREE.Vector3();
-  const hipY=Math.max(...this.config.capsules.filter(c=>c.boneA!==c.boneB).map(c=>c.a[1]));
+  const everywhere=this.config.blend==='all';
+  const hipY=everywhere?0:Math.max(...this.config.capsules.filter(c=>c.boneA!==c.boneB).map(c=>c.a[1]));
   for(let v=0;v<positions.count;v++){
    p.fromBufferAttribute(positions,v).applyMatrix4(record.restToModel);
    this.config.capsules.forEach((c,i)=>{axis.fromArray(c.b).sub(new THREE.Vector3(...c.a));delta.copy(p).sub(new THREE.Vector3(...c.a));const t=THREE.MathUtils.clamp(delta.dot(axis)/Math.max(axis.lengthSq(),.000001),0,1),distance=delta.addScaledVector(axis,-t).length();values[v*4+i]=Math.max(0,THREE.MathUtils.lerp(c.radiusA,c.radiusB,t)-distance);});
    // Waist and upper hips are fitted and already follow the body rig. Only
    // the free skirt below the hip joint needs a thigh contact correction.
-   values[v*4+3]=1-THREE.MathUtils.smoothstep(p.y,hipY-.08,hipY+.015);
+   // Hair has no such fitted region - every strand is free - so it opts out.
+   values[v*4+3]=everywhere?1:1-THREE.MathUtils.smoothstep(p.y,hipY-.08,hipY+.015);
   }
   g.setAttribute('avatarClothAllowance',new THREE.Float32BufferAttribute(values,4));
  }

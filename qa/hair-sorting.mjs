@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import * as T from '../web/vendor/three/three.module.js';
+const portraitSource=fs.readFileSync(new URL('../web/avatar3d-portrait.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace('export class AvatarPortrait','class AvatarPortrait');
+const AvatarPortrait=new Function('THREE',portraitSource+'\nreturn AvatarPortrait;')(T);
+const assert=(x,m)=>{if(!x)throw Error(m);};
+const head=new T.Bone(),chest=new T.Bone(),camera=new T.PerspectiveCamera();camera.position.z=5;camera.updateMatrixWorld(true);head.updateMatrixWorld(true);chest.updateMatrixWorld(true);
+const owner=Object.create(AvatarPortrait.prototype);owner.avatar={bones:{head,chest}};owner.sorting={count:0,milliseconds:0};
+const make=(contact)=>{const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute([-.1,0,-1,.1,0,-1,0,.2,-1,-.1,0,1,.1,0,1,0,.2,1],3));g.setIndex([0,1,2,3,4,5]);if(contact)g.setAttribute('avatarHairRest',new T.Float32BufferAttribute(new Float32Array(24),4));const n=new T.Mesh(g,new T.MeshBasicMaterial());n.updateMatrixWorld(true);let calls=0;n.getVertexPosition=(i,p)=>{calls++;p.fromBufferAttribute(g.attributes.position,i);p.z*=chest.position.x>.5?-1:1;return p;};return {node:n,calls:()=>calls};};
+const r=make(true);owner.sortHair(r,camera,r.node.geometry);assert(r.node.geometry.index.getX(0)===0,'initial back triangle');const source=r.order.source.slice(),positions=r.order.positions,centers=r.order.centers;const firstCalls=r.calls();r.order.lastAt=-Infinity;owner.sortHair(r,camera,r.node.geometry);assert(r.calls()===firstCalls,'idle must reuse vertices');
+chest.position.x=1;chest.updateMatrixWorld(true);r.order.lastAt=performance.now();owner.sortHair(r,camera,r.node.geometry);assert(r.calls()===firstCalls,'65ms throttling');r.order.lastAt=-Infinity;owner.sortHair(r,camera,r.node.geometry);assert(r.node.geometry.index.getX(0)===3,'changed contact reorders same view');assert(r.order.positions===positions&&r.order.centers===centers,'arrays reused');assert(r.order.source.every((v,i)=>v===source[i]),'original source order retained');
+chest.position.x=0;chest.updateMatrixWorld(true);r.order.lastAt=-Infinity;owner.sortHair(r,camera,r.node.geometry);assert(r.node.geometry.index.getX(0)===0,'return restores original sort');
+const rigid=make(false);owner.sortHair(rigid,camera,rigid.node.geometry);const rigidCalls=rigid.calls();chest.position.x=1;chest.updateMatrixWorld(true);rigid.order.lastAt=-Infinity;owner.sortHair(rigid,camera,rigid.node.geometry);assert(rigid.calls()===rigidCalls,'rigid hair unchanged');
+const merge=Object.create(AvatarPortrait.prototype);merge.meshes=[{hair:true,node:r.node},{hair:true,node:make(true).node}];merge.combineHair();assert(!merge.unifiedHair,'contact merge prohibited');
+console.log('Hair contact sorting: idle cache, deformation refresh, throttling and merge isolation passed.');

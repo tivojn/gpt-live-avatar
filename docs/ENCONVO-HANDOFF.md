@@ -3,15 +3,15 @@
 **Goal: give EnConvo's existing agents a visible, animated avatar. EnConvo owns
 the intelligence, credentials, voice conversation, tools and permissions.**
 
-For the EnConvo developer and their AI coding assistant. Updated September 16,
-2026 for GPT-Live Avatar **v0.2.15**. Use its tag for a reproducible source
+For the EnConvo developer and their AI coding assistant. Updated September 17,
+2026 for GPT-Live Avatar **v0.2.19**. Use its tag for a reproducible source
 reference. Check the matching release page for signed installer availability
 and checksums, and record the exact source commit you integrate.
 
 - Repository: https://github.com/tivojn/gpt-live-avatar
-- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.15
-- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.15/GPT-Live.Avatar-0.2.15-arm64.dmg
-- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.15/SHA256SUMS-0.2.15.txt
+- Release: https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.19
+- Apple Silicon DMG: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.19/GPT-Live.Avatar-0.2.19-arm64.dmg
+- Checksums: https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.19/SHA256SUMS-0.2.19.txt
 - This handoff: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/ENCONVO-HANDOFF.md
 - Plain Markdown for your coding assistant: https://raw.githubusercontent.com/tivojn/gpt-live-avatar/main/docs/ENCONVO-HANDOFF.md
 - Clone/build guide: https://github.com/tivojn/gpt-live-avatar/blob/main/docs/DEVELOPER-HANDOFF.md
@@ -25,7 +25,7 @@ EnConvo's code has not been inspected for this handoff. Locate its actual
 extension, audio and agent interfaces before choosing a native bridge. Names
 explicitly marked *proposed* below are interfaces to implement, not existing APIs.
 
-### Integration reference in the v0.2.15 source
+### Integration reference in the v0.2.19 source
 
 - Five characters, solo/Together controls, local audio-to-viseme lip-sync,
   overhead speech/task updates, protected downloads and the encrypted Sarah
@@ -41,8 +41,51 @@ explicitly marked *proposed* below are interfaces to implement, not existing API
   EnConvo. Start with one silent avatar, then connect EnConvo's own audio and
   tools. Do not start by reproducing the standalone account/settings system.
 
-Use `SHA256SUMS-0.2.15.txt` from the matching release to verify its downloaded
+Use `SHA256SUMS-0.2.19.txt` from the matching release to verify its downloaded
 installer rather than checksums from an older release.
+
+
+## 0.2.19 music, input and deformation update
+
+- Right-click **Sing Along to Current Song**, **Dance Along to Current Song** or
+  **Stop Singing & Dancing** in solo or Together. Together uses the clicked
+  character; stopping one leaves the other performers running. Stop also
+  cancels pending startup. Music controls need neither a voice API key nor an
+  external agent, but require macOS 14.4 or newer, audible music and audio-capture permission.
+- Every visible overhead bubble includes input, microphone and send controls,
+  including after live conversation ends. Focusing the field keeps it open.
+  Ordinary bubbles hide during motions/music and return afterward; explicitly
+  reopened input and agent questions remain accessible during a performance.
+- `web/music-command.js` recognizes direct typed/spoken requests;
+  `web/sing.js` manages music sessions and per-character output;
+  `electron/audio-tap-owner.cjs` owns the shared native capture helper.
+  `electron/music-menu.cjs` supplies both menus. Reuse the existing request
+  route and keep music audio separate from conversational voice output.
+- Local bundled vocal-activity detection reduces mouth motion during
+  instrumental passages. Music visemes are estimates; this is not exact lyric
+  alignment or separated vocals. Dance-only mode keeps mouth output silent.
+- Sarah's immutable `sarah-wardrobe-v10` packages restore authored pelvis
+  weights on body, fitted brief, side ties, pants, belt and dress. Geometry and
+  morphs are unchanged. All five characters use motion overlay
+  `music-pelvis-20260917`; previous immutable download URLs remain available. Signed catalogue publication
+  times let a new installer supersede stale cached catalogues; an older
+  downloaded Sarah package cannot override the repaired bundled starter.
+- The renderer preserves real finger tracks when present. The audited Meshy
+  sources contain wrist motion but no changing finger animation. Root drift,
+  arm volume and hair clearance repairs are included in this release.
+
+EnConvo continues to own credentials, voice sessions, reasoning, tools and
+permissions. The avatar components provide rendering and attributed UI/audio
+hooks; there is still no completed EnConvo adapter. Map music capture and
+session lifecycle to EnConvo's host permissions before exposing these controls.
+
+Validation: the full `npm test` suite, pelvis fingerprint/geometry checks and
+idempotent retrofit pass. `qa/music-controls-app.cjs` exercises the real solo
+and Together windows with stubbed music requests; session and native-menu
+regressions separately cover scoped startup/stop and routing. See
+[Singing QA](SING-ALONG-QA.md), [Vocal detector QA](SINGING-DETECTOR-QA.md),
+[Pelvis weight QA](PELVIS-WEIGHT-QA.md), [Motion deformation QA](MOTION-DEFORMATION-QA.md)
+and [Finger audit](MESHY-HAND-AUDIT.md) for measured scope and limitations.
 
 ## 1. Scope and ownership
 
@@ -153,7 +196,7 @@ alone. Use the developer's own account if testing standalone voice. The EnConvo
 integration should use the developer's normal EnConvo credential setup.
 
 The earlier v0.2.12 reference DMG is about 1.05 GB because encrypted Tia,
-wardrobe and motions are included. The current v0.2.15 reference includes Sarah
+wardrobe and motions are included. The current v0.2.19 reference includes Sarah
 instead; check its matching release for the installer size and checksums.
 EnConvo can use this starter pattern; a cloud-only package needs
 a first-run download UI before a character can appear.
@@ -491,7 +534,7 @@ More behavior: [GROUP-CONVERSATIONS.md](GROUP-CONVERSATIONS.md).
 ## 9. Controls, defaults and visual fidelity
 
 - Seed from `default-appearance.json`, the owner's later manually selected
-  looks. Sarah is the initial avatar in v0.2.15, using `casual` — **Tie top,
+  looks. Sarah is the initial avatar in v0.2.19, using `casual` — **Tie top,
   chain pants & sandals**, without the coat. Tia's body remains `Ps012.stand`
   (Standing 6); all characters default to no prop. Cursor
   following is off. Preserve later user edits.

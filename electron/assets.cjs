@@ -51,7 +51,7 @@ class AvatarAssets {
   loadIndexSync() {
     if (this.index) return this.index;
     for (const p of [path.join(this.downloadsRoot, 'index.json'), this.bundledIndexPath]) {
-      try { const parsed = this.parseIndex(fs.readFileSync(p, 'utf8')); if (parsed && parsed.avatars) { this.index = parsed; break; } } catch {}
+      try { const parsed = this.parseIndex(fs.readFileSync(p, 'utf8')); if (parsed && parsed.avatars && (!this.index || (Date.parse(parsed.publishedAt)||0) > (Date.parse(this.index.publishedAt)||0))) this.index = parsed; } catch {}
     }
     if (!this.index) this.index = { version: 1, avatars: {} };
     return this.index;
@@ -68,6 +68,7 @@ class AvatarAssets {
       const data = await this.fetchBuffer(this.baseURL + 'index.json', null, 15000);
       const parsed = this.parseIndex(data.toString('utf8'));
       if (parsed && parsed.avatars) {
+        if ((Date.parse(parsed.publishedAt)||0) < (Date.parse(this.loadIndexSync().publishedAt)||0)) return this.index;
         await fsp.mkdir(this.downloadsRoot, { recursive: true });
         await fsp.writeFile(path.join(this.downloadsRoot, 'index.json'), data);
         this.index = parsed;
@@ -85,7 +86,12 @@ class AvatarAssets {
       if (this.exists(local,'manifest.json')) return [local];
     }
     const b=path.join(this.bundledRoot,slug),d=path.join(this.downloadsRoot,slug);
-    const roots=fs.existsSync(path.join(d,'base.gla'))?[d,b]:[b,d];
+    const downloaded=this.archive(path.join(d,'base.gla')),bundled=this.archive(path.join(b,'base.gla'));
+    const revision=this.loadIndexSync().avatars?.[slug]?.assetRevision;
+    // A current installer must supersede an older downloaded starter. Keep
+    // both encrypted files; matching texture/motion tiers are isolated below.
+    const preferBundle=bundled&&bundled.meta.assetRevision===revision&&downloaded?.meta.assetRevision!==revision;
+    const roots=fs.existsSync(path.join(d,'base.gla'))&&!preferBundle?[d,b]:[b,d];
     return roots.filter(dir=>this.exists(dir,'manifest.json')||fs.existsSync(path.join(dir,'runtime'))||['balanced','best','motions'].some(t=>fs.existsSync(path.join(dir,t+'.gla'))));
   }
   installed(slug) { return this.roots(slug).some(dir=>this.exists(dir,'manifest.json')); }

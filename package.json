@@ -1,6 +1,6 @@
 {
   "name": "gpt-live-avatar",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "description": "GPT-Live Avatar, a full-duplex desktop companion on OpenAI GPT-Live-1",
   "author": "Adam Cohen",
   "license": "MIT",
@@ -8,18 +8,19 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node qa/qa.js && node qa/asset-revisions.cjs && node qa/controls.cjs && node qa/shortcuts.cjs && node qa/zoom.cjs && node qa/body-brief-hooks.cjs && node qa/delegate.cjs && node qa/group.cjs && node qa/show.cjs && node qa/attention.cjs && node qa/group-live.cjs && node qa/render-budget.cjs && node qa/agent.cjs && node qa/codex-agent.cjs && node qa/agent-progress.cjs && node qa/protected-assets.cjs && node qa/import-release.cjs && node qa/lip-sync.cjs && node qa/agent-runtimes.cjs && node qa/releases.cjs && node qa/agent-composer.cjs && node qa/agent-folder.cjs && node qa/path-display.cjs",
+    "test": "node qa/qa.js && node qa/asset-revisions.cjs && node qa/controls.cjs && node qa/shortcuts.cjs && node qa/zoom.cjs && node qa/body-brief-hooks.cjs && node qa/delegate.cjs && node qa/group.cjs && node qa/show.cjs && node qa/attention.cjs && node qa/group-live.cjs && node qa/render-budget.cjs && node qa/motion-drift.mjs && node qa/hair-sorting.mjs && node qa/agent.cjs && node qa/codex-agent.cjs && node qa/agent-progress.cjs && node qa/protected-assets.cjs && node qa/import-release.cjs && node qa/lip-sync.cjs && node qa/agent-runtimes.cjs && node qa/releases.cjs && node qa/agent-composer.cjs && node qa/agent-folder.cjs && node qa/path-display.cjs && node qa/music-commands.mjs && node qa/music-routing.mjs && node qa/sing-session.cjs && node qa/lip-sync-timing.cjs && node qa/audio-tap.cjs && node qa/audio-tap-owner.cjs && node qa/tap-source.cjs && node qa/vocal-detector.cjs && node qa/motion-finger-priority.mjs && node qa/music-bubbles.cjs && node qa/music-menu.cjs",
     "pack": "electron-builder --mac dir",
+    "build:native": "bash tools/build-audio-tap.sh",
     "dmg": "bash tools/dmg.sh",
     "fetch-assets": "bash tools/fetch-assets.sh",
     "build-protected-assets": "node tools/build-protected-assets.cjs",
-    "prepack": "node tools/verify-release.cjs",
-    "predmg": "node tools/verify-release.cjs",
+    "prepack": "npm run build:native && node tools/verify-release.cjs",
+    "predmg": "npm run build:native && node tools/verify-release.cjs",
     "import-release": "node tools/import-release.cjs",
     "start:isolated": "node tools/start-isolated.cjs",
-    "prepack:local": "node tools/verify-release.cjs",
+    "prepack:local": "npm run build:native && node tools/verify-release.cjs",
     "pack:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir -c.mac.identity=null -c.mac.notarize=false",
-    "predmg:local": "node tools/verify-release.cjs",
+    "predmg:local": "npm run build:native && node tools/verify-release.cjs",
     "dmg:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg -c.mac.identity=null -c.mac.notarize=false -c.dmg.sign=false"
   },
   "dependencies": {
@@ -49,7 +50,8 @@
       "category": "public.app-category.productivity",
       "extendInfo": {
         "LSMinimumSystemVersion": "14.0",
-        "NSMicrophoneUsageDescription": "GPT-Live Avatar uses the microphone only during a live conversation; ending the conversation stops capture."
+        "NSMicrophoneUsageDescription": "GPT-Live Avatar uses the microphone only during a live conversation; ending the conversation stops capture.",
+        "NSAudioCaptureUsageDescription": "GPT-Live Avatar listens to the music player you choose, and only while your avatar is singing along, so she can lip-sync and dance to it."
       },
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
@@ -57,6 +59,10 @@
       "notarize": true
     },
     "extraResources": [
+      {
+        "from": "build/native/gla-audio-tap",
+        "to": "gla-audio-tap"
+      },
       {
         "from": "build/protected/index.json",
         "to": "assets-index.json"
@@ -81,7 +87,8 @@
           "show-motion-facing.py",
           "retarget-meshy-motion.py",
           "prepare-character.py",
-          "complete-sarah.py"
+          "complete-sarah.py",
+          "sarah_pelvis_weights.py"
         ]
       }
     ],

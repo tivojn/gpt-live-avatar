@@ -107,7 +107,21 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  });
  let result=await new ShowPlayer(stage(async()=>({result:'spoken',text:'Under the cushion!'}))).run(parsed,{resolveMotion:id=>id==='juggle-air'?'wave':id});
  assert.equal(result.finished,true);assert.equal(result.passes,0);assert.equal(result.lines.length,4);
- assert.deepEqual(log,['scene:0','floor:tia>user','move:tia:center','motion:tia:plead-beg:surprise,anger','speak:tia:Where is my crown? (sharp, rising panic)','clear:tia','line:tia:Where is my crown?','floor:user>iselda','human:Perhaps under the cushion, Majesty.','line:user:Under the cushion!','floor:iselda>tia','motion:iselda:wave:-','speak:iselda:I will search at once!','clear:iselda','line:iselda:I will search at once!','floor:tia>-','speak:tia:Hurry.','clear:tia','line:tia:Hurry.']);
+ assert.deepEqual(log,['scene:0','floor:tia>user','move:tia:center','speak:tia:Where is my crown? (sharp, rising panic)','motion:tia:plead-beg:surprise,anger','clear:tia','line:tia:Where is my crown?','floor:user>iselda','human:Perhaps under the cushion, Majesty.','line:user:Under the cushion!','floor:iselda>tia','motion:iselda:wave:-','speak:iselda:I will search at once!','clear:iselda','line:iselda:I will search at once!','floor:tia>-','speak:tia:Hurry.','clear:tia','line:tia:Hurry.']);
+ // The line carries the walk: the voice starts while the actor is still
+ // crossing, the gesture waits for the feet to stop, and every cue hands the
+ // voice the part it plays, the room it stands in and the line it answers.
+ const beats=[],seen=[];let crossing=false;
+ const walkStage={
+  scene:()=>{},floor:()=>{},clear:()=>{},line:()=>{},status:()=>{},stop:()=>{},understudy:()=>{},human:async()=>({result:'pass'}),
+  move:async()=>{crossing=true;beats.push('walk-start');await new Promise(r=>setTimeout(r,40));crossing=false;beats.push('walk-end');},
+  motion:()=>{beats.push('gesture'+(crossing?'-while-walking':'-on-arrival'));},
+  speak:async(cue,slug,context)=>{beats.push('speak'+(crossing?'-while-walking':'-standing-still'));seen.push(context);return 'ok';},
+ };
+ await new ShowPlayer(walkStage).run({title:'T',cast:[{slug:'tia',name:'Tia',role:'The Queen'},{slug:'iselda',name:'Iselda',role:'The Steward'}],scenes:[{title:'The hall',lines:[{speaker:'tia',text:'One.',move:'center',motion:'wave'},{speaker:'iselda',text:'Two.'}]}]});
+ assert.deepEqual(beats,['walk-start','speak-while-walking','walk-end','gesture-on-arrival','speak-standing-still'],'the actor speaks while crossing and gestures on arrival');
+ assert.deepEqual(seen[0],{role:'The Queen',scene:'The hall',to:'The Steward',after:'',note:''},'the voice is told who it plays, where it stands and who it addresses');
+ assert.equal(seen[1].after,'The Queen: One.','the voice hears the line it answers');
  log.length=0;result=await new ShowPlayer(stage(async()=>({result:'pass'}))).run(parsed);
  assert.equal(result.passes,1);assert.ok(log.includes('understudy:sarah:pass'));assert.ok(log.includes('speak:sarah:Perhaps under the cushion, Majesty.'));assert.ok(log.includes('line:sarah*:Perhaps under the cushion, Majesty.'));
  // Timeout falls back to a pass; an explicit button pass wins over a slow human.

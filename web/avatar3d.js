@@ -15,7 +15,8 @@ import { GLTFLoader } from '/vendor/three/GLTFLoader.js';
 import { AvatarVolumeSkin } from '/avatar3d-volume.js';
 import { NaturalAttention } from '/avatar3d-attention.js';
 import { fitGarment } from '/avatar3d-garment-fit.js';
-import { AvatarClearance } from '/avatar3d-clearance.js';
+import { AvatarClearance, hairClearance } from '/avatar3d-clearance.js';
+import { AvatarHairClearance } from '/avatar3d-hair-clearance.js';
 import { AvatarClothOcclusion } from '/avatar3d-cloth-occlusion.js';
 import { AvatarHeadAttachments } from '/avatar3d-head-attachments.js';
 import { RoomEnvironment } from '/vendor/three/RoomEnvironment.js';
@@ -244,10 +245,22 @@ class Avatar3D {
     this.characterId=library?.characterId||null;
     this.model.traverse(node=>{if(node.isMesh)fitGarment(this.characterId,node);});
     if(library?.preserveVolumeNodes?.length)this.volumeSkin=new AvatarVolumeSkin(this,library.preserveVolumeNodes);
+    else if(['sarah','tia'].includes(this.characterId)&&!Array.isArray(library?.preserveVolumeNodes)){
+      // Legacy exports omitted preserve-volume metadata. Their rotating arms
+      // collapse under matrix blending; correct only arm-influenced vertices
+      // while retaining the original face, torso, hair and garment fit.
+      const names=[];this.model.traverse(node=>{if(node.isSkinnedMesh)names.push(node.userData.sourceName);});
+      this.volumeSkin=new AvatarVolumeSkin(this,names,{armOnly:true});
+    }
     this.authoredExpressions = (library?.expressions || []).slice(0,128);
     this.authoredChannels = library?.channelAliases || {};
     this.resolveChannels();
     if(library?.clothClearance)this.clearance=new AvatarClearance(this,library.clothClearance);
+    // Rigid head-bound hair sweeps through the torso in any motion that turns
+    // her body. The collider is measured from this character's own mesh, so a
+    // character without hair, or without a spine to hang it on, simply opts out.
+    if(this.characterId==='sarah')this.hairContact=new AvatarHairClearance(this);
+    else{const hairContact=hairClearance(this);if(hairContact)this.hairContact=new AvatarClearance(this,hairContact);}
     this.clothOcclusion=new AvatarClothOcclusion(this);
     this.appearance = new Avatar3DAppearance(this);
     for (const targets of this.channels.values()) {
@@ -1077,6 +1090,7 @@ class Avatar3D {
     }
 
     this.clearance?.update();
+    this.hairContact?.update();
     this.appearance?.portrait?.beforeRender();
     this.volumeSkin?.beforeRender();
     this.clothOcclusion?.beforeRender();
@@ -1230,6 +1244,7 @@ class Avatar3D {
     this.appearance?.dispose();
     this.volumeSkin?.dispose();
     this.clearance?.dispose();
+    this.hairContact?.dispose();
     this.clothOcclusion?.dispose();
     this.headAttachments?.dispose();
     if (this.model) {

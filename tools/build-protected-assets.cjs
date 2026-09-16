@@ -45,6 +45,7 @@ async function main(){
  const index={version:2,release:'2026-09-14-v1',avatars:{}};
  for(const slug of slugs){const source=fs.realpathSync(path.join(repo,'build/characters',slug)),manifest=JSON.parse(fs.readFileSync(path.join(source,'manifest.json'))),mac={};for(const tier of ['base','balanced','best']){const p=await pack(source,slug,tier,secrets);if(p)mac[tier]=p;console.log(slug,tier,p?.bytes||0);}index.avatars[slug]={name:manifest.name,assetRevision:manifest.assetRevision,bundledMac:slug===starterAvatar.slug,mac};}
  const bytes=Object.values(index.avatars).flatMap(a=>Object.values(a.mac)).reduce((n,p)=>n+p.bytes,0);if(bytes+2*1024*1024>10_000_000_000)throw Error('Protected release exceeds the 10 GB cap.');
+ index.publishedAt=new Date().toISOString();
  const payload=JSON.stringify(index),envelope={payload,signature:crypto.sign(null,Buffer.from(payload),secrets.privateKey).toString('base64')};fs.writeFileSync(path.join(out,'index.json'),JSON.stringify(envelope));
  fs.writeFileSync(path.join(out,'assets-runtime.json'),JSON.stringify({downloadToken:secrets.downloadToken,publicKey:secrets.publicKey}),{mode:0o600});
  const objects=Object.values(index.avatars).flatMap(a=>Object.values(a.mac)).flatMap(p=>p.parts);objects.push({file:'index.json',bytes:fs.statSync(path.join(out,'index.json')).size,sha256:await hash(path.join(out,'index.json'))});

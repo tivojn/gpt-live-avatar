@@ -1,3 +1,5 @@
+import {MusicCommandRouter,musicCommand} from '/music-command.js';
+import '/sing.js';
 import '/avatar3d.js';
 import {closeupView} from '/avatar-closeup.js';
 import {zoomScale,normalizeView,pixelView,zoomCrop,panCrop} from '/avatar-zoom.js';
@@ -25,11 +27,12 @@ const microphone=new GroupMicrophone(voiceAPI,{
  onError:message=>{$('#micStatus').textContent=message;}
 });
 const liveGroup=new LiveGroup(voiceAPI,{
+ musicRequest:(text,meta)=>musicRouter.run(text,meta),
  connected:()=>conversationSounds.transition('connected'),
  warning:message=>status(message,true),status:message=>status(message),error:message=>{stop();status(message,true);},
  floor:floor=>{speaker=floor.speaker;listener=floor.listener;for(const a of actors.values()){a.el.classList.toggle('speaking',a.slug===speaker);if(a.slug!==speaker)setBubble(a,'');}},
  text:line=>{const actor=actors.get(line.speaker);if(actor)setBubble(actor,line.text);},
- line:line=>{if(line.speaker==='_human'&&!line.viaAgent&&!(catalogue?.agentEnabled&&needsAgent(line.text)))void actOnSpeech(line.text);history.push(line);appendLine(actors.get(line.speaker)||{info:{name:human.name+' (you)'}},line.text);},
+ line:line=>{const isMusic=line.speaker==='_human'&&musicCommand(line.text,{characters:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name})),character:liveGroup.directed||liveGroup.active||speaker});if(line.speaker==='_human'&&!line.viaAgent&&!isMusic&&!(catalogue?.agentEnabled&&needsAgent(line.text)))void actOnSpeech(line.text);history.push(line);appendLine(actors.get(line.speaker)||{info:{name:human.name+' (you)'}},line.text);},
  microphone:state=>{$('#liveMic').textContent=!state.active?'Microphone off':state.muted?'Unmute microphone':'Mute microphone';$('#liveMic').disabled=!state.active;$('#liveMic').setAttribute('aria-pressed',String(state.active&&!state.muted));},
 });
 function liveMode(){return $('#liveMode').checked;}
@@ -39,6 +42,15 @@ const status=(message,error=false)=>{$('#status').textContent=message;$('#status
 let helpCharacter='',actorVoiceStarting=false,show=null;
 const showMode=()=>$('#format').value==='show';
 const namedActor=name=>[...actors.values()].find(a=>[a.slug,a.info.name].some(value=>value.toLowerCase()===String(name).toLowerCase()));
+const musicRouter = new MusicCommandRouter({
+  characters:()=>[...actors.values()].map(a=>({slug:a.slug,name:a.info.name})),
+  character:()=>helpCharacter || liveGroup.directed || liveGroup.active || selectedActor,
+  execute:(action,args,cancelled)=>{
+    if(typeof window.gla_sing_command!=='function')throw Error('Music performance is unavailable in this build.');
+    return window.gla_sing_command(action,args,cancelled);
+  }
+});
+
 function recordAskLine(line){
  if(liveGroup.running)liveGroup.recordLine({...line,viaAgent:true});
  else{history.push(line);appendLine(actors.get(line.speaker)||{info:{name:(human.name||'You')+' (you)'}},line.text);}
@@ -52,8 +64,13 @@ async function runAgentRequest(request){
  if(result.ok)recordAskLine({id:request.id,speaker:target.slug,text:result.text});
  return result;
 }
+window.gla_sing_targets=character=>{
+ const key=String(character||'').toLowerCase();
+ return [...actors.values()].filter(a=>!a.avatar.disposed&&(!key||['all','everyone','everybody'].includes(key)||[a.slug,a.info.name.toLowerCase()].includes(key))).map(a=>({id:a.slug,name:a.info.name,avatar:a.avatar,play:id=>a.avatar.motion.play(id,{loop:false})}));
+};
 const agentUI=installAgentUI({api:{...window.gla.agent,run:runAgentRequest},onStatus:(_message,update)=>{if(!update)return;const actor=namedActor(update.character);if(!actor)return;actor.activity=update;refreshBubble(actor);},name:()=>actors.get(helpCharacter)?.info.name||'the characters',settings:()=>catalogue,onOpen:openComposer,questionHost:name=>namedActor(name)?.questions,onQuestionChange:(name,open)=>{const actor=namedActor(name);if(actor){actor.questionOpen=open;refreshBubble(actor);}},execute:async(action,args,cancelled)=>{
  if(action==='state')return {ok:true,characters:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,motions:[...a.avatar.motion.clips.values()].slice(0,180).map(c=>({id:c.id,label:c.label||c.id}))}))};
+ if(['sing_along','dance_along','stop_singing'].includes(action))return window.gla_sing_command(action,args,cancelled);
  const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(args.character).toLowerCase()));if(!actor)throw Error('That character is not visible.');
  if(action==='play_motion'){if(!actor.avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');const result=await actor.avatar.motion.play(args.motion,{loop:false});return {ok:result!==false,motion:args.motion,character:actor.slug};}
  if(action==='move_avatar'){await walkActor(actor,args.destination,cancelled);return {ok:true,character:actor.slug,destination:args.destination,reached:true};}
@@ -225,12 +242,14 @@ function openComposer(name,focus=true){
 function updateComposer(actor){
  if(!actor.composer)return;
  const busy=agentUI.isBusy(actor.info.name),listening=liveGroup.running&&Boolean(liveGroup.microphone)&&!liveGroup.muted&&(liveGroup.directed||liveGroup.active)===actor.slug;
- actor.composer.hidden=!actor.composerOpen;
- actor.askSend.disabled=busy||!actor.askInput.value.trim()||!catalogue?.agentEnabled;
+ actor.composer.hidden=false; // Input belongs to every visible speech/task bubble.
+ actor.askClose.hidden=!actor.composerOpen;
+ const localMusic=Boolean(musicRouter.parse(actor.askInput.value,{character:actor.slug}));
+ actor.askSend.disabled=(!localMusic&&busy)||!actor.askInput.value.trim()||(!catalogue?.agentEnabled&&!localMusic);
  actor.askStop.hidden=!busy;actor.askMic.disabled=actorVoiceStarting||loading||!catalogue?.hasKey;
  actor.askMic.classList.toggle('listening',listening);actor.askMic.setAttribute('aria-pressed',String(listening));
  actor.askMic.title=listening?'Mute microphone':'Talk to '+actor.info.name;actor.askMic.setAttribute('aria-label',actor.askMic.title);
- actor.askTip.textContent=actorVoiceStarting?'Connecting live talk…':listening?'Listening · speak to '+actor.info.name:!catalogue?.hasKey?'Add a voice API key in Settings to talk.':'Ask about files or a webpage · mic or double-click my head to talk.';
+ actor.askTip.textContent=actorVoiceStarting?'Connecting live talk…':listening?'Listening · speak to '+actor.info.name:!catalogue?.hasKey?'Add a voice API key in Settings to talk.':'Try “Sing along” or “Do a backflip” · mic or double-click my head to talk.';
  actor.el.classList.toggle('composing',Boolean(actor.composerOpen||actor.questionOpen));
 }
 function createComposer(actor){
@@ -238,7 +257,7 @@ function createComposer(actor){
  const composer=document.createElement('div');composer.className='actor-composer';composer.hidden=true;
  const tip=document.createElement('p');tip.className='actor-ask-tip';
  const form=document.createElement('form');form.className='actor-ask-form';form.setAttribute('aria-label','Ask '+actor.info.name);
- const input=document.createElement('input');input.type='text';input.className='actor-ask-input';input.maxLength=6000;input.autocomplete='off';input.placeholder='Try “Do a backflip”…';input.setAttribute('aria-label','Request for '+actor.info.name);
+ const input=document.createElement('input');input.type='text';input.className='actor-ask-input';input.maxLength=6000;input.autocomplete='off';input.placeholder='Ask me to do something…';input.setAttribute('aria-label','Request for '+actor.info.name);
  const button=(className,label,content)=>{const b=document.createElement('button');b.type='button';b.className=className;b.title=label;b.setAttribute('aria-label',label);b.innerHTML=content;return b;};
  const mic=button('actor-ask-mic','Talk to '+actor.info.name,'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3m-3 0h6"/></svg>');
  const send=button('actor-ask-send','Send to '+actor.info.name,'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>');send.type='submit';
@@ -246,8 +265,20 @@ function createComposer(actor){
  const close=button('actor-ask-close','Close request input','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>');
  form.append(mic,input,send,stopTask,close);composer.append(tip,form);
  const questions=document.createElement('div');questions.className='actor-questions';actor.bubble.append(text,composer,questions);
- Object.assign(actor,{bubbleText:text,composer,askInput:input,askSend:send,askStop:stopTask,askMic:mic,askTip:tip,questions,composerOpen:false,questionOpen:false});
- form.onsubmit=async event=>{event.preventDefault();const request=input.value.trim();if(!request||agentUI.isBusy(actor.info.name))return;input.value='';const task=agentUI.run(request,actor.info.name);refreshBubble(actor);await task;if(actors.get(actor.slug)===actor)refreshBubble(actor);};
+ Object.assign(actor,{bubbleText:text,composer,askInput:input,askSend:send,askStop:stopTask,askMic:mic,askTip:tip,askClose:close,questions,composerOpen:false,questionOpen:false});
+ form.onsubmit=async event=>{event.preventDefault();const request=input.value.trim();if(!request)return;
+if(musicRouter.parse(request,{character:actor.slug})){
+ input.value='';
+ recordAskLine({id:'typed-music-'+crypto.randomUUID(),speaker:'_human',text:request,viaMusic:true});
+ const result=await musicRouter.run(request,{id:'bubble-music-'+crypto.randomUUID(),character:actor.slug,cancelled:()=>actors.get(actor.slug)!==actor});
+ if(!result.cancelled&&actors.get(actor.slug)===actor){
+  input.blur();actor.composerOpen=false;setBubble(actor,result.text);
+  recordAskLine({id:'music-result-'+crypto.randomUUID(),speaker:actor.slug,text:result.text,viaMusic:true});
+ }
+ refreshBubble(actor);return;
+}
+if(agentUI.isBusy(actor.info.name))return;input.value='';const task=agentUI.run(request,actor.info.name);refreshBubble(actor);await task;if(actors.get(actor.slug)===actor)refreshBubble(actor);};
+ input.onfocus=()=>{actor.composerOpen=true;refreshBubble(actor);};
  input.oninput=()=>updateComposer(actor);
  mic.onclick=()=>void startActorVoice(actor,true);
  stopTask.onclick=()=>{agentUI.stop(actor.info.name);refreshBubble(actor);};
@@ -282,13 +313,18 @@ function headAt(actor,event){
  return event.clientX>=Math.min(...points.map(p=>p.x))&&event.clientX<=Math.max(...points.map(p=>p.x))&&event.clientY>=Math.min(...points.map(p=>p.y))&&event.clientY<=Math.max(...points.map(p=>p.y));
 }
 function refreshBubble(actor){
+ const performing=Boolean(actor.avatar.motion?.active||window.gla_sing_sample?.(actor.slug));
+ const beganPerforming=performing&&!actor.wasPerforming;
+ actor.wasPerforming=performing; // set before blur or focus can refresh again
+ if(beganPerforming&&!actor.questionOpen){actor.composerOpen=false;if(actor.bubble.contains(document.activeElement))document.activeElement.blur();}
  const activity=actor.activity&&performance.now()<actor.activity.until?actor.activity:null;
  const text=shortenHomePaths(activity?[activity.label,activity.detail].filter(Boolean).join('\n'):actor.message||(actor.bubbleMode==='always'?(actor.slug===speaker?'Speaking…':running?'Listening':'Ready'):''),catalogue?.userHome);
  actor.bubble.classList.toggle('task-update',Boolean(activity));actor.bubble.setAttribute('aria-label',activity?actor.info.name+' task progress':actor.info.name+' speech');
  updateComposer(actor);
- actor.bubble.hidden=!(actor.composerOpen||actor.questionOpen||(actor.bubbleMode!=='off'&&Boolean(text||actor.slug===speaker)));
+ // Explicit input and questions must be visible before focus can enter them.
+ actor.bubble.hidden=!(actor.composerOpen||actor.questionOpen||(!performing&&actor.bubbleMode!=='off'&&Boolean(text||actor.slug===speaker)));
  if(actor.bubbleText.textContent!==text)actor.bubbleText.textContent=text;actor.bubbleText.hidden=!text;
- actor.bubble.classList.toggle('wave-only',!text&&!actor.composerOpen&&!actor.questionOpen&&actor.slug===speaker);
+ actor.bubble.classList.toggle('wave-only',false);
  const width=actor.bubble.offsetWidth||270,height=actor.bubble.offsetHeight||0;
  actor.bubble.style.left=Math.max(width/2+8-actor.x,Math.min(actor.w/2,innerWidth-width/2-8-actor.x))+'px';
  actor.bubble.style.bottom=Math.min(actor.h,actor.y+actor.h-height-8)+'px';
@@ -348,7 +384,11 @@ async function startLive(focusSlug=''){
 }
 function animate(now){requestAnimationFrame(animate);if(document.visibilityState!=='visible')return;const due=frameDue(now,lastFrame,30);if(due===null)return;const dt=Math.min(.12,(now-lastFrame)/1000);lastFrame=due;const signal=liveGroup.running?liveGroup.sample():voice.sample();
  for(const actor of actors.values()){
-  const a=actor.avatar;if(a.disposed||!a.options)continue;const isSpeaker=actor.slug===speaker,talking=isSpeaker&&Boolean(signal.speaking);
+  const a=actor.avatar;if(a.disposed||!a.options)continue;const isSpeaker=actor.slug===speaker;
+  const liveTalking=isSpeaker&&Boolean(signal.speaking);
+  const musicSignal=window.gla_sing_sample?.(actor.slug);
+  const actorSignal=liveTalking?signal:musicSignal||signal;
+  const talking=liveTalking||Boolean(musicSignal?.speaking);
   const busy=isSpeaker||a.motion?.active||a.options.transition||drag?.actor===actor||gestureSize?.actor===actor||wheelActor===actor;
   const actorDue=frameDue(now,actor.lastFrame||0,busy?30:12);if(actorDue===null)continue;const actorDt=Math.min(.15,(now-(actor.lastFrame||now))/1000);actor.lastFrame=actorDue;
   const partner=actors.get(isSpeaker?listener:speaker),audience=!running||!partner||(isSpeaker&&Math.sin(now/3200)>.75);
@@ -358,7 +398,7 @@ function animate(now){requestAnimationFrame(animate);if(document.visibilityState
   actor.yaw=actor.walk?targetYaw:actor.yaw+(targetYaw-actor.yaw)*(1-Math.exp(-actorDt*2.8));if(Math.abs(actor.yaw-(actor.renderYaw??999))>.001||pitch!==actor.renderPitch){a.setOrbit({yaw:actor.yaw,pitch});actor.renderYaw=actor.yaw;actor.renderPitch=pitch;}
   let lookTarget;if(!audience){lookTarget=a.camera.position.clone();lookTarget.x+=direction*1.5;}
   const cursor=a.options.enabled('followCursor'),gaze=cursor&&hoverPoint?{x:Math.max(-1,Math.min(1,(hoverPoint.x-actor.x-actor.w/2)/(actor.w/2))),y:Math.max(-1,Math.min(1,-(hoverPoint.y-actor.y-actor.h/2)/(actor.h/2)))}:{x:0,y:0};
-  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?signal.viseme:'sil',visemeWeights:talking?signal.visemeWeights:{},lipSyncSource:signal.lipSyncSource,intensity:talking?signal.relative:0,speaking:talking,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:show?.expression(actor,now)||{}},actor.zoom?pixelView(actor.zoom,a.width,a.height):actor.closeup);
+  a.render(now,{reduce:false,breathe:1,bodyMotion:false,fitContent:true,stableFitContent:true,viseme:talking?actorSignal.viseme:'sil',visemeWeights:talking?actorSignal.visemeWeights:{},lipSyncSource:actorSignal.lipSyncSource,intensity:talking?actorSignal.relative:0,speaking:talking,projectedHeight:actor.h,lipSyncGain:1.35,audienceContact:audience&&!cursor,cameraFocus:true,lookTarget,gaze,expression:show?.expression(actor,now)||{}},actor.zoom?pixelView(actor.zoom,a.width,a.height):actor.closeup);
   refreshBubble(actor);
   // Layer the stage by depth so a downstage actor passes in front of an
   // upstage one rather than clipping through it; the speaker stays clear.
@@ -431,12 +471,18 @@ function actorCatalogue(actor){
 }
 addEventListener('contextmenu',async event=>{
  if(event.target?.closest?.('.speech'))return;event.preventDefault();const actor=actors.get(actorAt(event)?.dataset.slug);if(!actor)return;selectedActor=actor.slug;release();menuOpen=true;api.setIgnoreMouse(false);ignore=false;
- try{await api.showMenu({slug:actor.slug,catalogue:actorCatalogue(actor),bubbleMode:actor.bubbleMode||'auto'});}finally{menuOpen=false;syncMouse();}
+ try{await api.showMenu({slug:actor.slug,catalogue:actorCatalogue(actor),bubbleMode:actor.bubbleMode||'auto',music:window.gla_sing?.(),musicPending:Boolean(window.gla_sing_pending?.(actor.slug)),musicAvailable:!loading&&!actor.avatar.disposed,performing:Boolean(actor.avatar.motion?.active||window.gla_sing_sample?.(actor.slug))});}finally{menuOpen=false;syncMouse();}
 });
 async function actorMenuAction({slug,action}){
  const actor=actors.get(slug||selectedActor||catalogue?.selected)||actors.values().next().value;if(!actor)return;selectedActor=actor.slug;const a=actor.avatar,o=a.options;
  if(action==='close-up'){closeupActor(actor);return;}
  if(action==='agent'){helpCharacter=actor.slug;agentUI.open(actor.info.name);return;}
+ if(action==='music:sing'||action==='music:dance'){
+  const result=await musicRouter.run(action==='music:sing'?'Sing along to the current song':'Dance along to the current song',{id:'menu-music-'+crypto.randomUUID(),character:actor.slug,cancelled:()=>actors.get(actor.slug)!==actor});
+  if(actors.get(actor.slug)===actor&&!result.cancelled){setBubble(actor,result.text);status(result.text,!result.ok);}
+  return;
+ }
+ if(action==='stop-performing'){window.gla_sing_stop?.(actor.slug);a.motion?.stop();refreshBubble(actor);return;}
  if(action==='recover'){recoverActor(actor);return;}
  if(action==='face-audience'){actor.userOrbit=null;actor.yaw=0;return;}
  if(action.startsWith('bubble:')){actor.bubbleMode=action.slice(7);setBubble(actor,'');return;}

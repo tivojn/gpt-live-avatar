@@ -12,6 +12,13 @@ class VisemeProcessor extends AudioWorkletProcessor {
     };
   }
   reset(){
+    // Setting processorOptions.visemeEventsEnabled would also attach each
+    // frame's Mahalanobis distance to every viseme prototype, and the smallest
+    // of those looks like it should be a voice detector: "how much does this
+    // sound like any phoneme at all". It was measured against ground-truth
+    // audio and it is not one - a human voice scored 14.8 and a vocal-free
+    // orchestra 15.9. A nearest-prototype model has no none-of-the-above class,
+    // so every sound lands near something. Do not spend the frames again.
     this.recognizer=new Processor({sampleRate,parameterData:{vadGateActiveDb:-45,vadGateInactiveDb:-52}}, {port:{postMessage:e=>{
       // A 32 ms MFCC frame plus three-frame voting represents speech about
       // 32 ms before this audio quantum. Use the audio clock, never UI arrival.

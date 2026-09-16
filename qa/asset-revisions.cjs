@@ -25,5 +25,22 @@ try {
   assert.equal(assets.status('sarah').tiers.best.available,false,'Reject old remote tiers after a local upgrade');
   assets.index.avatars.sarah.assetRevision='new';
   assert.equal(assets.status('sarah').tiers.best.available,true);
-  console.log('Avatar revision isolation passed.');
+  // Cached catalogues and old downloaded starters must not defeat an upgrade.
+  const oldIndex={version:2,avatars:{sarah:{name:'Sarah',assetRevision:'old',mac:{}}}};
+  const currentIndex={version:2,publishedAt:'2026-09-17T00:00:00Z',avatars:{sarah:{name:'Sarah',assetRevision:'new',mac:{}}}};
+  fs.writeFileSync(path.join(downloadsRoot,'index.json'),JSON.stringify(oldIndex));
+  fs.writeFileSync(path.join(root,'index.json'),JSON.stringify(currentIndex));
+  const upgrade=new AvatarAssets({bundledRoot,downloadsRoot,bundledIndexPath:path.join(root,'index.json')});
+  assert.equal(upgrade.loadIndexSync().avatars.sarah.assetRevision,'new','New bundled catalogue supersedes old cached catalogue offline');
+  fs.writeFileSync(path.join(downloadsRoot,'sarah','base.gla'),'fixture');
+  const revisions=new Map([[path.join(bundledRoot,'sarah','base.gla'),'new'],[path.join(downloadsRoot,'sarah','base.gla'),'old']]);
+  upgrade.archive=file=>revisions.has(file)?{meta:{assetRevision:revisions.get(file)}}:null;
+  upgrade.exists=()=>true;
+  assert.equal(upgrade.roots('sarah')[0],path.join(bundledRoot,'sarah'),'Repaired bundle beats old download');
+  revisions.set(path.join(downloadsRoot,'sarah','base.gla'),'new');
+  assert.equal(upgrade.roots('sarah')[0],path.join(downloadsRoot,'sarah'),'Matching downloads retain precedence');
+  const future={...currentIndex,publishedAt:'2026-09-18T00:00:00Z'};
+  fs.writeFileSync(path.join(downloadsRoot,'index.json'),JSON.stringify(future));upgrade.index=null;
+  assert.equal(upgrade.loadIndexSync().publishedAt,future.publishedAt,'Newer remote catalogue remains usable');
+  console.log('Avatar revision isolation and existing-profile upgrade selection passed.');
 }finally{fs.rmSync(root,{recursive:true,force:true});}

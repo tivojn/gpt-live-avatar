@@ -5,6 +5,9 @@ import * as THREE from '/vendor/three/three.module.js';
 // use the same deformation as the GPU, including frame and hit-test bounds.
 const functions=`
 #if defined(USE_SKINNING) && defined(AVATAR_DQ_SKIN)
+#ifdef AVATAR_DQ_ARM_ONLY
+attribute float avatarVolumeWeight;
+#endif
 bool avatarRigid(mat4 m){
  vec3 x=m[0].xyz,y=m[1].xyz,z=m[2].xyz;
  return abs(dot(x,x)-1.)<.002&&abs(dot(y,y)-1.)<.002&&abs(dot(z,z)-1.)<.002
@@ -30,6 +33,9 @@ function shaders(){
 #if defined(USE_SKINNING) && defined(AVATAR_DQ_SKIN)
  bool avatarUseDQ=(skinWeight.x==0.||avatarRigid(boneMatX))&&(skinWeight.y==0.||avatarRigid(boneMatY))
   &&(skinWeight.z==0.||avatarRigid(boneMatZ))&&(skinWeight.w==0.||avatarRigid(boneMatW));
+ #ifdef AVATAR_DQ_ARM_ONLY
+ avatarUseDQ=avatarUseDQ&&avatarVolumeWeight>0.;
+ #endif
  vec4 avatarReal=vec4(0.,0.,0.,1.),avatarD=vec4(0.);
  if(avatarUseDQ){
   vec4 qx=avatarQuaternion(boneMatX),qy=avatarQuaternion(boneMatY),qz=avatarQuaternion(boneMatZ),qw=avatarQuaternion(boneMatW);
@@ -53,7 +59,11 @@ function shaders(){
    #endif`,
  })){
   const old=THREE.ShaderChunk[chunk];
-  THREE.ShaderChunk[chunk]=`#if defined(USE_SKINNING) && defined(AVATAR_DQ_SKIN)\nif(avatarUseDQ){\n${dq}\n}else{\n${old}\n}\n#else\n${old}\n#endif`;
+  const source=chunk==='skinning_vertex'?'vec3 avatarSource=transformed;':'vec3 avatarSource=objectNormal;\n#ifdef USE_TANGENT\nvec3 avatarSourceTangent=objectTangent;\n#endif';
+  const matrix=chunk==='skinning_vertex'?'vec3 avatarMatrix=transformed;transformed=avatarSource;':'vec3 avatarMatrix=objectNormal;objectNormal=avatarSource;\n#ifdef USE_TANGENT\nvec3 avatarMatrixTangent=objectTangent;objectTangent=avatarSourceTangent;\n#endif';
+  const mix=chunk==='skinning_vertex'?'transformed=mix(avatarMatrix,transformed,avatarVolumeWeight);':'objectNormal=mix(avatarMatrix,objectNormal,avatarVolumeWeight);\n#ifdef USE_TANGENT\nobjectTangent=mix(avatarMatrixTangent,objectTangent,avatarVolumeWeight);\n#endif';
+  const masked=`${source}\n${old}\n${matrix}\n${dq}\n${mix}`;
+  THREE.ShaderChunk[chunk]=`#if defined(USE_SKINNING) && defined(AVATAR_DQ_SKIN)\nif(avatarUseDQ){\n#ifdef AVATAR_DQ_ARM_ONLY\nif(avatarVolumeWeight<1.){\n${masked}\n}else{\n${dq}\n}\n#else\n${dq}\n#endif\n}else{\n${old}\n}\n#else\n${old}\n#endif`;
  }
 }
 function rigid(m){
@@ -62,18 +72,26 @@ function rigid(m){
   &&Math.abs(x.dot(y))<.002&&Math.abs(x.dot(z))<.002&&Math.abs(y.dot(z))<.002&&x.cross(y).dot(z)>0;
 }
 export class AvatarVolumeSkin {
- constructor(avatar,names=[]){
-  this.avatar=avatar;this.names=new Set(names);this.meshes=[];this.depths=[];shaders();
+ constructor(avatar,names=[],{armOnly=false}={}){
+  this.avatar=avatar;this.names=new Set(names);this.meshes=[];this.depths=[];this.armOnly=armOnly;this.geometries=new WeakMap();
+  this.armBones=new Set(['upperArm','lowerArm','hand','finger'].flatMap(key=>Object.values(avatar.boneGroups?.[key]||{}).flat()));
+  shaders();
   avatar.model.traverse(node=>{if(this.names.has(node.userData.sourceName))this.bind(node);});
  }
  bind(node){
   if(!node.isSkinnedMesh||node.userData.avatarPreserveVolume)return;
   node.userData.avatarPreserveVolume=true;this.meshes.push(node);
-  for(const m of Array.isArray(node.material)?node.material:[node.material]){m.defines={...m.defines,AVATAR_DQ_SKIN:1};m.needsUpdate=true;}
+  const defines={AVATAR_DQ_SKIN:1,...(this.armOnly?{AVATAR_DQ_ARM_ONLY:1}:{})};
+  for(const m of Array.isArray(node.material)?node.material:[node.material]){m.defines={...m.defines,...defines};m.needsUpdate=true;}
+  this.prepareGeometry(node);
   const original=node.applyBoneTransform,m=new THREE.Matrix4(),q=new THREE.Quaternion(),t=new THREE.Vector3(),cross=new THREE.Vector3(),real=new THREE.Vector4(),dual=new THREE.Vector4();
+  const owner=this,linear=new THREE.Vector3();
   const rotations=Array.from({length:4},()=>new THREE.Quaternion()),translations=Array.from({length:4},()=>new THREE.Vector3());
   node.applyBoneTransform=function(index,target){
    const indices=this.geometry.attributes.skinIndex,weights=this.geometry.attributes.skinWeight;if(!indices||!weights)return original.call(this,index,target);
+   const gain=owner.armOnly?owner.prepareGeometry(this).getX(index):1;
+   if(gain<=0)return original.call(this,index,target);
+   if(gain<1)original.call(this,index,linear.copy(target));
    let reference=0,maxWeight=-1;
    for(let i=0;i<4;i++){
     const weight=weights.getComponent(index,i),j=indices.getComponent(index,i);
@@ -91,14 +109,31 @@ export class AvatarVolumeSkin {
    const length=Math.max(real.length(),.000001);real.divideScalar(length);dual.divideScalar(length);const dot=real.dot(dual);dual.addScaledVector(real,-dot);
    cross.set(real.x,real.y,real.z).cross(new THREE.Vector3(dual.x,dual.y,dual.z));
    t.set(2*(real.w*dual.x-dual.w*real.x+cross.x),2*(real.w*dual.y-dual.w*real.y+cross.y),2*(real.w*dual.z-dual.w*real.z+cross.z));
-   return target.applyMatrix4(this.bindMatrix).applyQuaternion(q.set(real.x,real.y,real.z,real.w)).add(t).applyMatrix4(this.bindMatrixInverse);
+   target.applyMatrix4(this.bindMatrix).applyQuaternion(q.set(real.x,real.y,real.z,real.w)).add(t).applyMatrix4(this.bindMatrixInverse);
+   return gain<1?target.lerp(linear,1-gain):target;
   };
   if(!node.customDepthMaterial){node.customDepthMaterial=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking});this.depths.push(node.customDepthMaterial);}
-  node.customDepthMaterial.defines={...node.customDepthMaterial.defines,AVATAR_DQ_SKIN:1};
+  node.customDepthMaterial.defines={...node.customDepthMaterial.defines,...defines};
+ }
+ prepareGeometry(node){
+  if(!this.armOnly)return null;
+  const g=node.geometry,weights=g.attributes.skinWeight,indices=g.attributes.skinIndex;
+  if(this.geometries.get(node)===g)return g.getAttribute('avatarVolumeWeight');
+  const values=new Float32Array(g.attributes.position?.count||0);
+  if(weights&&indices)for(let i=0;i<values.length;i++){
+   let weight=0;for(let k=0;k<4;k++)if(this.armBones.has(node.skeleton.bones[indices.getComponent(i,k)]))weight+=weights.getComponent(i,k);
+   // Fade the correction at the shoulder seam; facial and torso vertices
+   // without arm influence retain their original deformation exactly.
+   values[i]=THREE.MathUtils.smoothstep(weight,0,.8);
+  }
+  const attribute=new THREE.Float32BufferAttribute(values,1);g.setAttribute('avatarVolumeWeight',attribute);this.geometries.set(node,g);return attribute;
  }
  beforeRender(){
-  for(const node of this.meshes)if(node.customDepthMaterial&&!node.customDepthMaterial.defines?.AVATAR_DQ_SKIN){
-   node.customDepthMaterial.defines={...node.customDepthMaterial.defines,AVATAR_DQ_SKIN:1};node.customDepthMaterial.needsUpdate=true;
+  for(const node of this.meshes){
+   this.prepareGeometry(node);
+   if(node.customDepthMaterial&&!node.customDepthMaterial.defines?.AVATAR_DQ_SKIN){
+    node.customDepthMaterial.defines={...node.customDepthMaterial.defines,AVATAR_DQ_SKIN:1,...(this.armOnly?{AVATAR_DQ_ARM_ONLY:1}:{})};node.customDepthMaterial.needsUpdate=true;
+   }
   }
  }
  dispose(){for(const d of this.depths)d.dispose();}

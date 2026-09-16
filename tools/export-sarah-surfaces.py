@@ -9,6 +9,8 @@ GLB supplied after --. Materials are placeholders, matched to the base export.
 import bpy, sys, json
 import numpy as np
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sarah_pelvis_weights import mark_glb
 
 out=Path(sys.argv[sys.argv.index('--')+1]).resolve()
 if bpy.context.object and bpy.context.object.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
@@ -19,11 +21,22 @@ def show(layer):
 show(bpy.context.view_layer.layer_collection)
 for collection in bpy.data.collections:collection.hide_viewport=False
 names=['Fem-A__Whl_BY_Sarah.export','Fem-A_Whl_Ac_VDress','Fem-A_Top_Ac_Tshtt','Fem-A_Top_Ac_ChnCt',
-    'Fem-A_Bot_Ac_ChnPnts_1','Fem-A_Fot_Ac_Chnhl','Fem-A_Fot_Ac_Sndlhl','Fem-A_Bot_Ac_BknBrzl_1']
+    'Fem-A_Bot_Ac_ChnPnts_1','Fem-A_Bot_Ac_ChnPnts_2','Fem-A_Fot_Ac_Chnhl','Fem-A_Fot_Ac_Sndlhl','Fem-A_Bot_Ac_BknBrzl_1']
 if '--bottoms-only' in sys.argv:names=['Fem-A_Bot_Ac_BknBrzl_1']
 objects=[];report=[]
 for name in names:
     obj=bpy.data.objects[name];obj.hide_set(False);obj.hide_viewport=False
+    # The authored pelvis attachment is named after its control bone, which
+    # is intentionally not exported as a deform joint. Preserve those weights
+    # on the driven root.x joint before subdivision and glTF normalization.
+    # Dropping them makes waist vertices follow the thigh at nearly 100%.
+    pelvis=obj.vertex_groups.get('c_root_bend.x')
+    if pelvis:
+        root=obj.vertex_groups.get('root.x') or obj.vertex_groups.new(name='root.x')
+        for vertex in obj.data.vertices:
+            weight=next((g.weight for g in vertex.groups if g.group==pelvis.index),0)
+            if weight>0:root.add([vertex.index],weight,'ADD')
+        obj.vertex_groups.remove(pelvis)
     keys=obj.data.shape_keys
     records=[(k.name,k.value,k.slider_min,k.slider_max) for k in list(keys.key_blocks)[1:]] if keys else []
     if keys:keys.animation_data_clear()
@@ -68,4 +81,5 @@ for mat in {m for obj in objects for m in obj.data.materials if m}:
 bpy.ops.export_scene.gltf(filepath=str(out),export_format='GLB',use_selection=True,export_animations=False,
     export_def_bones=True,export_rest_position_armature=True,export_extras=False,export_morph=True,
     export_morph_normal=True,export_apply=False,export_materials='EXPORT')
+mark_glb(out)
 out.with_suffix('.json').write_text(json.dumps(report,indent=2));print('SURFACES',json.dumps(report),flush=True)

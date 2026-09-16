@@ -105,6 +105,37 @@ class Retarget:
     a,b=start+side,end+side
     if all(n in self.snames and n in self.tnames for n in [a,b]):
      corrections[group]=align_directions(self.tw[self.tnames[b],:3,3]-self.tw[self.tnames[a],:3,3],self.sw[self.snames[b],:3,3]-self.sw[self.snames[a],:3,3])
+   # Retain the native elbow bending plane across characters as well as
+   # limb direction; endpoint alignment alone can rotate the elbow crease.
+   def elbow_frames(names,world):
+    if not all(n+side in names for n in ['c_arm_twist.','c_forearm_stretch.','hand.']):return None
+    upper=world[names['c_forearm_stretch.'+side],:3,3]-world[names['c_arm_twist.'+side],:3,3]
+    lower=world[names['hand.'+side],:3,3]-world[names['c_forearm_stretch.'+side],:3,3]
+    upper/=np.linalg.norm(upper);lower/=np.linalg.norm(lower)
+    z=np.cross(upper,lower)
+    if np.linalg.norm(z)<.03:return None
+    z/=np.linalg.norm(z)
+    result={}
+    for group,y in [('arm',upper),('forearm',lower)]:
+     x=np.cross(y,z);x/=np.linalg.norm(x);result[group]=np.stack([x,y,np.cross(x,y)],axis=1)
+    return result
+   sf=elbow_frames(self.snames,self.sw);tf=elbow_frames(self.tnames,self.tw)
+   if sf and tf:
+    for group in ['arm','forearm']:corrections[group]=sf[group]@tf[group].T
+   # Match both palm direction and normal. A one-vector wrist swing leaves
+   # different character palm rolls in every transferred hand motion.
+   def palm_frame(names,world):
+    origin=world[names['hand.'+side],:3,3]
+    middle=world[names['middle1.'+side],:3,3]-origin
+    index=world[names['index1.'+side],:3,3]-origin
+    pinky=world[names['pinky1.'+side],:3,3]-origin
+    y=middle/np.linalg.norm(middle)
+    z=np.cross(index,pinky)*(1 if side=='l' else -1)
+    z/=np.linalg.norm(z);x=np.cross(y,z);x/=np.linalg.norm(x)
+    return np.stack([x,y,np.cross(x,y)],axis=1)
+   if all(n+side in self.snames and n+side in self.tnames for n in ['hand.','middle1.','index1.','pinky1.']):
+    corrections['hand']=palm_frame(self.snames,self.sw)@palm_frame(self.tnames,self.tw).T
+
    for n in self.names:
     if not n.endswith('.'+side):continue
     group='arm' if n.startswith('c_arm') else 'forearm' if n.startswith('c_forearm') else 'thigh' if n.startswith('c_thigh') else 'leg' if n.startswith('c_leg') else 'hand' if re.match(r'^(hand|c_index|c_middle|c_ring|c_pinky|c_thumb|index|middle|ring|pinky|thumb)',n) else None

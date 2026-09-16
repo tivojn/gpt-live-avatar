@@ -62,6 +62,8 @@ def replace_surfaces(doc,binary,path):
         if 'weights' in old:new['weights']=old['weights']
         target['mesh']=node['mesh']+mo
     binary.extend(blob);doc['accessors'].extend(surf['accessors']);doc['bufferViews'].extend(surf['bufferViews']);doc['meshes'].extend(surf['meshes'])
+    if surf.get('extras', {}).get('avatarSarahPelvisWeights'):
+        doc.setdefault('extras', {})['avatarSarahPelvisWeights'] = copy.deepcopy(surf['extras']['avatarSarahPelvisWeights'])
 
 def compact(doc,binary):
     # Remove the superseded coarse geometry and duplicated face buffers.

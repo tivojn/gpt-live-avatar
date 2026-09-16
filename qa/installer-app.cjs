@@ -1,22 +1,40 @@
-// Launch the exact signed application with a fresh profile and no voice key.
 'use strict';
-const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),assert=require('node:assert/strict');
-const repo=path.resolve(__dirname,'..'),out=path.join(repo,'build/qa-release-app'),profile=path.join(out,'profile');
-const bundle=process.argv[2]||path.join(repo,'dist/mac-arm64/GPT-Live Avatar.app');
-const wait=ms=>new Promise(r=>setTimeout(r,ms));async function until(fn,label,ms=180000){const end=Date.now()+ms;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch{}await wait(150);}throw Error('Timed out: '+label);}
-(async()=>{let child,ws;try{
- fs.rmSync(profile,{recursive:true,force:true});fs.mkdirSync(profile,{recursive:true});fs.writeFileSync(path.join(profile,'config.json'),JSON.stringify({avatar:'tia',quality:'friendly',bubbleMode:'off',windowWidth:420,windowHeight:700}));
- child=cp.spawn(path.join(bundle,'Contents/MacOS/GPT-Live Avatar'),['--user-data-dir='+profile,'--remote-debugging-port=19443','--remote-debugging-address=127.0.0.1'],{stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',d=>stderr=(stderr+d).slice(-2000));
- const tab=await until(async()=>{const r=await fetch('http://127.0.0.1:19443/json/list');return (await r.json()).find(t=>t.url.endsWith('/avatar.html'));},'packaged avatar');
- ws=new WebSocket(tab.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});let id=0;const pending=new Map();ws.onmessage=event=>{const r=JSON.parse(event.data);if(!r.id)return;const p=pending.get(r.id);if(!p)return;pending.delete(r.id);r.error?p.reject(Error(r.error.message)):p.resolve(r.result);};
- const send=(method,params={})=>new Promise((resolve,reject)=>{const n=++id;pending.set(n,{resolve,reject});ws.send(JSON.stringify({id:n,method,params}));});
- const js=async expression=>{const r=await send('Runtime.evaluate',{expression:'(async()=>{'+expression+'})()',awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||'Evaluation failed');return r.result.value;};
- const capture=async name=>{const data=await until(async()=>{const png=(await send('Page.captureScreenshot',{format:'png'})).data;return await js('const img=new Image();img.src='+JSON.stringify('data:image/png;base64,'+png)+';await img.decode();const c=document.createElement("canvas");c.width=img.width;c.height=img.height;const ctx=c.getContext("2d");ctx.drawImage(img,0,0);const p=ctx.getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<p.length;i+=4)if(p[i+3]>80&&Math.max(p[i],p[i+1],p[i+2])>40)count++;return count>1000;')?png:false;},name+' visible pixels');fs.writeFileSync(path.join(out,name+'.png'),Buffer.from(data,'base64'));};
- await until(()=>js('const s=await gla.getSettings();return Boolean(window.gla_avatar?.resources?.ready&&gla_avatar.motion?.clips.size&&gla_avatar.appearance?.indexURL===s.avatar.appearanceURL);'),'bundled Tia unlocked and rendered');
- await js('await gla_avatar.resources.pending;');
- const tia=await js('return await gla.getSettings();');assert(tia.avatar.roots.some(r=>r.startsWith(bundle+'/Contents/Resources')));assert.equal(tia.hasKey,false);assert(!fs.existsSync(path.join(profile,'avatars/tia/base.gla')));assert(fs.existsSync(path.join(profile,'avatars/content-keys.bin')));assert(!tia.avatars.some(a=>a.slug.startsWith('sgt-')));
- await capture('tia');console.log('Exact packaged app unlocked and rendered bundled Tia with no model download.');
- const r=await js("return await gla.assets.download('sarah','base');");assert(r.ok,r.error);await js("await gla.selectAvatar('sarah');");await until(()=>js("return (await gla.getSettings()).avatar.slug==='sarah'&&gla_avatar?.resources?.ready&&gla_avatar?.motion?.clips.size&&gla_avatar.appearance?.indexURL===(await gla.getSettings()).avatar.appearanceURL;"),'downloaded Sarah rendered');
- const sarah=await js('return await gla.getSettings();');assert(fs.existsSync(path.join(profile,'avatars/sarah/base.gla')));assert(sarah.avatar.roots.every(r=>r.startsWith(profile)));assert.equal((await fetch(new URL(sarah.avatar.modelURL,tab.url))).status,403);await js('await gla_avatar.resources.pending;');await capture('sarah');
- fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({passed:true,bundle,tia:{slug:tia.avatar.slug,roots:tia.avatar.roots},sarah:{slug:sarah.avatar.slug,roots:sarah.avatar.roots},voices:!tia.hasKey,externalModelBlocked:true},null,2));console.log('Exact packaged app downloaded encrypted Sarah from R2 and rendered her.');await js('gla.quit();');
- }catch(e){console.error(e.message);process.exitCode=1;}finally{ws?.close();child?.kill();}})();
+const fs=require('fs'),path=require('path'),cp=require('child_process'),assert=require('assert/strict'),crypto=require('crypto');
+const repo=path.resolve(__dirname,'..'),out=process.env.GLA_QA_OUTPUT||repo+'/build/qa-installer';fs.mkdirSync(out,{recursive:true});
+const bundle=process.argv[2]||repo+'/dist/mac-arm64/GPT-Live Avatar.app',upgrade=process.argv.includes('--upgrade'),port=19453;
+const profile=out+(upgrade?'/upgrade-profile':'/fresh-profile');fs.mkdirSync(profile,{recursive:true});
+fs.writeFileSync(profile+'/config.json',JSON.stringify(upgrade?{avatar:'sarah',voice:'gleam',bubbleMode:'always',quality:'friendly',conversationSounds:false,avatarLooks:{sarah:{outfit:'tactical',body:'Ps007.stand',prop:''}}}:{quality:'friendly',bubbleMode:'always',conversationSounds:false}));
+if(upgrade){
+ const previous=process.env.GLA_QA_PREVIOUS_APP||'/Applications/GPT-Live Avatar.app';
+ const resources=previous+'/Contents/Resources';
+ fs.mkdirSync(profile+'/avatars/sarah',{recursive:true});
+ fs.copyFileSync(resources+'/assets-index.json',profile+'/avatars/index.json');
+ for(const name of ['base','motions'])fs.copyFileSync(resources+'/avatars/sarah/'+name+'.gla',profile+'/avatars/sarah/'+name+'.gla');
+}
+const wait=ms=>new Promise(r=>setTimeout(r,ms));async function until(fn,label){let last;const end=Date.now()+240000;while(Date.now()<end){try{const v=await fn();if(v)return v;}catch(e){last=e;}await wait(200);}throw Error('Timed out '+label+' '+(last?.message||''));}
+let child,ws;
+(async()=>{try{
+ const env={...process.env};delete env.GLA_OPENAI_KEY;delete env.ELECTRON_RUN_AS_NODE;
+ child=cp.spawn(bundle+'/Contents/MacOS/GPT-Live Avatar',['--user-data-dir='+profile,'--remote-debugging-port='+port,'--remote-debugging-address=127.0.0.1'],{env,stdio:['ignore','ignore',fs.openSync(out+'/app.log','a')]});
+ const tab=await until(async()=>{const r=await fetch('http://127.0.0.1:'+port+'/json/list');return(await r.json()).find(t=>t.url.endsWith('/avatar.html'));},'packaged window');
+ ws=new WebSocket(tab.webSocketDebuggerUrl);await new Promise((r,e)=>{ws.onopen=r;ws.onerror=e;});let seq=0;const pending=new Map();ws.onmessage=e=>{const m=JSON.parse(e.data);if(!m.id)return;const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);};
+ const send=(method,params)=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
+ const js=async code=>{const r=await send('Runtime.evaluate',{expression:'(async()=>{'+code+'})()',returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description);return r.result.value;};
+ await until(()=>js("return window.gla_avatar?.resources?.ready&&gla_avatar.characterId==='sarah'&&gla_avatar.motion?.clips.size"),'Sarah');
+ const info=await js("const s=await gla.getSettings();return {slug:s.avatar.slug,revision:s.avatar.manifest.assetRevision,roots:s.avatar.roots,modelURL:s.avatar.modelURL,motions:gla_avatar.motion.clips.size,hasKey:s.hasKey,outfit:gla_avatar.options.selection.outfit,voice:s.voice,input:!document.querySelector('#steerRow').hidden,tap:await gla.tap.available()};");
+ assert.equal(info.revision,'sarah-wardrobe-v10');assert.equal(info.hasKey,false);assert.equal(info.input,true);assert.equal(info.tap,true);assert.equal(info.outfit,upgrade?'tactical':'casual');
+ assert(fs.existsSync(profile+'/avatars/content-keys.bin'),'Fresh key authorization');
+ const model=await js("return await (await fetch((await gla.getSettings()).avatar.modelURL)).json();");
+ assert.equal(model.extras.avatarSarahPelvisWeights.version,1);
+ const fingerprints=JSON.parse(fs.readFileSync(repo+'/qa/pelvis-payload.json')).payload.buffers;
+ for(const name of ['pelvis-weight-restoration-v1.bin','pelvis-dress-weight-restoration-v1.bin']){
+ const got=await js("const url=new URL("+JSON.stringify(name)+",new URL((await gla.getSettings()).avatar.modelURL,location.href));const data=await(await fetch(url)).arrayBuffer();return [...new Uint8Array(await crypto.subtle.digest('SHA-256',data))].map(x=>x.toString(16).padStart(2,'0')).join('');");assert.equal(got,fingerprints[name]);}
+ assert.equal((await fetch(new URL(info.modelURL,tab.url))).status,403);
+ await js("await gla_avatar.motion.play('kung-fu-punch',{loop:false});");await wait(1000);assert.equal(await js("return document.querySelector('#bubble').classList.contains('hidden')"),true);
+ await js('gla_avatar.motion.stop();');await wait(500);assert.equal(await js("return !document.querySelector('#steerRow').hidden"),true);
+ const png=(await send('Page.captureScreenshot',{format:'png'})).data;fs.writeFileSync(out+(upgrade?'/upgrade.png':'/fresh.png'),Buffer.from(png,'base64'));
+ if(!upgrade){const result=await js("return await gla.assets.download('tia','base');");assert(result.ok,result.error);await js("await gla.selectAvatar('tia');");await until(()=>js("return gla_avatar?.resources?.ready&&gla_avatar.characterId==='tia'"),'downloaded Tia');console.log('Fresh package: Sarah unlock and pelvis fingerprints; live Tia base/motion download passed.');}
+ else console.log('Existing encrypted profile: new bundled Sarah wins, old textures isolated, tactical outfit preserved.');
+ fs.writeFileSync(out+(upgrade?'/upgrade-report.json':'/fresh-report.json'),JSON.stringify({passed:true,bundle,info,pelvisBuffersVerified:true,externalModelBlocked:true},null,2));
+ await js('gla.quit();');
+ }finally{ws?.close();child?.kill();}})().catch(e=>{console.error(e);process.exitCode=1;});

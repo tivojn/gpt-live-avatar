@@ -4,12 +4,19 @@ const {TOOLS,latestUserRequest,createAvatarTools}=require('../electron/avatar-to
 const {permissions,permissionPatch,engineConfig,selectEngine,providerMenu,reasoningMenu}=require('../electron/agent-engines.cjs');
 const {actionEngine,reasoningEngine,runtimeConfig,normalizeDelegate}=require('../electron/delegate.cjs');
 (async()=>{
- assert.deepEqual(TOOLS.map(t=>t.name),['avatar_state','move_avatar','play_motion']);
+ assert.deepEqual(TOOLS.map(t=>t.name),['avatar_state','move_avatar','play_motion','sing_along','dance_along','stop_singing']);
  const actions=[],agent=createAvatarTools({avatarCommand:async(name,args)=>{actions.push({name,args});return {ok:true};}}),signal=new AbortController().signal;
  for(const name of ['shell','create_text_file','trash_file','read_current_page','read_file','fetch_url'])await assert.rejects(agent.execute(name,{},signal),/Invalid avatar/);
  await agent.execute('avatar_state',{},signal);await agent.execute('move_avatar',{character:'Sarah',destination:'upper-right'},signal);await agent.execute('play_motion',{character:'Tia',motion:'wave'},signal);assert.equal(actions.length,3);
+ // Singing along is a visual control like the rest: named character, nothing else.
+ await agent.execute('dance_along',{character:'Sarah'},signal);await agent.execute('sing_along',{character:'Sarah'},signal);await agent.execute('stop_singing',{character:'Sarah'},signal);assert.equal(actions.length,6);
+ assert.deepEqual(actions.at(-2),{name:'sing_along',args:{character:'Sarah'}});
+ for(const name of ['sing_along','dance_along','stop_singing']){
+  await assert.rejects(agent.execute(name,{},signal),/Invalid avatar/,'A character is required');
+  await assert.rejects(agent.execute(name,{character:'Sarah',track:'anything'},signal),/Invalid avatar/,'No track argument: she hears, she does not fetch');
+ }
  await assert.rejects(agent.execute('avatar_state',{path:'/tmp'},signal),/Invalid/);await assert.rejects(agent.execute('move_avatar',{character:'Tia',destination:'/tmp'},signal),/supported/);
- const cancelled=new AbortController();cancelled.abort();await assert.rejects(agent.execute('avatar_state',{},cancelled.signal));assert.equal(actions.length,3);
+ const cancelled=new AbortController();cancelled.abort();await assert.rejects(agent.execute('avatar_state',{},cancelled.signal));assert.equal(actions.length,6);
  const history=[{role:'user',text:'Old request'},{role:'assistant',text:'Done'},{role:'user',text:'Hi Sarah,'},{role:'user',text:'read this page.'}];assert.equal(latestUserRequest(history),'Hi Sarah, read this page.');
  assert.deepEqual(permissions({agentAccess:'auto_review'}),{codex:'auto_review',openclaw:'workspace',hermes:'workspace',grok:'workspace'});
  const saved={agentAccess:'full',agentPermissions:{codex:'workspace',hermes:'workspace'}};

@@ -13,6 +13,14 @@ const blend = (a,b,t) => b.map((v,i) => {
 });
 const smooth = t => {t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 
+// Clips withdrawn from the library. The motion pack is signed, so a clip
+// cannot be deleted from its manifest without rebuilding and re-signing the
+// pack; dropping it as the library is read retires it in one place instead,
+// and keeps it retired across pack updates. A clip that is absent here is
+// absent everywhere downstream - the motion menu, the agent's vocabulary,
+// and the sing-along dance pool all read this same map.
+const RETIRED = new Set(['indoor-swing','cardio-dance','jazz-hands']);
+
 // Optional local motion clips. The API credential and donor character never
 // enter the runtime. Clips address the original exported rig by bone name.
 export class Avatar3DMotion {
@@ -28,6 +36,7 @@ export class Avatar3DMotion {
     if(data.version!==1||!Array.isArray(data.clips)||data.clips.length>96)throw Error('Invalid motion library');
     for(const entry of data.clips) {
       if(!/^[a-z0-9_-]{1,40}$/.test(entry.id))throw Error('Invalid motion name');
+      if(RETIRED.has(entry.id))continue;
       const source=new URL(entry.file,origin);
       if(source.protocol!==origin.protocol||source.host!==origin.host)throw Error('Motion clip must be local');
       this.clips.set(entry.id,{...entry,url:source.href,ready:null});
@@ -55,11 +64,50 @@ export class Avatar3DMotion {
           ||!frame.every(v=>Number.isFinite(v)&&Math.abs(v)<10000))throw Error('Invalid motion transform');
         return new Float32Array(frame);
       });
+      // Exported rigs may flatten the pelvis, spine and limbs into sibling
+      // bones. Pinning just root.x pulls pelvis-weighted vertices away from
+      // the rest of the body. Remove travel as one model-space translation
+      // across every animated root, letting descendants inherit it once.
+      const travels=Number.isFinite(data.retargeting?.forwardSpeed)&&data.retargeting.forwardSpeed>.01;
+      let drift=null;
+      if(!travels&&frames.length>1){
+        const byNode=new Map(bones.map((bone,i)=>[bone.node,{bone,index:indices[i]}]));
+        let anchor=bones.find(bone=>/^root/i.test(bone.name))?.node;
+        // A nested pelvis is carried by its animated ancestors. The outermost
+        // animated ancestor is the root whose travel needs to be removed.
+        for(let parent=anchor?.parent;parent;parent=parent.parent)if(byNode.has(parent))anchor=parent;
+        if(anchor){
+          const parentSpace=bone=>bone.world.clone().multiply(bone.rest.m.clone().invert());
+          const source=byNode.get(anchor),offset=source.index*12,first=frames[0],last=frames[frames.length-1];
+          drift=new THREE.Vector3(last[offset+3]-first[offset+3],last[offset+7]-first[offset+7],last[offset+11]-first[offset+11])
+            .applyMatrix3(new THREE.Matrix3().setFromMatrix4(parentSpace(source.bone)));
+          drift.y=0; // Keep jump/squat height in model space.
+          if(drift.length()>.05){
+            const roots=bones.filter(bone=>{
+              for(let parent=bone.node.parent;parent;parent=parent.parent)if(byNode.has(parent))return false;
+              return true;
+            }).map(bone=>({offset:byNode.get(bone.node).index*12,delta:drift.clone().applyMatrix3(
+              new THREE.Matrix3().setFromMatrix4(parentSpace(bone).invert()))}));
+            frames.forEach((frame,k)=>{
+              const share=k/(frames.length-1);
+              for(const {offset,delta} of roots){
+                frame[offset+3]-=share*delta.x;
+                frame[offset+7]-=share*delta.y;
+                frame[offset+11]-=share*delta.z;
+              }
+            });
+          }else drift=null;
+        }
+      }
       let bounds=null;
       if(data.bounds!==undefined){
         if(!Array.isArray(data.bounds)||data.bounds.length!==2||!data.bounds.every(v=>Array.isArray(v)&&v.length===3&&v.every(n=>Number.isFinite(n)&&Math.abs(n)<10000))
           ||data.bounds[0].some((v,i)=>v>data.bounds[1][i]))throw Error('Invalid motion bounds');
         bounds=new THREE.Box3(new THREE.Vector3(...data.bounds[0]),new THREE.Vector3(...data.bounds[1]));
+        // Every frame is translated somewhere between zero and -drift. The
+        // union contains that whole sweep; shrinking by the endpoint drift
+        // can exclude raised hands or wide poses halfway through the clip.
+        if(drift)bounds.union(bounds.clone().translate(drift.clone().negate()));
       }
       const speed=data.retargeting?.forwardSpeed;
       const requestedBlend=data.retargeting?.loopBlendSeconds;
@@ -71,7 +119,22 @@ export class Avatar3DMotion {
           ||![g.blendIn,g.blendOut].every(n=>Number.isFinite(n)&&n>=.1&&n<=2))throw Error('Invalid portrait gesture');
         gesture={...g};
       }
-      clip.ready={frames,indices,fps:data.fps,loop:Boolean(data.loop),bounds:gesture?null:bounds,gesture,cache:new Map(),loopBlendSeconds,
+      // A clip either drives its own fingers or it does not, and that decides
+      // whether a resting hand may be imposed on it. Meshy's presets animate the
+      // body while the fingers stay at the exporter's default - a flat, rigid
+      // paddle that is visible in every dance. Clips authored on the original rig
+      // do animate them, and forcing a static pose onto one of those would freeze
+      // a wave mid-gesture. So this is measured, never assumed.
+      const fingers=data.bones.reduce((list,name,i)=>{
+        if(!/toe/i.test(name)&&/index|middle|ring|pinky|thumb/i.test(name))list.push(i*12);
+        return list;
+      },[]);
+      let animatesFingers=false;
+      search: for(const offset of fingers)
+        for(let f=1;f<frames.length;f++)
+          for(let k=0;k<12;k++)
+            if(Math.abs(frames[f][offset+k]-frames[0][offset+k])>.002){animatesFingers=true;break search;}
+      clip.ready={frames,indices,fps:data.fps,loop:Boolean(data.loop),bounds:gesture?null:bounds,gesture,cache:new Map(),loopBlendSeconds,animatesFingers,
         forwardSpeed:Number.isFinite(speed)&&speed>.01&&speed<20?speed:0};
       const cached=[...this.clips.values()].filter(c=>c.ready).sort((a,b)=>(a.used||0)-(b.used||0));
       while(cached.length>this.cacheLimit){
@@ -106,10 +169,21 @@ export class Avatar3DMotion {
         ? this.options.current[i] : null);
     // Meshy's preset rig carries body motion but no finger animation. Use
     // Tia's authored hand poses, while a user-selected grip always wins.
+    //
+    // A clip that names no pose used to fall through to the exporter's default,
+    // which is a flat rigid paddle - so she danced with two planks on the end of
+    // her arms. A relaxed curl is the honest neutral for a hand nobody has said
+    // anything about. Clips that want a fist, a point or spread jazz hands still
+    // name one, per side, so a one-handed thumbs-up no longer leaves the other
+    // hand flat. Only clips that animate their own fingers are left alone.
     const authoredHands=this.options.bones.map(()=>null);
     const entry=this.clips.get(id);
-    for(const group of ['hands','leftHand','rightHand']){
-      const pose=this.options.poses?.get(entry[group]);
+    const both=Boolean(this.options.poses?.get(entry.hands));
+    const resting=clip.animatesFingers||both?null:{leftHand:'Hnd.l.pose1',rightHand:'Hnd.r.pose1'};
+    for(const group of clip.animatesFingers?[]:['hands','leftHand','rightHand']){
+      // A named pose this character does not carry is the same situation as no
+      // name at all, so it rests rather than falling back to the flat default.
+      const pose=this.options.poses?.get(entry[group])||this.options.poses?.get(resting?.[group]);
       if(!pose||pose.group!==group)continue;
       const target=this.options.targetFor(pose);
       this.options.bones.forEach(({name},i)=>{

@@ -3,6 +3,7 @@ import {SpeechOutput,silentSpeech} from '/lip-sync.js';
 import {GroupCapture} from '/group-capture.js';
 import {commentaryChunks} from '/delegate-client.js';
 import {needsAgent} from '/group-agent-request.js';
+import {musicCommand} from '/music-command.js';
 import {addressedSpeaker,addressedText,playbackEcho,quotedContext} from '/group-context.js';
 
 // Hysteresis rejects clicks and brief noise; release tolerates ordinary pauses.
@@ -150,9 +151,27 @@ export class LiveGroup {
    this.recordLine({speaker:'_human',id,text:result.text,at:performance.now()});this.emit('text',{speaker:'_human',text:result.text});
   }catch(error){if(current()){p.routingPending=false;p.acceptUser=false;this.awaitingHuman=false;this.awaitingNextHuman=true;this.emit('status','Please say that again or type it. '+error.message);}}
  }
+ async performMusic(p){
+  const generation=this.generation,floor=p.openAt,inputId=p.lastHumanId,text=p.lastHumanText;
+  const current=()=>this.running&&this.generation===generation&&p.openAt===floor&&p.lastHumanId===inputId&&p.slug===this.active;
+  p.delegating=true;p.acceptUser=false;p.agentDue=0;this.awaitingHuman=true;
+  p.client.stopSpeaking();p.client.appendInstructions('The app is handling the confirmed sing-along or dance-along request. Wait silently for its verified music-control result. Do not delegate or substitute an ordinary dance animation.');
+  let result;try{result=await this.callbacks.musicRequest(text,{id:inputId,character:p.slug,cancelled:()=>!current()});}catch(error){result={ok:false,text:error.message};}
+  if(!current())return;p.delegating=false;this.awaitingHuman=false;this.finishLine(p);p.heard=false;p.openAt=p.lastText=p.lastAudio=performance.now();this.advanceAt=0;
+  if(result?.cancelled)return;
+  const message=String(result?.text||'The music control did not return a result.');
+  p.agentHandledText=text;p.agentResult=message;
+  this.share({musicResult:{character:p.slug,ok:result?.ok===true,text:message}});
+  this.emit('text',{speaker:p.slug,text:message});
+  p.client.appendInstructions('Floor OPEN for '+p.name+'. Briefly acknowledge only the following verified music-control result, then wait for the human. Do not repeat or delegate the action.');
+  p.client.appendCommentary(message);
+ }
  async delegate(p,id,application=false){
   if(!this.running||this.active!==p.slug||p.client.reasoningMode!=='delegate')return;
   if(p.delegating||!p.acceptUser)return;
+  if(this.callbacks.musicRequest&&p.humanFinal&&!p.routingPending&&musicCommand(p.lastHumanText,{characters:this.cast,character:p.slug})){
+   p.agentDue=performance.now()+150;return;
+  }
   if(p.acceptUser&&p.agentHandledText===p.lastHumanText&&p.agentResult){if(!application)for(const chunk of commentaryChunks(p.agentResult))p.client.appendCommentary(chunk,id);return;}
   p.agentDue=0;
   p.delegatedIds ||= new Set();if(p.delegatedIds.has(id))return;p.delegatedIds.add(id);if(p.delegatedIds.size>128)p.delegatedIds.delete(p.delegatedIds.values().next().value);
@@ -199,6 +218,9 @@ export class LiveGroup {
   if(p.acceptUser&&!p.routingPending&&p.humanFinal&&p.agentDue&&now>=p.agentDue&&!p.delegating){
    const target=this.target(p.lastHumanText);if(target!==p.slug){p.agentDue=0;this.open(target,false,{text:p.lastHumanText,id:p.lastHumanId});return;}
    p.agentDue=0;
+   if(this.callbacks.musicRequest&&musicCommand(p.lastHumanText,{characters:this.cast,character:p.slug})){
+    void this.performMusic(p);return;
+   }
    if(this.agentEnabled&&p.agentHandledText!==p.lastHumanText&&needsAgent(p.lastHumanText)){
     p.client.appendInstructions('The application is executing the real human request through the selected external agent. Wait for its verified result before claiming success or lack of access.');
     void this.delegate(p,'human-'+p.lastHumanId.replace(/[^a-z0-9_-]/gi,'').slice(-80),true);return;

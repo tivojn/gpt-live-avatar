@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "payload": {
+    "modelSHA256": "4a63cee521f0325a5eb99dcd34dcd1c35159ffe4318c68291bd8e75ef3d5a654",
+    "buffers": {
+      "rig.bin": "cec6bc0a71c3d8546e0bc82a2ff2367f93510162a0ce1c953d9b099e193c2bf3",
+      "mesh-1.bin": "dc7c4cb4bb72f339fb2b1f5cc3cad33ad79755a922e5d685f3f6528caf45005f",
+      "mesh-6.bin": "dd1f6a43cbe380a1516b3b29a957d6ff60b8d694899093c11f6f877f8c440fa7",
+      "mesh-7.bin": "1e726b28d0a0364e57c8299a9c142d1848681be05ff5a59cb74527c0e7fc8a28",
+      "mesh-8.bin": "52d549d6fcfc2171eaae9acf90a77e1acc69ddf5c088451dcce23de82d41094d",
+      "mesh-9.bin": "f6f8e6ab2124535d8e1168124a770503ff135d317806a9a5f4e007fb6157d0e2",
+      "mesh-10.bin": "634baf22870f8c352b1a664fbbc5b7f6332ea648e016848d22a385a1a2c81f1c",
+      "mesh-11.bin": "754f9d730ba9c6698d6d70f80e3a18a412844b272e7524f27bb8c0a6de0b62d4",
+      "mesh-14.bin": "a87801647898ddc0095bafcd89f5e5644ab6e7382482ed18af0de3eec4eefc75",
+      "mesh-15.bin": "188ac048f34df360765983a26a02e5053c762d3e8dd989fc7ca411c72b40df09",
+      "fitted-bottoms-v1.bin": "b9ba2c3f27d9471fc1ef6af2dea2af55866e153b70edd49045c0def5bc2c9885",
+      "body-fitted-brief-v5.bin": "a1f588f82b64f640f39e4cb679683c037f30a7f5ce969fac2dd176226413b0e5",
+      "pelvis-weight-restoration-v1.bin": "9e80e01fcd6e919b328ee772c9a35fa4fb782cbc8f3c678722c4f7b684b75dee",
+      "pelvis-dress-weight-restoration-v1.bin": "52618337089e2a0172871403a54c48cf50ab1da9d0dbc3cb3888e703799b2b67"
+    }
+  },
+  "validation": {
+    "structuralBaselineChecked": true,
+    "maxWeightSumError": 2.009328454732895e-07,
+    "briefVertices": 4728,
+    "maxBriefBodyWeightDifference": 0,
+    "referenceChecks": {
+      "Fem-A__Whl_BY_Sarah.export": {
+        "vertices": 8368,
+        "maxWeightError": 1.0443632458834173e-07
+      },
+      "Fem-A_Bot_Ac_ChnPnts_1": {
+        "vertices": 6638,
+        "maxWeightError": 2.9794651745795875e-08
+      },
+      "Fem-A_Bot_Ac_ChnPnts_2": {
+        "vertices": 10976,
+        "maxWeightError": 2.980231772475861e-08
+      },
+      "Fem-A_Whl_Ac_VDress": {
+        "vertices": 10654,
+        "maxWeightError": 2.9797794232067076e-08
+      },
+      "Fem-A_Bot_Ac_BknBrzl_1": {
+        "vertices": 4728,
+        "maxWeightError": 2.9798648992773735e-08
+      },
+      "Fem-A_Bot_Ac_BknBrzl_2": {
+        "vertices": 1982,
+        "maxWeightError": 2.9781234367476372e-08
+      }
+    }
+  }
+}

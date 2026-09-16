@@ -120,9 +120,39 @@ for side, prefix in [('l', 'L'), ('r', 'R')]:
         tv = control_rest[b].translation - control_rest[a].translation
         dv = donor_rest[prefix + '_' + source_end].translation - donor_rest[prefix + '_' + source].translation
         align[a] = tv.normalized().rotation_difference(dv.normalized())
+    if args.preset:
+        # Match the elbow bending plane as well as segment direction. A
+        # shortest swing leaves the native elbow crease rotated around the
+        # limb when the donor bind frame is an already posed dance frame.
+        def elbow_frame(upper, lower, segment):
+            y = segment.normalized()
+            z = upper.cross(lower).normalized()
+            x = y.cross(z).normalized()
+            return Matrix((x, y, x.cross(y))).transposed().to_quaternion()
+        tu = control_rest['c_forearm_fk.' + side].translation - control_rest['c_arm_fk.' + side].translation
+        tl = control_rest['c_hand_fk.' + side].translation - control_rest['c_forearm_fk.' + side].translation
+        su = donor_rest[prefix + '_Elbow'].translation - donor_rest[prefix + '_Shoulder'].translation
+        sl = donor_rest[prefix + '_Wrist'].translation - donor_rest[prefix + '_Elbow'].translation
+        if tu.normalized().cross(tl.normalized()).length > .03 and su.normalized().cross(sl.normalized()).length > .03:
+            align['c_arm_fk.' + side] = elbow_frame(su, sl, su) @ elbow_frame(tu, tl, tu).inverted()
+            align['c_forearm_fk.' + side] = elbow_frame(su, sl, sl) @ elbow_frame(tu, tl, tl).inverted()
     # The wrist follows the calibrated forearm basis; finger articulation
     # uses Tia's authored neutral hand until a hand pose is selected.
     align['c_hand_fk.' + side] = align['c_forearm_fk.' + side]
+    if args.preset:
+        # A preset bind pose is already articulated, including wrist flexion
+        # and roll. Reusing the forearm swing loses that initial articulation.
+        # Match the authored palm frame, then retain all source wrist motion.
+        wrist = control_rest['hand.' + side].translation
+        middle = control_rest['middle1.' + side].translation - wrist
+        index = control_rest['index1.' + side].translation - wrist
+        pinky = control_rest['pinky1.' + side].translation - wrist
+        y = middle.normalized()
+        z = index.cross(pinky).normalized() * (1 if side == 'l' else -1)
+        x = y.cross(z).normalized(); z = x.cross(y).normalized()
+        palm = Matrix((x, y, z)).transposed().to_quaternion()
+        align['c_hand_fk.' + side] = donor_rest[prefix + '_Wrist'].to_quaternion() @ palm.inverted()
+
     # A preset FBX's bind pose can be the first running/kicking frame. Its
     # ankle and toe bases are therefore not necessarily standing flat. Match
     # the anatomical foot directions too; copying only their deltas makes a
@@ -461,6 +491,8 @@ if args.walk_cycle:
     print('WALK_FLAT_SOLE_REFERENCE', {k:round(math.degrees(v),2) for k,v in walking_neutral_pitch.items()},flush=True)
 min_feet = min(control_rest['c_foot_fk.' + s].translation.z for s in ('l', 'r'))
 foot_samples = []
+twist_continuity = {}
+twist_branch_corrections = {}
 for frame_index,frame in enumerate(frame_times):
     scene.frame_set(math.floor(frame),subframe=frame%1)
     for pb in arm.pose.bones:
@@ -558,7 +590,29 @@ for frame_index,frame in enumerate(frame_times):
     targets = {}
     for i in bone_ids:
         name = nodes[i]['name']
-        posed = C @ evaluated.matrix_world @ evaluated.pose.bones[name].matrix @ C.inverted()
+        native = evaluated.pose.bones[name].matrix.copy()
+        # Auto-Rig Pro's half-twist helpers can jump by 180 degrees when
+        # its Euler twist extraction crosses the +/-pi branch. Choose the
+        # continuous lift relative to the same limb, keeping actual joints,
+        # authored wrist motion, translations, scales and affine terms.
+        if any(name.startswith('c_' + part + '_twist_2.') for part in ('arm', 'forearm', 'thigh', 'leg')):
+            part, side = name.split('_twist_2.')
+            anchor = part + ('.' if part == 'c_arm' else '_stretch.') + side
+            if part == 'c_arm': anchor = 'c_arm_twist.' + side
+            if part == 'c_thigh': anchor = 'c_thigh_twist.' + side
+            reference = evaluated.pose.bones[anchor].matrix.to_quaternion().inverted()
+            relative = reference @ native.to_quaternion()
+            alternate = native @ Matrix.Rotation(math.pi, 4, 'Y')
+            alternate_relative = reference @ alternate.to_quaternion()
+            previous = twist_continuity.get(name)
+            def distance(q):
+                angle = previous.rotation_difference(q).angle
+                return min(angle, 2 * math.pi - angle)
+            if previous is not None and distance(alternate_relative) + 1e-5 < distance(relative):
+                native = alternate; relative = alternate_relative
+                twist_branch_corrections[name] = twist_branch_corrections.get(name, 0) + 1
+            twist_continuity[name] = relative
+        posed = C @ evaluated.matrix_world @ native @ C.inverted()
         targets[i] = posed @ rest_world[name].inverted() @ worlds[i]
         point=targets[i].translation
         for axis in range(3):
@@ -611,7 +665,7 @@ for offset in range(0,len(frames[0]),12):
 loop_blend = 0 if seam_rotation < .25 and seam_distance < .0005 else .1
 result = {'version': 1, 'id': args.name, 'label': args.name.title(),
           'source': ('Meshy preset' if args.preset else 'Meshy text-to-motion') + ', retargeted to the original Tia rig',
-          'retargeting': {'version': 11, **({'pelvisReference': 'hip-midpoint-to-pelvis'} if args.preset else {}), 'stationaryRoot': args.stationary_root, 'supportedStance': args.supported_stance, 'motionFit':'source-amplitude-and-initial-body-orientation',
+          'retargeting': {'version': 12, **({'armReference': 'anatomical-elbow-plane', 'wristReference': 'authored-palm-forward-and-normal'} if args.preset else {}), 'twistContinuity': 'limb-relative-half-turn-unwrapping', 'twistBranchCorrections': twist_branch_corrections, **({'pelvisReference': 'hip-midpoint-to-pelvis'} if args.preset else {}), 'stationaryRoot': args.stationary_root, 'supportedStance': args.supported_stance, 'motionFit':'source-amplitude-and-initial-body-orientation',
                           **({'walkingFit':'source-hip-and-arm-swing-with-neutral-sole-reference'} if args.walk_cycle else {}),
                           'sourceFrameRange': [start,end], 'walkingCycle': args.walk_cycle,
                           'loopBlendSeconds': loop_blend, 'seamRotationDegrees': round(seam_rotation,4), 'pelvisTranslation': 'xyz', 'travelScale': round(travel_scale, 7), 'inPlace': args.in_place,

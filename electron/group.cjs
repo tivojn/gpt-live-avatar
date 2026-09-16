@@ -2,6 +2,7 @@
 const {BrowserWindow,ipcMain,screen,Menu}=require('electron');
 const path=require('node:path');
 const {GroupContext}=require('./group-context.cjs');
+const {musicMenu}=require('./music-menu.cjs');
 const {normalizeDelegate,usesCodexActions,actionEngine}=require('./delegate.cjs');
 const cleanText=(s,max)=>typeof s==='string'?s.trim().slice(0,max):'';
 function conversationRequest(request,catalogue){
@@ -48,7 +49,12 @@ function setupGroup(deps){
  ipcMain.handle('gla:group:open',(event)=>{if(event.sender.getURL()!==deps.origin+'/avatar.html'&&event.sender.getURL()!==deps.origin+'/settings.html')return false;return open();});
  ipcMain.handle('gla:group:catalogue',guard(()=>{const settings=deps.getSettings();return {avatars:catalogue(),looks:settings.avatarLooks||{},defaults:settings.appearanceDefaults,voices:deps.voices,groupVoices:settings.groupVoices||{},conversationSounds:settings.conversationSounds!==false,quality:settings.quality,hardware:settings.hardware,selected:deps.getConfig().avatar,hasKey:settings.hasKey,agentEnabled:settings.agentEnabled,agentFolder:settings.agentFolder,userHome:settings.userHome,reasoning:settings.reasoningMode==='delegate'?settings.delegate.model:'gpt-5.6-luna'};}));
  ipcMain.handle('gla:group:reply',guard(async(event,request)=>{const r=conversationRequest(request,catalogue()),config=deps.getConfig();const choice=config.reasoningMode==='delegate'?config:normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:'gpt-5.6-luna'});if(config.agentEnabled&&request.humanRequest&&request.human?.enabled){const text=cleanText(request.humanRequest,6000);const context=shared;const result=await deps.agentAnswer(event.sender,{id:r.id,turnId:request.turnId||r.id,history:context.history({...request,humanRequest:text},catalogue()),character:catalogue().find(a=>a.slug===request.speaker)?.name,onReceipt:receipt=>{const entry=context.record({id:request.turnId||r.id,speaker:request.speaker,request:text,receipt});if(entry&&!event.sender.isDestroyed())event.sender.send('gla:group:context',entry);}});return {...result,sharedActions:context.context()};}return deps.backend.answer(event.sender.id,r.id,{...config,...choice,personaName:catalogue().find(a=>a.slug===request.speaker)?.name},r.history,r.instructions);}));
- ipcMain.handle('gla:group:voice',guard(async(_event,{sdp,voice,text,delivery,slot:wanted}={})=>{const speechText=cleanText(text,1200),speechDelivery=cleanText(delivery,160);if(!speechText||!deps.voices.includes(voice))throw Error('Choose a voice and a spoken line.');const slot=wanted==='prepare'?'prepare':'speak';pendingVoice.get(slot)?.abort();const abort=new AbortController();pendingVoice.set(slot,abort);try{return await deps.createSession({sdp,voice,preview:true,speechText,speechDelivery},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}finally{if(pendingVoice.get(slot)===abort)pendingVoice.delete(slot);}}));
+ // A line lands better when the voice knows the play it is standing in, so
+ // the stage note carried by each cue becomes plain instructions here.
+ const sceneNote=c=>{if(!c||typeof c!=='object')return '';
+  const role=cleanText(c.role,80),scene=cleanText(c.scene,120),to=cleanText(c.to,80),after=cleanText(c.after,300),note=cleanText(c.note,200);
+  return [role?'You are playing '+role+'.':'',scene?'The scene: '+scene+'.':'',to?'You are speaking to '+to+'.':'',after?'The line spoken just before yours was - '+after:'',note?'The director asks for: '+note+'.':''].filter(Boolean).join(' ');};
+ ipcMain.handle('gla:group:voice',guard(async(_event,{sdp,voice,text,delivery,context,slot:wanted}={})=>{const speechText=cleanText(text,1200),speechDelivery=cleanText(delivery,160),speechContext=sceneNote(context);if(!speechText||!deps.voices.includes(voice))throw Error('Choose a voice and a spoken line.');const slot=wanted==='prepare'?'prepare':'speak';pendingVoice.get(slot)?.abort();const abort=new AbortController();pendingVoice.set(slot,abort);try{return await deps.createSession({sdp,voice,preview:true,speechText,speechDelivery,speechContext},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}finally{if(pendingVoice.get(slot)===abort)pendingVoice.delete(slot);}}));
  ipcMain.handle('gla:group:live',guard(async(_event,request={})=>{
   const cast=catalogue(),r=conversationRequest({...request,id:'live-session'},cast);
   if(!deps.voices.includes(request.voice))throw Error('Choose a supported voice.');
@@ -67,6 +73,7 @@ function setupGroup(deps){
   await new Promise(resolve=>Menu.buildFromTemplate([
    {label:actor.name,enabled:false},
    {label:'Ask '+actor.name+' to do something…',enabled:deps.getConfig().agentEnabled,click:send('agent')},
+   ...musicMenu(request,send,actor.slug),
    deps.avatarReasoningMenu(),
    deps.avatarPermissionsMenu(),
    ...deps.avatarCatalogueMenu(request.catalogue,send),

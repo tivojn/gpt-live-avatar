@@ -18,6 +18,7 @@ async function main(){
  }
  const packs=Object.values(index.avatars).flatMap(a=>[...Object.values(a.mac),a.motionUpdate.package]),bytes=packs.reduce((n,p)=>n+p.bytes,0);
  if(bytes+2*1024*1024>require('../electron/asset-download.json').storageCapBytes)throw Error('Motion update exceeds the storage cap.');
+ index.publishedAt=new Date().toISOString();
  const payload=JSON.stringify(index),envelope={payload,signature:crypto.sign(null,Buffer.from(payload),secrets.privateKey).toString('base64')};
  fs.writeFileSync(path.join(out,'index.json'),JSON.stringify(envelope));
  const objects=packs.flatMap(p=>p.parts);objects.push({file:'index.json',bytes:fs.statSync(path.join(out,'index.json')).size,sha256:await hash(path.join(out,'index.json'))});

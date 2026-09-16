@@ -7,7 +7,7 @@ const surface=m=>m.userData.avatarPortrait||({Top_Tia01A_M:'skin',Hed_Hair_21A_P
 // Head offsets are measured in each source rig's units; face geometry stays intact.
 const portraitSettings={
   tia:{displayTransform:'filmic',headOffset:.10050046,exposure:1.2,softExposure:1.35,hairEnvironment:.14,keyColor:0xfff0e9,rim:3,diffusionRadius:.16,channelVariance:[2.25,.027777778,.006944444],skinTint:[.42548996,.002338724,0]},
-  sarah:{displayTransform:'filmic',headOffset:.10050046,exposure:1.2,softExposure:1.35,hairEnvironment:.14,hairTransport:.25,keyColor:0xfff0e9,rim:2.5,diffusionRadius:.16,channelVariance:[2.25,.027777778,.006944444],skinTint:[.42548996,.004867622,0]},
+  sarah:{displayTransform:'filmic',headOffset:.10050046,exposure:1.2,softExposure:1.35,hairEnvironment:.05,hairSpecular:.06,hairTransport:.25,keyColor:0xfff0e9,rim:2.5,diffusionRadius:.16,channelVariance:[2.25,.027777778,.006944444],skinTint:[.42548996,.004867622,0]},
   iselda:{displayTransform:'filmic',headOffset:.0921685,exposure:1.5,softExposure:1.65,hairEnvironment:.2,keyColor:0xfff4fc,rim:4},
   'ming-mei':{displayTransform:'filmic',headOffset:.080164785,exposure:1.5,softExposure:1.65,hairEnvironment:.5,keyColor:0xfff4fc,rim:4,diffusionRadius:.14},
   seraphim:{displayTransform:'agx',headOffset:.10050046,exposure:1.2,softExposure:1.32,hairEnvironment:.065,keyColor:0xffe9e2,rim:2.5,diffusionRadius:.15,aoStrength:.5,channelVariance:[2.25,.027777778,.006944444]},
@@ -52,6 +52,9 @@ export class AvatarPortrait {
 
   combineHair(){
     const records=this.meshes.filter(r=>r.hair),nodes=records.map(r=>r.node),first=nodes[0];
+    // Contact deforms hair after skinning and also owns CPU vertex queries.
+    // The rigid-hair merge below cannot discard that attribute or controller.
+    if(nodes.some(n=>n.geometry.hasAttribute('avatarHairRest')||(Array.isArray(n.material)?n.material:[n.material]).some(m=>m.defines?.AVATAR_HAIR_CONTACT)))return;
     const attrs=['position','normal','uv','skinIndex','skinWeight'];
     // Merge only compatible sections. Other avatars retain their own rigs.
     if(nodes.length<2||nodes.some(n=>!n.isSkinnedMesh||n.material!==first.material||n.parent!==first.parent||!n.matrix.equals(first.matrix)||
@@ -283,7 +286,7 @@ export class AvatarPortrait {
         // Scattering is not metalness. Metallic hair plus the studio panels
         // produced the silver bands across Sarah's blonde cards. Keep a
         // broad, restrained dielectric highlight without changing her color.
-        if(settings.hairTransport!==undefined){m.metalness=0;m.roughness=.65;m.specularIntensity=.15;}
+        if(settings.hairTransport!==undefined){m.metalness=0;m.roughness=.65;m.specularIntensity=settings.hairSpecular??.15;}
         m.onBeforeCompile=(shader,renderer)=>{
           b.onBeforeCompile.call(m,shader,renderer);
           // Filter subpixel normal variation instead of rounding hair cards
@@ -404,25 +407,30 @@ export class AvatarPortrait {
     const n=record.node,ix=geometry.index;
     if(!ix||ix.count%3||geometry.groups.length>1)return;
     let c=record.order;
-    // The hair rig follows the head. Sorting depends on direction, not zoom,
-    // so a pinch does not repeatedly skin/sort the entire hair geometry.
     const head=this.avatar.bones.head||n;
     const inverse=new THREE.Matrix4().copy(head.matrixWorld).invert();
-    if(!c||c.geometry!==geometry){
-      // Tia's hair has no morphs or independently simulated strands. Cache
-      // triangle centres in head space once, rather than CPU-skinning nearly
-      // 175K hair vertices every time the camera or head turns.
-      const source=ix.array.slice(),positions=new Float32Array(geometry.attributes.position.count*3),p=new THREE.Vector3();
+    const now=performance.now(),fresh=!c||c.geometry!==geometry;
+    // Contact bends the tails relative to the head as the chest moves. A
+    // camera-only cache would keep sorting their former, rigid positions.
+    const contact=geometry.hasAttribute('avatarHairRest')&&this.avatar.bones.chest
+      ? inverse.clone().multiply(this.avatar.bones.chest.matrixWorld) : null;
+    const deformed=Boolean(contact&&(!c?.contact||contact.elements.some((v,i)=>Math.abs(v-c.contact.elements[i])>1e-5)));
+    const direction=camera.getWorldPosition(new THREE.Vector3()).applyMatrix4(inverse).normalize();
+    if(!fresh&&(now-c.lastAt<65||(!deformed&&direction.distanceToSquared(c.direction)<.00015)))return;
+    const started=now;
+    if(fresh){
+      c=record.order={geometry,source:ix.array.slice(),positions:new Float32Array(geometry.attributes.position.count*3),
+        centers:new Float32Array(ix.count),z:new Float32Array(ix.count/3),counts:new Uint32Array(512),offsets:new Uint32Array(512),
+        direction:new THREE.Vector3(Infinity,0,0),lastAt:-Infinity,contact:null};
+    }
+    if(fresh||deformed){
+      const {source,positions,centers}=c,p=new THREE.Vector3();
       const matrix=inverse.clone().multiply(n.matrixWorld);n.skeleton?.update();
       for(let i=0;i<positions.length/3;i++){n.getVertexPosition(i,p).applyMatrix4(matrix);p.toArray(positions,i*3);}
-      const centers=new Float32Array(ix.count);
       for(let t=0;t<ix.count/3;t++)for(let k=0;k<3;k++)centers[t*3+k]=(positions[source[t*3]*3+k]+positions[source[t*3+1]*3+k]+positions[source[t*3+2]*3+k])/3;
-      c=record.order={geometry,source,centers,z:new Float32Array(ix.count/3),counts:new Uint32Array(512),offsets:new Uint32Array(512),direction:new THREE.Vector3(Infinity,0,0),lastAt:-Infinity};
+      c.contact=contact?.clone()||null;
     }
-    const direction=camera.getWorldPosition(new THREE.Vector3()).applyMatrix4(inverse).normalize();
-    const now=performance.now();
-    if(direction.distanceToSquared(c.direction)<.00015||now-c.lastAt<65)return;
-    const started=now;c.direction.copy(direction);c.lastAt=now;
+    c.direction.copy(direction);c.lastAt=now;
     const e=new THREE.Matrix4().multiplyMatrices(camera.matrixWorldInverse,head.matrixWorld).elements;
     let low=Infinity,high=-Infinity;
     for(let t=0;t<c.z.length;t++){

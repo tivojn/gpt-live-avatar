@@ -76,7 +76,7 @@
   <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Avatar</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span><button type="button" class="icon" id="composerClose" hidden title="Close typing controls" aria-label="Close typing controls"><svg viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
   <div id="taskUpdate" hidden role="status" aria-live="polite"></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
-  <p id="composerTip" hidden>Ask about files or a webpage. Tap the mic or double-click my head to talk.</p>
+  <p id="composerTip" hidden>Try “Sing along”, “Dance along”, or “Do a backflip”. Tap the mic or double-click my head to talk.</p>
   <div class="row" id="steerRow" hidden>
     <button class="icon" id="muteBtn" title="Mute microphone"><svg class="on" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><svg class="off" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M3 17 17 3"/></svg></button>
     <button class="icon" id="hushBtn" title="Stop talking"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg></button>
@@ -89,7 +89,9 @@
 <div id="listen" class="hidden" role="button" tabindex="0" aria-label="Show conversation"><span class="listen-orb" aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg></span><span class="meter" id="listenMeter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span id="listenText">Listening</span></div>
 <div id="toast"></div>
 <script type="module" src="/avatar3d.js"></script>
+<script type="module" src="/sing.js"></script>
 <script type="module">
+import { MusicCommandRouter } from '/music-command.js';
 import {closeupFit} from '/avatar-closeup.js';
 import {zoomScale,zoomFit,keepZoomVisible} from '/avatar-zoom.js';
 import { installAgentUI } from './agent-client.js';
@@ -137,8 +139,26 @@ const setStatus = (text, dot = '') => { conversationStatus={text,dot};paintStatu
 const taskStatus = (_message, update) => { if(!update||!isCurrentCharacter(update.character))return;taskActivity=update;if(update.active)composerResult=null;syncBubble();placeBubble(); };
 const bubblePolicy = new BubblePolicy();
 const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
+const singing = () => { try { return window.gla_sing?.() || null; } catch { return null; } };
+let wasPerforming = false;
+// Whatever she is doing, this ends it. The music stopping is handled inside the
+// sing session, but a viewer who simply wants her to stand still needs a way in
+// that does not depend on her hearing anything.
+const stopPerforming = () => {
+  let stopped = false;
+  try { stopped = Boolean(window.gla_sing_stop?.()); } catch {}
+  try { if (avatar?.motion?.active) { avatar.motion.stop(); stopped = true; } } catch {}
+  return stopped;
+};
 const showBubble = (ms = 9000) => { bubblePolicy.incoming(performance.now(), ms); syncBubble(); };
 const syncBubble = () => {
+  const performing = Boolean(singing() || avatar?.motion?.active);
+  const beganPerforming = performing && !wasPerforming;
+  wasPerforming = performing; // update before blur can re-enter syncBubble
+  if (beganPerforming && !questionOpen) {
+    composerOpen = false;
+    if (bubble.contains(document.activeElement)) document.activeElement.blur();
+  }
   const task=currentTask(), forced=composerOpen||questionOpen, connected=live.state==='connected';
   const detail=composerResult&&task?.id===composerResult.id ? composerResult.text : displayText(task?.detail||'');
   bubblePolicy.activity=Boolean(task);
@@ -150,15 +170,17 @@ const syncBubble = () => {
   bubblePolicy.setMode(bubbleMode());
   if (bubbleMode() === 'off' && !forced && bubble.contains(document.activeElement)) document.activeElement.blur();
   bubblePolicy.editor = connected && bubble.contains(document.activeElement);
-  bubble.classList.toggle('hidden', !(forced || bubblePolicy.visible(performance.now())));
-  $('#steerRow').hidden = !forced && !connected;
+  // Keep automatic status bubbles off the performance. A newly opened input
+  // or agent question stays visible, including before it receives focus.
+  bubble.classList.toggle('hidden', !(forced || (!performing && bubblePolicy.visible(performance.now()))));
+  $('#steerRow').hidden = false; // Every visible bubble accepts a typed request.
   $('#composerClose').hidden = !composerOpen;
   $('#composerTip').hidden = !forced || live.state !== 'idle';
-  $('#steer').placeholder = connected ? 'Say something or follow up…' : 'Try “Do a backflip”…';
+  $('#steer').placeholder = connected ? 'Say something or follow up…' : 'Ask me to do something…';
   const busy=agentUI?.isBusy(currentCharacter());
-  $('#steerBtn').disabled = live.state === 'connecting' || (!connected && Boolean(busy));
-  $('#hushBtn').hidden = !connected && !busy;
-  $('#hushBtn').title = busy ? 'Stop task' : 'Stop talking';
+  $('#steerBtn').disabled = live.state === 'connecting' || (!connected && Boolean(busy) && !musicRouter.parse($('#steer').value));
+  $('#hushBtn').hidden = !connected && !busy && !performing;
+  $('#hushBtn').title = performing ? 'Stop dancing' : busy ? 'Stop task' : 'Stop talking';
   $('#hushBtn').setAttribute('aria-label', $('#hushBtn').title);
   $('#endBtn').hidden = live.state === 'idle';
   $('#muteBtn').disabled = live.state === 'connecting';
@@ -171,7 +193,7 @@ const openComposer = character => {
 };
 const closeComposer = () => { composerOpen=false;if(bubble.contains(document.activeElement))document.activeElement.blur();syncBubble();placeBubble(); };
 $('#composerClose').onclick=closeComposer;
-$('#steer').addEventListener('focus', syncBubble);
+$('#steer').addEventListener('focus', () => { composerOpen=true;syncBubble(); });
 $('#steer').addEventListener('blur', syncBubble);
 setInterval(syncBubble, 100);
 const BUBBLE_RESERVE = 190; // fixed render headroom; a longer bubble scrolls without resizing her surface
@@ -183,7 +205,9 @@ let audioSignal = silentSpeech(), currentViseme = 'sil', speaking = false;
 // Voice preview temporarily mutes this output without touching the microphone.
 const audio = { get muted(){return speechMuted;}, set muted(v){speechMuted=Boolean(v);if(speechOutput)speechOutput.muted=speechMuted;}, play(){return audioContext?.resume()||Promise.resolve();} };
 const sampleAudio = () => {
-  audioSignal = speechOutput?.sample() || silentSpeech();
+  const voice=speechOutput?.sample();
+  const music=window.gla_sing_sample?.(settings.avatar?.slug);
+  audioSignal = voice?.speaking && voice.rms>.003 ? voice : music || voice || silentSpeech();
   currentViseme = audioSignal.viseme; speaking = audioSignal.speaking;
 };
 const attachRemoteAudio = stream => {
@@ -236,6 +260,7 @@ const downscaleTextures = (instance, maxSize) => {
 };
 let loadGeneration = 0, loadingAvatar = false, avatarSwitchGeneration = 0, suspended=false;
 async function loadAvatar() {
+  window.gla_sing_stop?.();
   if(suspended)return;
   const generation = ++loadGeneration; loadingAvatar = true;
   const info = settings.avatar;
@@ -593,7 +618,8 @@ function consumeReaction(now) {
   else void performAction('clip:' + reaction).catch(e => toast(e.message));
 }
 let latestUser = '', turnID = '';
-const considerReply = reply => { if (!companion) return; companion.consider(latestUser, reply, undefined, performance.now(), { clips: avatar && avatar.motion ? avatar.motion.clips : null, turnID }); };
+let musicTurnID='';
+const considerReply = reply => { if (!companion || musicTurnID===turnID) return; companion.consider(latestUser, reply, undefined, performance.now(), { clips: avatar && avatar.motion ? avatar.motion.clips : null, turnID }); };
 
 // ---------------------------------------------------------------- live session
 const live = new LiveClient({ createSession: (sdp, options) => gla.createLiveSession(sdp, options) });
@@ -602,6 +628,41 @@ const delegate = new DelegateClient(live,gla.delegate,message=>{
  if(message==='Thinking…'){delegateStatusID='delegate-'+crypto.randomUUID();taskStatus(message,{id:delegateStatusID,label:'Working…',detail:'',active:true,until:Infinity});}
  else if(taskActivity?.id===delegateStatusID){taskStatus(message,{id:delegateStatusID,label:message?'Couldn’t finish':'',detail:message||'',state:message?'error':'cancelled',active:false,until:message?performance.now()+8000:0});}
 });
+const musicRouter = new MusicCommandRouter({
+  characters: () => [{slug:settings.avatar?.slug, name:currentCharacter()}],
+  character: () => settings.avatar?.slug || currentCharacter(),
+  execute: (action,args,cancelled) => {
+    if(typeof window.gla_sing_command!=='function')throw Error('Music performance is unavailable in this build.');
+    return window.gla_sing_command(action,args,cancelled);
+  },
+  before: (_command,meta) => {
+    musicTurnID=meta.id || turnID;
+    delegate.cancel(); live.stopSpeaking();
+    if(companion)companion.pendingReaction=null;
+    if(live.state==='connected')live.appendInstructions('The app is handling the confirmed music performance request. Wait for its verified result; do not delegate, substitute an ordinary dance, or claim it started yet.');
+  },
+  onResult: (outcome,meta) => {
+    if(meta.id!==musicTurnID || outcome.cancelled)return;
+    $('#lineAssistant').textContent=displayText(outcome.text);
+    $('#lineAssistant').classList.remove('pending');
+    $('#steer').blur();composerOpen=false;showBubble(6000);syncBubble();
+    if(live.state==='connected'){
+      live.remember('assistant',outcome.text);
+      live.appendCommentary('Verified music-control result: '+outcome.text+' Briefly acknowledge this result, then wait. Do not repeat the action.');
+    }
+  }
+});
+// Prevent a late GPT-Live delegation for an already handled music instruction
+// from executing a second time. Speech final IDs and DelegateClient.turn agree.
+delegate.localRequest = request => {
+  const text=[...request.history].reverse().find(x=>x.role==='user')?.text || '';
+  const confirmed=musicRouter.resultFor(request.turnId);
+  if(confirmed)return confirmed;
+  // A delegation can arrive before the user's final transcript. Suppress that
+  // duplicate path, but wait for the normal user-final handler to execute.
+  return musicRouter.parse(text)?{handled:true,cancelled:true}:{handled:false};
+};
+
 agentUI=installAgentUI({api:gla.agent,name:currentCharacter,onStatus:taskStatus,settings:()=>settings,onOpen:openComposer,questionHost,onQuestionChange:()=>{syncQuestionHosts();syncBubble();placeBubble();},execute:async(action,args,cancelled)=>{
  if(!avatar||!ready)throw Error('The avatar is still loading.');
  const slug=settings.avatar?.slug,name=settings.avatar?.name||settings.personaName;
@@ -615,6 +676,7 @@ agentUI=installAgentUI({api:gla.agent,name:currentCharacter,onStatus:taskStatus,
   if(companion?.destination)throw Error('Movement has not reached the destination yet.');return {ok:true,character:slug,destination:args.destination,reached:true};
  }
  if(action==='play_motion'){if(!avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');await performAction('clip:'+args.motion);return {ok:avatar.motion.active?.id===args.motion,character:slug,motion:args.motion};}
+ if(['sing_along','dance_along','stop_singing'].includes(action))return window.gla_sing_command(action,args,cancelled);
  throw Error('Unknown avatar action.');
 }});
 
@@ -622,8 +684,14 @@ const preview = new VoicePreview({ createSession: (sdp, options) => gla.createLi
   notify: state => { gla.reportVoicePreview(state); if (state.error) toast(state.error, 6000); else if (state.state !== 'idle') toast(`${state.state === 'connecting' ? 'Loading' : 'Playing'} ${state.voice} voice preview…`, 3000); } });
 addEventListener('pagehide', () => preview.stop());
 window.gla_live = live; // debug handle
-Object.defineProperty(window,'gla_speech',{get:()=>speechOutput}); // QA: output timing, no credentials
+window.gla_music_commands=musicRouter;
+Object.defineProperty(window,'gla_speech',{get:()=>speechOutput,set:value=>{speechOutput=value;}}); // QA: output timing, no credentials
 window.gla_preview = preview; // QA: inspect preview transport without exposing credentials
+window.gla_sing_targets=character=>{
+ const names=[settings.avatar?.slug,currentCharacter()].filter(Boolean).map(x=>x.toLowerCase());
+ if(!avatar||!ready||character&&!names.includes(String(character).toLowerCase())&&!['all','everyone'].includes(String(character).toLowerCase()))return [];
+ return [{id:settings.avatar.slug,name:currentCharacter(),avatar,play:id=>performAction('clip:'+id),cancel:()=>{++actionGeneration;}}];
+};
 Object.defineProperty(window, 'gla_avatar', { get: () => avatar }); // debug handle
 live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
 live.addEventListener('error', ({ detail }) => eventLog.push([performance.now() | 0, 'error:' + detail.message]));
@@ -650,7 +718,13 @@ live.addEventListener('transcript', ({ detail }) => {
   if (role === 'user') {
     lastUserActivity = performance.now();
     if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } }
-    else latestUser = text;
+    else {
+  latestUser=text;
+  if(musicRouter.parse(text)){
+    turnID=detail.id;
+    void musicRouter.run(text,{id:detail.id});
+  }
+}
   } else if (final) { assistantTurn = assistantTurn ? assistantTurn + ' ' + text : text; considerReply(assistantTurn); }
 });
 // Hang-up rules: no session may run while she cannot be seen, and none may
@@ -710,6 +784,16 @@ const toggleCall = async () => {
 // Live typing is spoken conversation; idle typing runs the selected action engine.
 const steer = async () => {
   const text=$('#steer').value.trim();if(!text)return;
+if(musicRouter.parse(text)){
+  const id='typed-music-'+crypto.randomUUID();
+  turnID=id;latestUser=text;assistantTurn='';
+  $('#steer').value='';$('#lineUser').textContent=displayText(text);
+  $('#lineUser').classList.remove('pending');$('#lineAssistant').textContent='';
+  if(live.state==='connected')live.remember('user',text);
+  await musicRouter.run(text,{id});
+  return;
+}
+
   if(live.state==='connected'){
     delegate.cancel();live.remember('user',text);live.appendCommentary(text);lastUserActivity=performance.now();$('#steer').value='';
     turnID='typed-'+Date.now().toString(36);assistantTurn='';latestUser=text;
@@ -732,6 +816,7 @@ const toggleMute = () => { live.setMuted(!live.muted); $('#muteBtn').classList.t
 $('#steerBtn').onclick = () => void steer();
 $('#muteBtn').onclick = () => { if(live.state==='idle')void toggleCall();else if(live.state==='connected')toggleMute(); };
 $('#hushBtn').onclick = () => {
+  if(stopPerforming()){syncBubble();toast('Stopped.');return;}
   if(agentUI.isBusy(currentCharacter())){++composerGeneration;agentUI.stop(currentCharacter());syncBubble();return;}
   delegate.cancel();live.stopSpeaking();toast('Asked her to stop.');
 };
@@ -765,7 +850,7 @@ function chooseAvatarOption(key, value) {
   persistAppearance();
   wake();
 }
-const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode(), catalogue: catalogue() });
+const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode(), catalogue: catalogue(), performing: Boolean(singing() || avatar?.motion?.active), music: singing(), musicPending: Boolean(window.gla_sing_pending?.()), musicAvailable: Boolean(ready && avatar && !avatar.disposed), character: settings.avatar?.slug });
 addEventListener('contextmenu', event => {
   event.preventDefault();
   if (bubble.contains(event.target) || $('#listen').contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
@@ -774,7 +859,9 @@ gla.onMenuAction(id => {
   if (id === 'agent') agentUI.open(currentCharacter());
   else if (id === 'call') toggleCall();
   else if (id === 'mute') toggleMute();
-  else if (id === 'hush') { delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); }
+  else if (id === 'hush') { stopPerforming(); delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); }
+  else if (id === 'stop-performing') { toast(stopPerforming() ? 'Stopped.' : 'She is already still.'); syncBubble(); }
+  else if (id === 'music:sing' || id === 'music:dance') void musicRouter.run(id === 'music:sing' ? 'Sing along to the current song' : 'Dance along to the current song', {id:'menu-music-'+crypto.randomUUID(),character:settings.avatar?.slug}).catch(e=>toast(e.message));
   else if (id === 'steer') agentUI.open(currentCharacter());
   else if (id.startsWith('avatar:')) void gla.selectAvatar(id.slice(7));
   else if (id.startsWith('voice-preview:')) { const voice = id.slice(14); if (voice) void preview.start(voice); else preview.stop(); }
