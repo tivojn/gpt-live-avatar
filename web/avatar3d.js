@@ -1075,6 +1075,11 @@ class Avatar3D {
       this.setChannel(weights, 'angry', anger * .4);
     }
 
+    // Deliberate expressions (a listening reaction) name the shapes they want;
+    // a rig without a shape simply does not show it.
+    if (mood.channels) for (const [name, value] of Object.entries(mood.channels))
+      if (this.channels.has(name)) this.setChannel(weights, name, clamp(Number(value) || 0, 0, 1));
+
     this.appearance?.expression(weights,this.options?.selection||{},Boolean(state.speaking));
     this.appearance?.face.expression(weights,this.options?.selection||{},Boolean(state.speaking),now);
     // Write morph influences: zero everything the renderer owns, then apply.

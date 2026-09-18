@@ -18,8 +18,9 @@ const { PERMISSION_CHOICES, validPermission, normalizePermission } = require('./
 const { ENGINES, permissions, permissionPatch, installed:installedEngines, providerMenu, reasoningMenu } = require('./agent-engines.cjs');
 const { historyItems } = require('./live-config.cjs');
 const { DelegateAuth } = require('./delegate-auth.cjs');
+const { Instinct } = require('./instinct.cjs');
 const { DelegateBackend, normalizeDelegate, selected, usesCodexServer, usesCodexActions, reasoningEngine, actionEngine, MODEL_CHOICES } = require('./delegate.cjs');
-let delegateAuth, delegateBackend, groupManager, showManager, agentManager, appInfo;
+let delegateAuth, delegateBackend, groupManager, showManager, agentManager, appInfo, instinct;
 const appearanceDefaults = require('./default-appearance.json');
 const defaultAvatar = require('./default-avatar.json');
 const voiceDefaults = require('./default-voices.json');
@@ -73,6 +74,8 @@ const DEFAULTS = {
   shortcuts: DEFAULT_SHORTCUTS,
   bubble: true,
   conversationSounds: true,
+  instinctEnabled: true, // TypeSafe Jev; has no effect until a TypeSafe key is saved
+  instinctListening: true,
   bubbleMode: 'auto', // incoming replies, always visible, or hidden
 };
 
@@ -137,8 +140,12 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, defaultAvatar, userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), avatar: avatarInfo(),
+  return { ...config, defaultAvatar, userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
+}
+function instinctSettings(){
+  const status=instinct?.status()||{hasKey:false,state:'off'};
+  return {...status,enabled:config.instinctEnabled!==false,listening:config.instinctListening!==false,active:config.instinctEnabled!==false&&status.state==='ready'};
 }
 function broadcastSettings() {
   const value = publicSettings();
@@ -396,6 +403,7 @@ function updateSettings(patch) {
   const previousAvatar=config.avatar;
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentFollowReasoning,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings]);
   if(typeof patch.conversationSounds==='boolean')config.conversationSounds=patch.conversationSounds;
+  for(const key of ['instinctEnabled','instinctListening'])if(typeof patch[key]==='boolean')config[key]=patch[key];
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(ENGINES[patch.agentEngine])config.agentEngine=patch.agentEngine;
   if(typeof patch.agentFollowReasoning==='boolean')config.agentFollowReasoning=patch.agentFollowReasoning;
@@ -450,6 +458,17 @@ delegateIPC('gla:delegate:cancel-login',(_event,p)=>{delegateAuth.cancel(p);retu
 delegateIPC('gla:delegate:logout',(_event,p)=>{delegateBackend.cancelAll();delegateAuth.signOut(p);return {};});
 delegateIPC('gla:delegate:xai-key',async(_event,key)=>{await delegateAuth.setXAIKey(key);return {};});
 delegateIPC('gla:delegate:clear-xai-key',()=>{delegateBackend.cancelAll();delegateAuth.clearXAIKey();return {};});
+// Instinct: the TypeSafe key stays in main; the renderer sends transcript
+// text and receives only a validated decision.
+delegateIPC('gla:instinct:key',async(_event,key)=>{await instinct.setKey(key);return {};});
+delegateIPC('gla:instinct:clear-key',()=>{instinct.clearKey();return {};});
+delegateIPC('gla:instinct:decide',async(_event,request)=>({decision:config.instinctEnabled===false?null:await instinct.decide(request)}));
+delegateIPC('gla:instinct:test',async()=>{
+  const started=Date.now(),decision=await instinct.decide({kind:'reply',user:'Can you do a kung fu punch?',reply:"Sure, I'll try a kung fu punch!",clips:[{id:'kung-fu-punch',label:'Kung Fu Punch',category:'Kung fu & fitness'},{id:'jazz-dance',label:'Jazz Dance',category:'Dances'}]});
+  broadcastSettings();
+  if(!decision)throw Error(instinct.status().lastError||'Jev did not answer.');
+  return {latencyMs:Date.now()-started,performs:decision.performs,choice:decision.choice};
+});
 delegateIPC('gla:delegate:models',async()=>({models:await delegateBackend.models(config)}));
 delegateIPC('gla:delegate:answer',async(event,{id,history,turnId}={})=>{
   if(config.agentEnabled&&event.sender===avatarWindow?.webContents)return agentManager.answer(event.sender,{id,history,turnId});
@@ -695,6 +714,9 @@ ipcMain.handle('gla:quit', () => { app.quit(); return true; });
 app.whenReady().then(async () => {
   loadConfig();
   delegateAuth=new DelegateAuth({directory:path.join(app.getPath('userData'),'delegate-credentials'),safeStorage,readOpenAIKey:readApiKey,openExternal:url=>shell.openExternal(url),onChange:broadcastSettings});
+  // Chromium's network stack keeps the TypeSafe connection alive between turns
+  // (about 370 ms per decision); Node's fetch reconnected every time (1.1 s).
+  instinct=new Instinct({directory:path.join(app.getPath('userData'),'delegate-credentials'),safeStorage,fetchImpl:(url,init)=>net.fetch(url,init),onChange:broadcastSettings});
   delegateBackend=new DelegateBackend({auth:delegateAuth,codex:{answer:(...args)=>agentManager.reason(...args),status:(...args)=>agentManager.status(...args),cancel:(...args)=>agentManager?.cancel(...args),cancelAll:()=>agentManager?.cancelAll()}});
   assets = new AvatarAssets({ bundledRoot: BUNDLED_AVATARS, downloadsRoot: path.join(app.getPath('userData'), 'avatars'), bundledIndexPath: BUNDLED_INDEX, runtimeConfigPath:ASSET_RUNTIME, safeStorage, fetcher:net.fetch.bind(net),
     developmentRoot: app.isPackaged ? undefined : path.join(__dirname, '..', 'build', 'assets', 'packages'),

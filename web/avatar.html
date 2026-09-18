@@ -104,6 +104,8 @@ import { BubblePolicy } from '/bubble-policy.js';
 import { VoicePreview } from '/voice-preview.js';
 import { frameDue, surfaceSize, renderPixelBudget, textureBudget } from '/avatar-render-budget.js';
 import { CompanionController, AvatarStudioStage, isSpatialAction } from '/avatar3d-companion.js';
+import { InstinctClient } from '/instinct-client.js';
+import { FaceDirector, EXPRESSIONS, expressionNames } from '/avatar3d-expressions.js';
 
 const $ = s => document.querySelector(s);
 const stageEl = $('#stage'); const context = stageEl.getContext('2d', { alpha: true });
@@ -202,6 +204,7 @@ const BUBBLE_GAP = 26; // clear air between her crown and the bubble, even mid-m
 // ---------------------------------------------------------------- streaming audio-to-viseme recognition
 let audioContext = null, speechOutput = null, speechMuted = false;
 let audioSignal = silentSpeech(), currentViseme = 'sil', speaking = false;
+const faceDirector = new FaceDirector(); // Instinct: her face while she listens and while she speaks
 // Voice preview temporarily mutes this output without touching the microphone.
 const audio = { get muted(){return speechMuted;}, set muted(v){speechMuted=Boolean(v);if(speechOutput)speechOutput.muted=speechMuted;}, play(){return audioContext?.resume()||Promise.resolve();} };
 const sampleAudio = () => {
@@ -361,7 +364,13 @@ function paint(now) {
   sampleAudio(now);
   const target = pointer.seen ? { x: Math.max(-1, Math.min(1, (pointer.x / cssW - .5) * 2)) * .6, y: Math.max(-1, Math.min(1, (pointer.y / cssH - .5) * -2)) * .35 } : { x: 0, y: 0 };
   gaze = { x: gaze.x + (target.x - gaze.x) * .08, y: gaze.y + (target.y - gaze.y) * .08 };
-  const expression = { smile: .35, ...(avatar.motion ? avatar.motion.expression(now, reduce) : {}) };
+  // Instinct chooses an expression; the director eases it onto whichever
+  // shapes this rig has. The renderer's generic mood alone barely moves some
+  // faces (Sarah), and it floors the smile, so sadness must go through sad.
+  const felt = faceDirector.frame(now, speaking);
+  const clipMood = avatar.motion ? avatar.motion.expression(now, reduce) : {};
+  const expression = { smile: Math.max(.35, clipMood.smile || 0, felt.mood.smile), sad: Math.max(clipMood.sad || 0, felt.mood.sad),
+    surprise: Math.max(clipMood.surprise || 0, felt.mood.surprise), anger: Math.max(clipMood.anger || 0, felt.mood.anger), channels: felt.channels };
   const state = { reduce, viseme: currentViseme, visemeWeights: audioSignal.visemeWeights, lipSyncSource: audioSignal.lipSyncSource, intensity: speaking ? Math.max(.4, audioSignal.relative) : 0, gaze, audienceContact: !avatar.options?.enabled('followCursor'), speaking, breathe: 1 + .0012 * Math.sin(now / 1600 * Math.PI * 2), expression, head: companion ? companion.gesture(now, speaking, reduce) : undefined };
   const image = avatar.render(now, state, view);
   // Geometry, reactions and bubble placement never wait on drawing: a texture
@@ -576,7 +585,7 @@ function loop(now) {
   renderRequest = 0;
   if(suspended)return;
   const q = quality();
-  const active = speaking || live.state !== 'idle' || avatar?.motion?.active || avatar?.options?.transition || now < manualUntil || dragging || companion?.walking || companion?.come || companion?.destination || stage?.turning;
+  const active = speaking || faceDirector.active || live.state !== 'idle' || avatar?.motion?.active || avatar?.options?.transition || now < manualUntil || dragging || companion?.walking || companion?.come || companion?.destination || stage?.turning;
   const due=frameDue(now,lastFrame,active?q.activeFps:q.idleFps);
   if (document.visibilityState==='visible'&&due!==null) { lastFrame=due; try { paint(now); maintainStage(now); } catch (error) { console.error(error); } }
   renderRequest = requestAnimationFrame(loop);
@@ -619,7 +628,46 @@ function consumeReaction(now) {
 }
 let latestUser = '', turnID = '';
 let musicTurnID='';
-const considerReply = reply => { if (!companion || musicTurnID===turnID) return; companion.consider(latestUser, reply, undefined, performance.now(), { clips: avatar && avatar.motion ? avatar.motion.clips : null, turnID }); };
+// Instinct (optional, TypeSafe Jev) answers "did she commit to a motion, and
+// which one?" in about 100 ms. Its answer fills the companion's suggestion;
+// no answer, or an unsure one, leaves the local rules to decide as before.
+const faceChoices = expressionNames.map(id => ({ id, when: EXPRESSIONS[id].when, family: EXPRESSIONS[id].family }));
+const instinct = new InstinctClient({ decide: request => gla.instinct.decide(request), active: () => Boolean(settings.instinct?.active), faces: () => settings.instinct?.listening ? faceChoices : [] });
+const considerReply = (reply, { partial = false } = {}) => {
+  if (!companion || musicTurnID===turnID) return;
+  // latestUser only changes when the user's transcript is final, which can be
+  // after she starts answering; the in-flight segment is the real request.
+  const heard = live.conversation().findLast(turn => turn.role === 'user')?.text;
+  const id = turnID, user = settings.instinct?.active && heard || latestUser, target = companion, clips = avatar && avatar.motion ? avatar.motion.clips : null;
+  const apply = d => { if (target === companion && musicTurnID !== id) { companion.consider(user, reply, d?.suggestion, performance.now(), { clips, turnID: id, reaction: d?.reaction, ranking: d?.ranking }); wake(); } };
+  if (!settings.instinct?.active) { if (!partial) apply(); return; }
+  const context = { clips, character: currentCharacter() };
+  const feel = d => { if (id !== turnID) return; if (d?.face) { window.gla_felt = { face: d.face, at: performance.now() | 0 }; showFace(d.face); } else if (d?.calm) faceDirector.relax(performance.now()); };
+  if (partial) void instinct.assistantPartial(id, user, reply, context).then(d => { if (!d || id !== turnID) return; feel(d); if (d.suggestion && d.suggestion !== 'veto') apply(d); });
+  else void instinct.assistantFinal(id, user, reply, context).then(r => { if (r.superseded) return; feel(r.decision); apply(r.decision); });
+};
+const showFace = (name, now = performance.now(), intensity = 1) => {
+  if (!avatar || !name) return false;
+  const has = channel => channel === '?independentEyes'
+    ? avatar.channels.get('eyeBlinkLeft')?.[0]?.index !== avatar.channels.get('eyeBlinkRight')?.[0]?.index || avatar.channels.get('eyeBlinkLeft')?.[0]?.mesh !== avatar.channels.get('eyeBlinkRight')?.[0]?.mesh
+    : avatar.channels.has(channel);
+  const shown = faceDirector.show(name, now, has, { intensity });
+  // People blink as a feeling crosses their face.
+  if (shown && faceDirector.current?.start === now && avatar.attention) avatar.attention.nextBlink = Math.min(avatar.attention.nextBlink || Infinity, now + 80 + Math.random() * 160);
+  wake(); return shown;
+};
+// Debug and authoring, no paid session: gla_face('concern'), gla_face({'Brow.up': 1}), gla_face() to clear.
+window.gla_face = face => { faceDirector.clear(); if (face && typeof face === 'object') faceDirector.raw = face; else if (face) return showFace(face); wake(); };
+window.gla_faces = expressionNames;
+window.gla_face_state = () => ({ showing: faceDirector.showing(performance.now()), current: faceDirector.current, levels: [...faceDirector.levels].map(([name, s]) => ({ name, level: +s.level.toFixed(3), start: s.start | 0 })), raw: faceDirector.raw, blinkNext: avatar?.attention?.nextBlink });
+const listenTo = (id, partial) => {
+  if (!settings.instinct?.active || !settings.instinct.listening || speaking) return;
+  void instinct.userPartial(id, partial, { history: live.conversation().slice(-5, -1), character: currentCharacter() }).then(d => {
+    if (!d || !avatar || id !== turnID) return;
+    const now = performance.now(); window.gla_listened = { ...d, at: now | 0 };
+    if (d.face) showFace(d.face, now, .8); else if (d.calm) faceDirector.relax(now); // a listener mirrors more softly than a speaker feels
+  });
+};
 
 // ---------------------------------------------------------------- live session
 const live = new LiveClient({ createSession: (sdp, options) => gla.createLiveSession(sdp, options) });
@@ -702,7 +750,7 @@ live.addEventListener('state', ({ detail }) => {
   conversationSounds.transition(s,{...detail,resumed:s==='connecting'&&live.resumed||detail.resumed});
   if (s === 'idle') { setStatus(ENDED_REASONS[detail.reason] || `Ended (${detail.reason}).`, '', 4000); speechOutput?.close(); speechOutput = null; audioSignal = silentSpeech(); currentViseme = 'sil'; speaking = false; $('#muteBtn').classList.remove('active'); }
   if (s === 'connecting') { setStatus(live.resumed ? 'Switching voice…' : 'Connecting to GPT-Live…', 'connecting'); if (!live.resumed) { $('#lineUser').textContent = ''; $('#lineAssistant').textContent = ''; } }
-  if (s === 'connected') { setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; lastUserActivity = performance.now(); if (detail.resumed) live.appendInstructions('The connection settings changed. Continue the previous conversation and wait for their next message. Do not repeat the greeting or previous answer.'); else live.appendCommentary('Greet the user warmly in one short sentence right now, then pause and listen.'); }
+  if (s === 'connected') { if (settings.instinct?.active) void gla.instinct.decide({ kind: 'warm' }); setStatus('Live. Talk to me.', 'live'); latestUser = ''; assistantTurn = ''; turnID = 'live:greeting'; lastUserActivity = performance.now(); if (detail.resumed) live.appendInstructions('The connection settings changed. Continue the previous conversation and wait for their next message. Do not repeat the greeting or previous answer.'); else live.appendCommentary('Greet the user warmly in one short sentence right now, then pause and listen.'); }
   gla.live.heartbeat(s !== 'idle');
   wake();
 });
@@ -717,15 +765,16 @@ live.addEventListener('transcript', ({ detail }) => {
   if (role === 'assistant') { if(taskActivity&&!taskActivity.active)taskActivity=null;showBubble(9000); } // incoming replies alone wake auto mode
   if (role === 'user') {
     lastUserActivity = performance.now();
-    if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } }
+    if (!final) { if (turnID !== detail.id) { turnID = detail.id; assistantTurn = ''; $('#lineAssistant').textContent = ''; } listenTo(detail.id, text); }
     else {
-  latestUser=text;
+  latestUser=text; listenTo(detail.id, text); // short lines may never yield a usable partial
   if(musicRouter.parse(text)){
     turnID=detail.id;
     void musicRouter.run(text,{id:detail.id});
   }
 }
   } else if (final) { assistantTurn = assistantTurn ? assistantTurn + ' ' + text : text; considerReply(assistantTurn); }
+  else considerReply(assistantTurn ? assistantTurn + ' ' + text : text, { partial: true });
 });
 // Hang-up rules: no session may run while she cannot be seen, and none may
 // idle forever. Both are cheap insurance against a forgotten call.

@@ -8,11 +8,19 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 17, 2026 for **v0.2.19**. Use the matching
-[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.19)
+Updated September 18, 2026 for **v0.2.20**. Use the matching
+[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.20)
 to confirm Apple Silicon installer availability and checksums. Use the release
 tag and matching checksums for a reproducible reference.
 
+
+## 0.2.20 Instinct update
+
+Optional TypeSafe Jev integration (Settings → Instinct): motions start
+mid-sentence, clips are chosen by meaning, and 21 facial expressions respond
+while the user speaks and while she speaks, in any language. Without a key
+the built-in rules decide as before. Design, measurements and tests:
+[Instinct](INSTINCT.md).
 
 ## 0.2.19 music, input and deformation update
 
@@ -66,8 +74,8 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Confirm availability on the matching release page, then download the official
-   signed v0.2.19 installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.19/GPT-Live.Avatar-0.2.19-arm64.dmg
+   signed v0.2.20 installer:
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.20/GPT-Live.Avatar-0.2.20-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Sarah appears in her tie top, chain pants and sandals, without a coat. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:

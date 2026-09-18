@@ -1,13 +1,13 @@
 {
-  "version": "0.2.19",
-  "date": "2026-09-17",
-  "title": "Sing along, dance along, and keep the conversation close",
-  "description": "Music controls in solo and Together, input in every visible overhead bubble, and repaired Sarah pelvis weights with updated protected motion packages.",
+  "version": "0.2.20",
+  "date": "2026-09-18",
+  "title": "Instinct: reflexes and a full range of facial expressions",
+  "description": "Optional TypeSafe Jev integration gives every character reflexes: motions start mid-sentence, clips are chosen by meaning, and 21 facial expressions respond while you speak and while she speaks, in any language.",
   "highlights": [
-    "Right-click to sing or dance along with the current music; stop affects the chosen character and also cancels startup.",
-    "Every visible overhead bubble includes typing, microphone and send controls. Ordinary bubbles stay clear during a performance.",
-    "Sarah\u2019s authored pelvis support is restored across body and clothing without changing her geometry or proportions.",
-    "Updated motions, root stability, arm volume, hair clearance and finger-track handling ship with matching protected assets.",
-    "Local vocal-activity detection reduces instrumental mouth reactions; singing uses estimated music visemes."
+    "Settings → Instinct: add a TypeSafe API key and she starts a promised motion while still saying the sentence, instead of after the transcript settles.",
+    "Requests the built-in rules could not parse (“show me something triumphant”) now pick the fitting clip; hypotheticals and refusals no longer trigger motions.",
+    "21 facial expressions on all five characters, chosen from the whole list while she listens and while she speaks, with human timing: quick onset, brief peak, soft trace.",
+    "Works in Chinese, Japanese, Spanish and English; short Chinese lines are judged by meaning, not character count.",
+    "Without a key, or whenever Jev is slow or unsure, the built-in rules decide exactly as before. Audio never leaves the Mac; only transcript text is sent."
   ]
 }

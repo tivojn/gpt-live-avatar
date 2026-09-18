@@ -94,6 +94,16 @@ browser/computer tools, choose **Codex** as the action engine in Settings.
 Both solo and Together use the real installed Codex engine and its account.
 See [Codex actions and setup](docs/CODEX-ACTIONS.md).
 
+## Instinct · reflexes from a System One model (optional)
+
+Add a [TypeSafe](https://typesafe.ai) key in Settings and the avatar gains
+reflexes. Jev, a model that cannot talk and answers typed questions in about a
+third of a second, decides whether she just committed to a motion and which
+installed clip fits, so the motion starts while she is still saying the
+sentence, and her face responds while you are still speaking. GPT-Live stays
+the only voice. Without a key, or whenever Jev is slow or unsure, the built-in
+rules decide as before. See [Instinct](docs/INSTINCT.md).
+
 ## Avatars and texture tiers
 
 The updated local Mac portrait build includes Tia's original 2K/4K maps,

@@ -142,6 +142,8 @@ export function replyAvatarAction(user, reply, suggestion, clips) {
   if(!text)return null;
   const denied=/\b(?:can't|cannot|couldn't|won't|will not|unable|don't have a body|do not have a body|don't actually|only imagine|wish i could)\b|不能|无法|不会表演|没有身体/i.test(text);
   if(denied)return null;
+  // Instinct (System One) is confident that nothing physical was promised.
+  if(suggestion==='veto')return null;
   if(typeof suggestion==='string'){
     if(suggestion.startsWith('clip:') && clips?.has(suggestion.slice(5)))return suggestion;
     if(suggestion.startsWith('action:') && conversationalActions.has(suggestion.slice(7)))return suggestion;
@@ -213,16 +215,18 @@ export function conversationReaction(user, reply, suggestion) {
 export class CompanionController {
   constructor({random=Math.random}={}){this.random=random;this.follow=false;this.come=false;this.walking=false;this.yaw=0;this.at=0;this.pauseUntil=0;this.velocityX=0;this.velocityY=0;this.gestures=true;this.wasSpeaking=false;this.gestureAt=-Infinity;
     this.reactions=true;this.pendingReaction=null;this.reactionAt=-Infinity;this.reactionKey='';this.lastReactionClip='';this.reactedTurns=new Set();this.performedTurns=new Set();}
-  consider(user,reply,suggestion,now,{clips,turnID=''}={}){
+  // reaction and ranking are optional Instinct answers: a validated reaction
+  // kind, and per-clip fit used instead of chance when several clips qualify.
+  consider(user,reply,suggestion,now,{clips,turnID='',reaction,ranking}={}){
     const key=String(user).slice(-1000)+'\n'+String(reply).slice(0,2000);
     const decision=replyAvatarAction(user,reply,suggestion,clips);
     if(turnID?(this.performedTurns.has(turnID)||(!decision&&this.reactedTurns.has(turnID))):key===this.reactionKey)return;
     if(!this.reactions&&!decision)return;
     const clipID=decision?.startsWith('clip:')?decision.slice(5):null;
     const action=decision?.startsWith('action:')?decision:null;
-    const kind=decision?null:conversationReaction(user,reply,suggestion);
+    const kind=decision?null:conversationReaction(user,reply,reaction===undefined?suggestion:reaction);
     if(!decision&&now-this.reactionAt<20000)return;
-    this.pendingReaction=kind||decision?{kind,clipID,action,key,turnID,expires:now+12000}:null;
+    this.pendingReaction=kind||decision?{kind,clipID,action,key,turnID,ranking,expires:now+12000}:null;
   }
   takeReaction(now,clips,blocked=false,{hasProp=false}={}){
     const pending=this.pendingReaction;
@@ -239,7 +243,8 @@ export class CompanionController {
       &&!(hasProp&&c.requiresFreeHands));
     const fresh=choices.filter(c=>c.id!==this.lastReactionClip);
     const pool=fresh.length?fresh:choices;
-    const clip=pool[Math.min(pool.length-1,Math.floor(Math.max(0,this.random())*pool.length))];
+    const fit=c=>Number(pending.ranking?.[c.id])||0,fitted=pool.reduce((a,c)=>fit(c)>fit(a)?c:a,pool[0]);
+    const clip=fitted&&fit(fitted)>0?fitted:pool[Math.min(pool.length-1,Math.floor(Math.max(0,this.random())*pool.length))];
     this.pendingReaction=null;
     if(!clip)return null;
     this.lastReactionClip=clip.id;this.reactionAt=now;this.reactionKey=pending.key;

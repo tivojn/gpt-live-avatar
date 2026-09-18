@@ -99,6 +99,17 @@
   </section>
 
   <section>
+    <h2>Instinct · TypeSafe Jev <span class="note">(optional)</span></h2>
+    <p class="note">Gives your avatar reflexes. Jev is a System One model: it does not talk, it answers small typed questions about the conversation in about a third of a second. With a key, she starts a motion while she is still promising it, picks the gesture that fits what she said, and her face responds while you are still speaking. Without a key, or whenever Jev is slow or unsure, the built-in rules decide as before.</p>
+    <label for="instinctKey">TypeSafe API key</label>
+    <div class="row"><input id="instinctKey" type="password" autocomplete="off" placeholder="From console.typesafe.ai (stored encrypted)"><button id="saveInstinctKey" type="button">Validate &amp; save</button><button id="clearInstinctKey" type="button">Remove</button><button id="testInstinct" type="button">Test</button></div>
+    <p class="state" id="instinctState" aria-live="polite"></p>
+    <label><input id="instinctEnabled" type="checkbox"> Use Instinct for motions and reactions</label>
+    <label><input id="instinctListening" type="checkbox"> Facial expressions, while she listens and while she speaks</label>
+    <p class="note">While on, the text of the current exchange is sent to TypeSafe (api.typesafe.ai) for each decision; audio never is. Typical cost is a few cents per hour of conversation.</p>
+  </section>
+
+  <section>
     <h2>Agent actions</h2>
     <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
     <p class="note">Works in solo and Together. Your selected agent handles tasks using its own account, tools and permissions. The addressed character shows progress and shares verified results with the group.</p>
@@ -182,6 +193,7 @@
 <script type="module">
   import {shortenHomePaths,expandHomePath} from "/path-display.js";
   const $ = s => document.querySelector(s);
+  let instinctBusy = false;
   let SETTINGS = null, voiceDraft = '', voicePreview = { state: 'idle', voice: '' }, codexModelChoices = [], codexConnection = null;
   let agentInventory=null;
   const runtimeConnections={}, runtimeNames={openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build'};
@@ -200,6 +212,10 @@
     updateVoiceState();
     renderShortcuts();
     $('#conversationSounds').checked=settings.conversationSounds!==false;
+    const instinct=settings.instinct||{};
+    $('#instinctEnabled').checked=instinct.enabled!==false;$('#instinctListening').checked=instinct.listening!==false;
+    $('#instinctListening').disabled=instinct.enabled===false;$('#testInstinct').disabled=!instinct.hasKey;
+    if(!instinctBusy)setState($('#instinctState'),!instinct.hasKey?'No key. Built-in rules are deciding.':instinct.state==='bad-key'?'TypeSafe rejected the saved key.':instinct.state==='paused'?'Jev is not answering; using built-in rules for a moment.':instinct.enabled===false?'Key saved. Instinct is switched off.':'Ready'+(instinct.answered?` · ${instinct.answered} decisions · last ${instinct.lastLatencyMs} ms · ${instinct.inputTokens} tokens`:''),instinct.state==='bad-key'?'bad':instinct.hasKey&&instinct.enabled!==false&&instinct.state==='ready'?'ok':'');
     $('#personaName').value = settings.personaName || '';
     $('#persona').value = settings.persona || '';
     $('#avatarDir').value = displayText(settings.avatarDir);
@@ -390,6 +406,12 @@
   $('#runtimeSaveModel').onclick=()=>save({agentRuntimeModels:{[localEngine()]:$('#runtimeModel').value.trim()}});
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
+  $('#instinctEnabled').onchange=()=>save({instinctEnabled:$('#instinctEnabled').checked});
+  $('#instinctListening').onchange=()=>save({instinctListening:$('#instinctListening').checked});
+  const instinctTask=async(message,work)=>{instinctBusy=true;setState($('#instinctState'),message);const r=await work();instinctBusy=false;if(!r.ok){setState($('#instinctState'),r.error,'bad');return null;}render(await gla.getSettings());return r;};
+  $('#saveInstinctKey').onclick=async()=>{if(await instinctTask('Validating TypeSafe key…',()=>gla.instinct.saveKey($('#instinctKey').value)))$('#instinctKey').value='';};
+  $('#clearInstinctKey').onclick=()=>instinctTask('Removing…',()=>gla.instinct.clearKey());
+  $('#testInstinct').onclick=async()=>{const r=await instinctTask('Asking Jev…',()=>gla.instinct.test());if(!r)return;instinctBusy=true;setState($('#instinctState'),`Jev answered in ${r.latencyMs} ms: ${r.choice||'no motion'} (commitment ${(r.performs*100).toFixed(0)}%).`,'ok');setTimeout(()=>{instinctBusy=false;},8000);}; // a settings broadcast must not wipe the result
   $('#agentEnabled').onchange=()=>save({agentEnabled:$('#agentEnabled').checked});
   $('#agentChooseFolder').onclick=async()=>{await gla.agent.chooseFolder();render(await gla.getSettings());};
   $('#reasoningMode').onchange=()=>save({reasoningMode:$('#reasoningMode').value});

@@ -70,6 +70,13 @@ contextBridge.exposeInMainWorld('gla', {
     cancel: id => ipcRenderer.invoke('gla:delegate:cancel', id),
     test: () => ipcRenderer.invoke('gla:delegate:test'),
   },
+  // Instinct: fast typed decisions from TypeSafe Jev; the key never leaves main
+  instinct: {
+    decide: request => ipcRenderer.invoke('gla:instinct:decide', request),
+    saveKey: key => ipcRenderer.invoke('gla:instinct:key', key),
+    clearKey: () => ipcRenderer.invoke('gla:instinct:clear-key'),
+    test: () => ipcRenderer.invoke('gla:instinct:test'),
+  },
   // avatar package
   avatarInfo: () => ipcRenderer.invoke('gla:avatar:info'),
   chooseAvatarFolder: () => ipcRenderer.invoke('gla:avatar:choose'),
