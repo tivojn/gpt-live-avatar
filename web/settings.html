@@ -80,6 +80,27 @@
   <div class="pane" id="pane-voice" role="tabpanel" aria-labelledby="tab-voice">
     <header><h1>Voice</h1><span class="chip" id="chip-voice"></span></header>
     <section>
+      <label for="liveProvider">Voice model</label>
+      <select id="liveProvider"><option value="openai">GPT-Live-1 · OpenAI</option><option value="gemini">Gemini 3.8 Live · Google</option></select>
+      <p class="note" id="liveProviderNote"></p>
+    </section>
+    <section id="geminiSection" hidden>
+      <h2>Gemini API key</h2>
+      <div class="row">
+        <input id="geminiKey" type="password" aria-label="Gemini API key" placeholder="Stored encrypted, never shown again" autocomplete="off">
+        <button id="saveGeminiKey" class="pri" type="button">Validate &amp; save</button>
+        <button id="clearGeminiKey" type="button">Remove</button>
+      </div>
+      <p class="state" id="geminiKeyState" aria-live="polite"></p>
+      <label for="geminiModel">Model</label>
+      <select id="geminiModel"></select>
+      <div id="geminiThinkingRow"><label for="geminiThinkingLevel">Thinking</label>
+      <select id="geminiThinkingLevel"><option value="low">Low · quickest</option><option value="medium">Medium</option><option value="high">High · most careful</option></select></div>
+      <label for="geminiVoice">Gemini voice</label>
+      <select id="geminiVoice"></select>
+      <p class="note">Your avatar talks with Gemini Live directly from this Mac; the key stays encrypted here. Extended Thinking reasons in the background and may say a short line while it works. Reasoning and action engines work as with GPT-Live-1. Avatar Show voices and voice previews still use GPT-Live-1 for now.</p>
+    </section>
+    <section>
       <h2>OpenAI API key</h2>
       <div class="row">
         <input id="key" type="password" aria-label="OpenAI API key" placeholder="sk-… (stored encrypted, never shown again)" autocomplete="off">
@@ -290,6 +311,14 @@
     renderShortcuts();
     $('#conversationSounds').checked=settings.conversationSounds!==false;
     $('#wardrobeFlourish').checked=settings.wardrobeFlourish!==false;
+    {const g=settings.gemini||{},on=settings.liveProvider==='gemini';
+     $('#liveProvider').value=on?'gemini':'openai';$('#geminiSection').hidden=!on;
+     $('#liveProviderNote').textContent=on?'She speaks and listens with Gemini Live. Changing the voice model briefly reconnects a live conversation and keeps the recent transcript.':'She speaks and listens with GPT-Live-1. Choose Gemini 3.8 Live to use Google’s voice model instead, including Extended Thinking.';
+     const fill=(select,items,label)=>select.replaceChildren(...items.map(item=>{const o=document.createElement('option');o.value=item.id;o.textContent=label(item);return o;}));
+     fill($('#geminiModel'),g.models||[],m=>m.label);$('#geminiModel').value=g.model||'';
+     fill($('#geminiVoice'),g.voices||[],v=>v.id+' · '+v.style);$('#geminiVoice').value=g.voice||'';
+     $('#geminiThinkingLevel').value=g.thinkingLevel||'low';$('#geminiThinkingRow').hidden=!g.thinking;
+     if(!$('#geminiKeyState').dataset.busy)setState($('#geminiKeyState'),settings.hasGeminiKey?'Gemini key stored on this Mac.':'No Gemini key yet. Paste one and validate.',settings.hasGeminiKey?'ok':'bad');}
     {const select=$('#showPlaywright'),names={'gpt-5.6-luna':'GPT-5.6 Luna · fastest','gpt-5.6-terra':'GPT-5.6 Terra','gpt-5.6-sol':'GPT-5.6 Sol','gpt-6-astra':'GPT-6 Astra · most capable, slower'};
      select.replaceChildren(...(settings.showPlaywrightChoices||[]).map(value=>{const option=document.createElement('option');option.value=value;
       option.textContent=value==='reasoning'?'Same as my reasoning provider':'OpenAI API · '+(names[value.slice(7)]||value.slice(7));return option;}));
@@ -329,7 +358,8 @@
   function renderStatus(s){
     const set=(pane,text,cls='')=>{const chip=$('#chip-'+pane);if(chip){chip.textContent=displayText(text);chip.className='chip '+cls;}$('#dot-'+pane).className='dot '+(cls||'off');};
     const a=s.avatar||{},instinct=s.instinct||{},engine=localEngine(),engineName=engine==='codex'?'Codex':runtimeNames[engine]||engine;
-    set('voice',s.hasKey?'Connected · '+voiceName(s.voice||'marin'):'Needs an API key',s.hasKey?'ok':'bad');
+    if(s.liveProvider==='gemini')set('voice',s.hasGeminiKey?(s.gemini?.models||[]).find(m=>m.id===s.gemini.model)?.label+' · '+s.gemini.voice:'Needs a Gemini API key',s.hasGeminiKey?'ok':'bad');
+    else set('voice',s.hasKey?'Connected · '+voiceName(s.voice||'marin'):'Needs an API key',s.hasKey?'ok':'bad');
     set('character',a.ok&&!a.fallbackFor?a.name+' · '+a.clips+' motions':a.fallbackFor?a.fallbackFor+' is not downloaded':(a.problem||'No avatar'),a.ok&&!a.fallbackFor?'ok':'bad');
     set('appearance',({friendly:'Resource friendly',balanced:'Balanced',best:'Best quality'})[s.quality]||'');
     set('reasoning',s.reasoningMode==='delegate'?'Delegate · '+({openai:'OpenAI',xai:'xAI',...runtimeNames})[s.delegate.provider]+(s.delegate.model?' · '+s.delegate.model:''):'GPT-Live · '+(s.backendModel||'default model'),'ok');
@@ -525,6 +555,17 @@
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
   $('#wardrobeFlourish').onchange=()=>save({wardrobeFlourish:$('#wardrobeFlourish').checked});
+  $('#liveProvider').onchange=()=>save({liveProvider:$('#liveProvider').value});
+  for(const id of ['geminiModel','geminiVoice','geminiThinkingLevel'])$('#'+id).onchange=()=>save({[id]:$('#'+id).value});
+  $('#saveGeminiKey').onclick=async()=>{
+    const key=$('#geminiKey').value.trim();if(!key)return;
+    const state=$('#geminiKeyState');state.dataset.busy='1';setState(state,'Validating with Google…');
+    const r=await gla.setGeminiKey(key);
+    if(r.ok){$('#geminiKey').value='';setState(state,'Key saved. Available: '+r.models.map(id=>(SETTINGS?.gemini?.models||[]).find(m=>m.id===id)?.label||id).join(', ')+'.','ok');}
+    else setState(state,r.error,'bad');
+    setTimeout(()=>{delete state.dataset.busy;},4000);
+  };
+  $('#clearGeminiKey').onclick=async()=>{await gla.clearGeminiKey();render(await gla.getSettings());};
   $('#showPlaywright').onchange=()=>save({showPlaywright:$('#showPlaywright').value});
   $('#instinctEnabled').onchange=()=>save({instinctEnabled:$('#instinctEnabled').checked});
   $('#instinctListening').onchange=()=>save({instinctListening:$('#instinctListening').checked});

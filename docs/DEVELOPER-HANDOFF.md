@@ -15,6 +15,18 @@ to confirm Apple Silicon installer availability and checksums
 release tag and matching checksums for a reproducible reference.
 
 
+## After 0.2.25: Gemini 3.8 Live as a second voice model (phase 1)
+
+The solo conversation can run on Gemini 3.8 Live or Extended Thinking
+(Settings › Voice › Voice model). The window talks to one `LiveSession`
+(`web/live-session.js`) that forwards to the GPT-Live or the Gemini client;
+Gemini's one function call is presented as GPT-Live's delegation event, so the
+reasoning and action engines are untouched. Verified against Google's real
+service on both models (connect, speech, lip-sync, hand-off round trip).
+Design, tests, what the real service taught us and what still needs a person
+at the microphone: **docs/GEMINI-LIVE.md**.
+Avatar Show, group conversation and voice previews still use GPT-Live-1.
+
 ## 0.2.25: the Playwright's own model, a Close button
 
 - **`showPlaywright`** (Settings › Reasoning › Avatar Show script writer;

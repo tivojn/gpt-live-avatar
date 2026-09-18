@@ -106,7 +106,7 @@ import {zoomScale,zoomFit,keepZoomVisible} from '/avatar-zoom.js';
 import { installAgentUI } from './agent-client.js';
 import { shortenHomePaths } from './path-display.js';
 import { DelegateClient } from './delegate-client.js';
-import { LiveClient } from '/live-client.js';
+import { LiveSession } from '/live-session.js';
 import { SpeechOutput, silentSpeech } from '/lip-sync.js';
 import { ConversationSounds } from '/conversation-sounds.js';
 import { BubblePolicy } from '/bubble-policy.js';
@@ -327,7 +327,7 @@ async function loadAvatar() {
   userOrbit = { yaw: Number(settings.orbitYaw) || 0, pitch: Number(settings.orbitPitch) || 0 }; avatar.setOrbit(userOrbit);
   if (avatar.options) { companion = new CompanionController(); companion.reactions = true; avatar.companion = companion; }
   $('#name').textContent = settings.personaName || info.name || settings.defaultAvatar?.name || 'Avatar';
-  setStatus(settings.hasKey ? 'Ready. Double-click my head to talk.' : 'Add your OpenAI key in Settings.');
+  setStatus(idleStatus());
   wake();
 }
 function applyQuality() {
@@ -714,7 +714,8 @@ const listenTo = (id, partial) => {
 };
 
 // ---------------------------------------------------------------- live session
-const live = new LiveClient({ createSession: (sdp, options) => gla.createLiveSession(sdp, options) });
+// GPT-Live-1 or Gemini Live, as chosen in Settings; everything below talks to this one object (live-session.js).
+const live = new LiveSession({ createSession: (sdp, options) => gla.createLiveSession(sdp, options), provider: () => settings.liveProvider });
 let delegateStatusID='';
 const delegate = new DelegateClient(live,gla.delegate,message=>{
  if(message==='Thinking…'){delegateStatusID='delegate-'+crypto.randomUUID();taskStatus(message,{id:delegateStatusID,label:'Working…',detail:'',active:true,until:Infinity});}
@@ -868,9 +869,12 @@ setInterval(() => {
 }, 80);
 live.addEventListener('state', ({ detail }) => { if (detail.state === 'connected' && live.microphone) attachMicrophone(live.microphone); if (detail.state === 'idle') micAnalyser = null; });
 
+// The key that the chosen voice model needs: OpenAI's for GPT-Live-1, Google's for Gemini Live.
+const voiceKeyReady = () => settings.liveProvider === 'gemini' ? Boolean(settings.hasGeminiKey) : Boolean(settings.hasKey);
+const idleStatus = () => voiceKeyReady() ? 'Ready. Double-click my head to talk.' : settings.liveProvider === 'gemini' ? 'Add your Gemini key in Settings.' : 'Add your OpenAI key in Settings.';
 const toggleCall = async () => {
   preview.stop();
-  if (!settings.hasKey) { gla.openSettings(); return; }
+  if (!voiceKeyReady()) { gla.openSettings('voice'); return; }
   if (live.state !== 'idle') { live.stop('user'); return; }
   const allowed = await gla.mic.ask();
   if (!allowed) {
@@ -895,7 +899,7 @@ if(musicRouter.parse(text)){
 }
 
   if(live.state==='connected'){
-    delegate.cancel();live.remember('user',text);live.appendCommentary(text);lastUserActivity=performance.now();$('#steer').value='';
+    delegate.cancel();live.remember('user',text);live.userText(text);lastUserActivity=performance.now();$('#steer').value='';
     turnID='typed-'+Date.now().toString(36);assistantTurn='';latestUser=text;
     $('#lineUser').textContent=displayText(text);$('#lineUser').classList.remove('pending');$('#lineAssistant').textContent='';
     $('#steer').blur();syncBubble();return;
@@ -950,7 +954,7 @@ function chooseAvatarOption(key, value) {
   persistAppearance();
   wake();
 }
-const menuState = () => ({ live: live.state, muted: live.muted, hasKey: Boolean(settings.hasKey), bubble: settings.bubble !== false, bubbleMode: bubbleMode(), catalogue: catalogue(), performing: Boolean(singing() || avatar?.motion?.active), music: singing(), musicPending: Boolean(window.gla_sing_pending?.()), musicAvailable: Boolean(ready && avatar && !avatar.disposed), character: settings.avatar?.slug });
+const menuState = () => ({ live: live.state, muted: live.muted, hasKey: voiceKeyReady(), bubble: settings.bubble !== false, bubbleMode: bubbleMode(), catalogue: catalogue(), performing: Boolean(singing() || avatar?.motion?.active), music: singing(), musicPending: Boolean(window.gla_sing_pending?.()), musicAvailable: Boolean(ready && avatar && !avatar.disposed), character: settings.avatar?.slug });
 addEventListener('contextmenu', event => {
   event.preventDefault();
   if (bubble.contains(event.target) || $('#listen').contains(event.target) || paintedAt(event.clientX, event.clientY)) gla.showMenu(menuState());
@@ -1191,10 +1195,14 @@ const applySettings = next => {
     if (live.state === 'connected') live.appendInstructions(`The on-screen avatar is now ${settings.personaName}. Use this name from now on. Available motions: ${(settings.avatar?.clipLabels || []).join(', ')}.`);
   } else if (!avatar && settings.avatar?.ok && !ready && !loadingAvatar) void loadAvatar();
   const changedReasoning=previous.reasoningMode!==settings.reasoningMode||JSON.stringify(previous.delegate&&[previous.delegate.provider,previous.delegate.auth,previous.delegate.model])!==JSON.stringify(settings.delegate&&[settings.delegate.provider,settings.delegate.auth,settings.delegate.model])||previous.backendModel!==settings.backendModel||previous.agentEnabled!==settings.agentEnabled||previous.agentEngine!==settings.agentEngine||previous.agentFollowReasoning!==settings.agentFollowReasoning||previous.agentAccess!==settings.agentAccess||previous.agentCodexModel!==settings.agentCodexModel||JSON.stringify([previous.agentRuntimePaths,previous.agentRuntimeModels,previous.avatarAgentBindings])!==JSON.stringify([settings.agentRuntimePaths,settings.agentRuntimeModels,settings.avatarAgentBindings]);
-  if (previous.voice !== settings.voice || changedReasoning) {
+  // A key saved or a voice model chosen in Settings changes what she can do right now; say so while she is idle.
+  const keyWasReady=previous.liveProvider==='gemini'?Boolean(previous.hasGeminiKey):Boolean(previous.hasKey);
+  if(avatar&&ready&&live.state==='idle'&&(keyWasReady!==voiceKeyReady()||previous.liveProvider!==settings.liveProvider))setStatus(idleStatus());
+  const changedVoiceModel=previous.liveProvider!==settings.liveProvider||JSON.stringify(previous.gemini&&[previous.gemini.model,previous.gemini.voice,previous.gemini.thinkingLevel])!==JSON.stringify(settings.gemini&&[settings.gemini.model,settings.gemini.voice,settings.gemini.thinkingLevel])&&settings.liveProvider==='gemini';
+  if (previous.voice !== settings.voice || changedReasoning || changedVoiceModel) {
     delegate.cancel();
     preview.stop(); clearTimeout(applySettings.voiceTimer);
-    if (live.state !== 'idle') applySettings.voiceTimer = setTimeout(() => { if (live.state !== 'idle') { toast(changedReasoning?'Applying reasoning settings and reconnecting…':'Switching voice and reconnecting…'); void live.restart(settings.voice); } }, 200);
+    if (live.state !== 'idle') applySettings.voiceTimer = setTimeout(() => { if (live.state !== 'idle') { toast(changedVoiceModel?'Switching voice model and reconnecting…':changedReasoning?'Applying reasoning settings and reconnecting…':'Switching voice and reconnecting…'); void live.restart(settings.voice); } }, 200);
   }
   const fallback = settings.avatar && settings.avatar.fallbackFor;
   if (fallback && fallback !== (previous.avatar && previous.avatar.fallbackFor)) toast(`${fallback} is not downloaded yet, so ${settings.avatar.name || settings.defaultAvatar?.name || 'the starter avatar'} is shown. Download it under Settings › Avatar.`, 8000);

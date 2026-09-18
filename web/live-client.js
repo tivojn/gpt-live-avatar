@@ -162,6 +162,8 @@ export class LiveClient extends EventTarget {
   }
   appendInstructions(content) { return this.send({ type: 'session.instructions.append', content, delegation_id: null }); }
   appendCommentary(content, delegation_id = null) { return this.send({ type: 'session.commentary.append', content, delegation_id }); }
+  // Something the user typed instead of saying.
+  userText(content) { return this.appendCommentary(content); }
   setMuted(muted) {
     this.muted = Boolean(muted);
     this.suspendInput(this.suspended);

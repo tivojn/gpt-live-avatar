@@ -174,6 +174,8 @@ and test commands are documented in [Desktop controls](docs/DESKTOP-CONTROLS.md#
 
 Settings is a sidebar of panes (Voice, Character, Appearance, Reasoning, Actions, Agents, Instinct, Shortcuts and tips), each with a one-line status. The whole app shares one monochrome theme that follows the macOS light or dark appearance.
 
+**Voice model.** She talks with GPT-Live-1 by default. Under **Settings › Voice › Voice model** you can choose **Gemini 3.8 Live** or **Gemini 3.8 Live · Extended Thinking** instead, with your own Gemini API key (stored encrypted, like the OpenAI key), a Gemini voice and, for Extended Thinking, a thinking level. Reasoning and action engines work the same with either. Avatar Show voices and voice previews still use GPT-Live-1.
+
 **Wardrobe flourish.** Each time your avatar comes up, or you switch to another one, she runs through her wardrobe for about two seconds (outfits, hair, skin tones, colours) and settles on the look you chose. Nothing she flashes through is saved, and props are never part of it. Turn it off under **Settings › Appearance** or **View › Wardrobe Flourish** in the right-click menu; it is skipped during a conversation and when macOS Reduce Motion is on.
 
 Settings supports **Codex App Server**, **OpenClaw**, **Hermes**, **Grok Build** and **EnConvo** for delegated reasoning and enabled actions. Choose the runtime under Reasoning, then use **Agents for each character** to select an OpenClaw agent, Hermes profile or EnConvo agent (Mavis or any custom agent) for each avatar. Missing installations are disabled. Each runtime uses its own configured account and tools; GPT-Live voice still uses the voice API key. See [setup and connection details](docs/AGENT-RUNTIMES.md).

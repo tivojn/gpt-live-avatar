@@ -62,6 +62,8 @@ contextBridge.exposeInMainWorld('gla', {
   onSettings: callback => subscribe('gla:settings', callback),
   setApiKey: key => ipcRenderer.invoke('gla:key:set', key),
   clearApiKey: () => ipcRenderer.invoke('gla:key:clear'),
+  setGeminiKey: key => ipcRenderer.invoke('gla:gemini-key:set', key),
+  clearGeminiKey: () => ipcRenderer.invoke('gla:gemini-key:clear'),
   keyStatus: () => ipcRenderer.invoke('gla:key:status'),
   listModels: () => ipcRenderer.invoke('gla:models:list'),
   delegate: {
