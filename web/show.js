@@ -160,7 +160,7 @@ let castNotes={};
   const hungUp=director.running;if(hungUp)director.stop();
   setStatus((revising?'The Playwright is revising the script from your feedback…':'The Playwright is writing the script…')+(hungUp?' Director voice hung up to save session cost; tap the microphone whenever you want to talk again.':''));
   try{
-   const request={id:'show-'+Date.now().toString(36),brief:{theme:hooks.topic(),transcript:chat.map(l=>({role:l.role,text:l.text})),notes:''},characters:characterList(),user:hooks.human(),understudy:understudySlug(),length:$('#showLength').value,previous,feedback};
+   const request={id:'show-'+Date.now().toString(36),brief:{theme:hooks.topic()||(chat.some(l=>l.role==='user')?'':hooks.suggestion?.()||''),transcript:chat.map(l=>({role:l.role,text:l.text})),notes:''},characters:characterList(),user:hooks.human(),understudy:understudySlug(),length:$('#showLength').value,previous,feedback};
    const result=await api.playwright(request);if(!current())return;if(!result.ok)throw Error(result.error);
    script=result.script;resolved=new Map();renderScript();
    setPhase('preparing');await prepareMotions(current);if(!current())return;

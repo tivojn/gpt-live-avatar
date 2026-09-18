@@ -37,6 +37,27 @@ release tag and matching checksums for a reproducible reference.
   colour tokens elsewhere; `qa/theme-app.cjs` opens the real windows in light
   and dark and fails on any computed colour with saturation, on text and
   surfaces that do not flip, and on a Settings pane that no longer fits.
+- **Settings saves as you change it** and says "Saved". Two things keep an
+  explicit step: secrets (Validate & save) and the voice (Preview, then Use
+  voice, because committing a voice reconnects a live conversation).
+- **Avatar Show panel.** The topic is a suggestion (a placeholder, used only
+  when you have told the Director nothing); "How it works" is a collapsed
+  drawer; in show mode the foot status line appears only for problems.
+- **In-app update** (`electron/updater.cjs`, driven by `electron/app-info.cjs`).
+  Check, then **Download** (progress in the window and in the menu row), then
+  **Install and Relaunch**; each step is the user's click. Before anything is
+  installed the installer must be on the release service under the exact
+  version-and-architecture name, match the published size and SHA-256, pass
+  `codesign --verify --deep --strict`, carry the running app's Developer ID team
+  and bundle identifier, be accepted by Gatekeeper as notarized, and contain
+  the announced version. A refusal deletes the download and explains itself.
+  The swap is two renames beside the installed app; the old bundle goes to the
+  Trash and is put back if the new one cannot move in. It works only in the
+  packaged app, and only for releases published with a checksum
+  (`tools/cloud/publish-release.cjs` writes one into `releases/latest.json`);
+  otherwise the button opens the download page as before. `qa/updater.cjs`
+  covers every refusal with faked tools, `qa/update-app.cjs` drives the real
+  window, and the verifier was run against the real notarized 0.2.23 image.
 - Seraphim's Enclosed and Heavy armors are retired on read; superseded R2
   packs are removed with `tools/cloud/prune-r2.cjs` (see Protected assets).
 

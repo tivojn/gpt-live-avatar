@@ -2,21 +2,26 @@
 const path = require('node:path');
 const releaseInfo = require('./release-info.json');
 const { REPOSITORY, RELEASES, compareVersions, latestRelease } = require('./releases.cjs');
+const { Updater } = require('./updater.cjs');
 
-function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, version } = {}) {
-  const { app, BrowserWindow, ipcMain, shell } = require('electron');
+function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, version, updater, quit } = {}) {
+  const { app, BrowserWindow, ipcMain, shell, net } = require('electron');
   version ||= app.getVersion();
+  updater ||= new Updater({ directory: path.join(app.getPath('userData'), 'updates'), currentVersion: version, isPackaged: app.isPackaged, fetchImpl: (url, init) => net.fetch(url, init) });
+  quit ||= () => app.quit();
   openExternal ||= url => shell.openExternal(url);
   let window = null, pending = null, abort = null, generation = 0;
   let update = { state: 'idle' };
   const details = releaseInfo.version === version ? releaseInfo : { title: 'GPT-Live Avatar', description: releaseInfo.description, highlights: [] };
   const snapshot = () => ({ version, architecture: process.arch === 'arm64' ? 'Apple silicon' : process.arch === 'x64' ? 'Intel' : process.arch,
-    date: details.date || '', title: details.title, description: details.description, highlights: details.highlights, update });
+    date: details.date || '', title: details.title, description: details.description, highlights: details.highlights, update: { ...update, installable: canInstall() } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('gla:app-info:changed', snapshot()); };
   // A quiet check (once, shortly after launch) only ever turns the menu row into
   // “Update to …”; a failure stays silent instead of greeting the user with an error.
+  const busy = () => ['downloading', 'verifying', 'ready', 'installing'].includes(update.state);
   async function check({ quiet = false } = {}) {
     if (pending) return pending;
+    if (busy()) return; // a check must not throw away an update that is on its way
     const own = ++generation; abort = new AbortController(); update = { state: 'checking' }; publish();
     pending = (async () => {
       try {
@@ -32,6 +37,33 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
     })();
     return pending;
   }
+  // The release the user is acting on. Each step is theirs to start; a refusal
+  // returns to "available" with the reason, and the download is already gone.
+  let transfer = null, verified = null, transfers = 0; // its own counter: closing the window must not orphan a download
+  const canInstall = () => Boolean(update.downloadURL && update.sha256);
+  async function download() {
+    if (update.state !== 'available' || !canInstall() || transfer) return;
+    const release = { ...update }, own = ++transfers; transfer = new AbortController();
+    const fail = error => { if (own === transfers) { update = { ...release, state: 'available', problem: error?.refused ? error.message : error?.name === 'AbortError' ? '' : 'The update could not be downloaded. Check your connection and try again.' }; publish(); } };
+    try {
+      update = { ...release, state: 'downloading', percent: 0, problem: '' }; publish();
+      const file = await updater.download(release, { signal: transfer.signal, onProgress: p => { if (own === transfers && p.percent !== update.percent) { update = { ...update, percent: p.percent }; publish(); } } });
+      if (own !== transfers) return;
+      update = { ...release, state: 'verifying', problem: '' }; publish();
+      verified = await updater.verify(file, release);
+      if (own !== transfers) { await verified.detach(); verified = null; return; }
+      update = { ...release, state: 'ready', problem: '' }; publish();
+    } catch (error) { verified = null; fail(error); } finally { transfer = null; }
+  }
+  async function install() {
+    if (update.state !== 'ready' || !verified) return;
+    const release = { ...update }, image = verified; verified = null;
+    try {
+      update = { ...release, state: 'installing' }; publish();
+      await updater.install(await updater.stage(image));
+      quit();
+    } catch (error) { update = { ...release, state: 'available', problem: error?.refused ? error.message : 'The update could not be installed. The app was left as it is.' }; publish(); }
+  }
   function open(checkNow = false) {
     if (!window || window.isDestroyed()) {
       window = new BrowserWindow({ width: 540, height: 690, minWidth: 440, minHeight: 500, title: 'GPT-Live Avatar · Version and updates',
@@ -43,7 +75,7 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
       window.webContents.on('will-navigate', event => event.preventDefault());
       void window.loadURL(origin + '/app-info.html');
     } else { if (window.isMinimized()) window.restore(); window.show(); window.focus(); }
-    if (checkNow) void check();
+    if (checkNow && !busy()) void check();
   }
   const guard = handler => (event, ...args) => {
     if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.sender.getURL() !== origin + '/app-info.html') throw Error('Untrusted app information request.');
@@ -51,8 +83,10 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   };
   ipcMain.handle('gla:app-info:get', guard(snapshot));
   ipcMain.handle('gla:app-info:check', guard(async () => { await check(); return snapshot(); }));
+  ipcMain.handle('gla:app-info:download', guard(async () => { void download(); return snapshot(); }));
+  ipcMain.handle('gla:app-info:install', guard(async () => { void install(); return snapshot(); }));
   ipcMain.handle('gla:app-info:open', guard(async kind => {
-    const url = kind === 'download' && update.state === 'available' ? update.downloadURL :
+    const url = kind === 'download' && update.state === 'available' && !canInstall() ? update.downloadURL :
       kind === 'release' ? update.releaseURL || RELEASES : kind === 'repository' ? REPOSITORY : null;
     if (!url) throw Error('That release action is unavailable.');
     await openExternal(url); return true;
@@ -60,8 +94,13 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   const quietTimer = setTimeout(() => { if (update.state === 'idle') void check({ quiet: true }); }, 20000); quietTimer.unref?.();
   // The version is always in view; what used to be About (what is new, licence,
   // links) lives in the same window as the update check.
-  return { menu: () => [{ label: update.state === 'available' ? `Update to ${update.version}…` : 'Check for Updates…', click: () => open(update.state !== 'available') },
+  const row = () => update.state === 'ready' ? { label: `Install ${update.version} and Relaunch`, click: () => void install() } :
+    update.state === 'downloading' ? { label: `Downloading ${update.version}… ${update.percent}%`, click: () => open() } :
+    update.state === 'verifying' ? { label: `Verifying ${update.version}…`, click: () => open() } :
+    update.state === 'installing' ? { label: `Installing ${update.version}…`, enabled: false } :
+    update.state === 'available' ? { label: `Update to ${update.version}…`, click: () => open() } : { label: 'Check for Updates…', click: () => open(true) };
+  return { menu: () => [row(),
     { label: `GPT-Live Avatar ${version}`, enabled: false }], open,
-    dispose() { clearTimeout(quietTimer); generation++; abort?.abort(); window?.destroy(); for (const name of ['get', 'check', 'open']) ipcMain.removeHandler('gla:app-info:' + name); } };
+    dispose() { clearTimeout(quietTimer); generation++; abort?.abort(); transfers++; transfer?.abort(); void verified?.detach(); window?.destroy(); for (const name of ['get', 'check', 'open', 'download', 'install']) ipcMain.removeHandler('gla:app-info:' + name); } };
 }
 module.exports = { createAppInfo };

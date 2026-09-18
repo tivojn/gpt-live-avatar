@@ -14,11 +14,13 @@ main{padding:26px 28px 22px;max-width:680px;margin:auto}h1{font-size:24px;line-h
 #description{color:var(--ui-dim);margin:14px 0 16px}
 .card{background:var(--ui-surface);border:1px solid var(--ui-line);border-radius:12px;padding:14px 16px;margin-bottom:12px}.title{font-weight:600;margin:0 0 6px}
 ul{margin:0;padding-left:18px;color:var(--ui-dim);font-size:13px}li{margin:4px 0}
-#status{font-weight:600;margin:0 0 4px}#update-detail{color:var(--ui-dim);margin:0 0 12px;font-size:13px}
+#status{font-weight:600;margin:0 0 4px}#update-detail{color:var(--ui-dim);margin:0 0 12px;font-size:13px}#update-detail.problem{color:var(--ui-text);font-weight:600}
 details{margin:0 0 12px;font-size:13px}summary{cursor:pointer;color:var(--ui-dim)}#release-notes{margin-top:8px;white-space:pre-wrap;color:var(--ui-dim)}
 .actions{display:flex;gap:8px;flex-wrap:wrap}button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--ui-line);background:var(--ui-surface);color:inherit;cursor:pointer}button:hover{background:var(--ui-hover)}
 button.primary{background:var(--ui-fill);border-color:var(--ui-fill);color:var(--ui-on-fill)}button.primary:hover{opacity:.88;background:var(--ui-fill)}button:disabled{opacity:.4;cursor:default}
 button:focus-visible,summary:focus-visible{outline:2px solid var(--ui-text);outline-offset:2px}
+/* Download progress: one hairline bar, no colour. */
+.progress{height:4px;border-radius:2px;background:var(--ui-selected);overflow:hidden;margin:0 0 12px}#progress-bar{height:100%;width:0;background:var(--ui-text);transition:width .2s linear}
 #action-error{margin:10px 0 0;padding:8px 10px;border:1px solid var(--ui-text);border-radius:8px;font-weight:600;font-size:13px}
 footer{display:flex;justify-content:space-between;align-items:center;color:var(--ui-dim);font-size:12px;margin-top:6px}#repository{border:0;background:transparent;color:var(--ui-dim);padding:4px 0}#repository:hover{color:var(--ui-text);background:transparent}
 </style>
@@ -37,10 +39,12 @@ footer{display:flex;justify-content:space-between;align-items:center;color:var(-
   <section class="card" aria-label="App updates">
     <p id="status" role="status" aria-live="polite">Check for a newer version</p>
     <p id="update-detail">Updates come from the official GPT-Live Avatar release service.</p>
+    <div id="progress" class="progress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" hidden><div id="progress-bar"></div></div>
     <details id="notes-section" hidden><summary>Latest release notes</summary><div id="release-notes"></div></details>
     <div class="actions">
       <button id="check" class="primary">Check for Updates</button>
       <button id="download" class="primary" hidden>Download Update</button>
+      <button id="install" class="primary" hidden>Install and Relaunch</button>
       <button id="release">Open Releases</button>
     </div>
     <p id="action-error" role="alert" hidden></p>

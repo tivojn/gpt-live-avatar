@@ -14,10 +14,10 @@ app.whenReady().then(async()=>{try{
  const models=['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'];
  for(const id of ['delegateModel','agentCodexModel']){const picker=await run(settings,`const e=document.querySelector('#${id}');return {tag:e.tagName,options:[...e.options].map(o=>o.value)}`);assert.equal(picker.tag,'SELECT');for(const model of models)assert(picker.options.includes(model),id+' lists '+model);}
  assert.equal(await run(settings,"return document.querySelector('#delegateModel').value"),'gpt-5.6-sol');
- for(const model of models){await run(settings,`document.querySelector('#delegateModel').value=${JSON.stringify(model)};await document.querySelector('#saveDelegateModel').onclick();`);assert.equal(await run(settings,'return (await gla.getSettings()).delegate.model'),model);}
- await run(settings,"document.querySelector('#delegateModel').value='gpt-5.6-sol';await document.querySelector('#saveDelegateModel').onclick();await document.querySelector('#refreshDelegateModels').onclick();");
+ for(const model of models){await run(settings,`document.querySelector('#delegateModel').value=${JSON.stringify(model)};await document.querySelector('#delegateModel').onchange();`);assert.equal(await run(settings,'return (await gla.getSettings()).delegate.model'),model);}
+ await run(settings,"document.querySelector('#delegateModel').value='gpt-5.6-sol';await document.querySelector('#delegateModel').onchange();await document.querySelector('#refreshDelegateModels').onclick();");
  assert.equal(await run(settings,"return document.querySelector('#delegateModel').value"),'gpt-5.6-sol');
- await run(settings,"document.querySelector('#agentCodexModel').value='gpt-6-astra';await document.querySelector('#codexSaveModel').onclick();");
+ await run(settings,"document.querySelector('#agentCodexModel').value='gpt-6-astra';await document.querySelector('#agentCodexModel').onchange();");
  assert.equal(await run(settings,'return (await gla.getSettings()).agentCodexModel'),'gpt-6-astra');
  fs.writeFileSync(out+'/models.png',(await settings.webContents.capturePage()).toPNG());
  const question=`Tia, run Python to calculate 7 times 8, create ${filename} in the working folder containing the result, then read it back.`;
