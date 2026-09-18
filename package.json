@@ -1,6 +1,6 @@
 {
   "name": "gpt-live-avatar",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "description": "GPT-Live Avatar, a full-duplex desktop companion on OpenAI GPT-Live-1",
   "author": "Adam Cohen",
   "license": "MIT",

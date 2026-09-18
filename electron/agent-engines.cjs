@@ -1,6 +1,6 @@
 'use strict';
 const {PERMISSION_CHOICES,normalizePermission}=require('./agent-permissions.cjs');
-const ENGINES=Object.freeze({codex:'Codex App Server',openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build'});
+const ENGINES=Object.freeze({codex:'Codex App Server',openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build',enconvo:'EnConvo'});
 const ACP_PERMISSIONS=Object.freeze([
  {value:'workspace',label:'Ask when the agent requests approval',description:'Show approval requests from this agent. Its own configured permissions still apply.'},
  {value:'full',label:'Allow requests for this task',description:'Allow each approval request for the current task. The agent keeps its own permissions; no permanent allowlist is changed.'},
@@ -25,6 +25,7 @@ function selectEngine(engine){
 function installed(config){
  return Object.fromEntries(Object.keys(ENGINES).map(engine=>{try{
   if(engine==='codex')require('./codex-client.cjs').findCodex();
+  else if(engine==='enconvo'){/* an HTTP service, not a binary: reachability is checked on connection */}
   else require('./acp-client.cjs').findRuntime(engine,config.agentRuntimePaths?.[engine]||'');
   return [engine,true];
  }catch{return [engine,false];}}));

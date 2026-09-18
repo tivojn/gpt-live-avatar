@@ -1,13 +1,13 @@
 {
-  "version": "0.2.20",
+  "version": "0.2.21",
   "date": "2026-09-18",
-  "title": "Instinct: reflexes and a full range of facial expressions",
-  "description": "Optional TypeSafe Jev integration gives every character reflexes: motions start mid-sentence, clips are chosen by meaning, and 21 facial expressions respond while you speak and while she speaks, in any language.",
+  "title": "EnConvo as a reasoning and action engine",
+  "description": "EnConvo joins Codex, OpenClaw, Hermes and Grok Build. Mavis or any custom EnConvo agent can think and act for each character through EnConvo's local API, keeping its own model, tools and account.",
   "highlights": [
-    "Settings → Instinct: add a TypeSafe API key and she starts a promised motion while still saying the sentence, instead of after the transcript settles.",
-    "Requests the built-in rules could not parse (“show me something triumphant”) now pick the fitting clip; hypotheticals and refusals no longer trigger motions.",
-    "21 facial expressions on all five characters, chosen from the whole list while she listens and while she speaks, with human timing: quick onset, brief peak, soft trace.",
-    "Works in Chinese, Japanese, Spanish and English; short Chinese lines are judged by meaning, not character count.",
-    "Without a key, or whenever Jev is slow or unsure, the built-in rules decide exactly as before. Audio never leaves the Mac; only transcript text is sent."
+    "Settings → Reasoning → EnConvo · local agent, and Action engine → EnConvo. Uses the EnConvo app's local API (http://localhost:54535 by default, configurable).",
+    "Agents for each character gains an EnConvo column listing Mavis and every custom EnConvo agent; bind a different agent to each avatar.",
+    "Each EnConvo agent keeps its own model, tools, account and permissions; only transcript text and the avatar tool instructions are sent.",
+    "With actions enabled, requests go to the action engine: choose Follow reasoning agent or EnConvo there to route through EnConvo.",
+    "Facial expression timing refined: brow gestures flash and rest instead of holding, and repeated feelings never restart a wink."
   ]
 }

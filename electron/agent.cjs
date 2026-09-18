@@ -10,7 +10,7 @@ function setupAgent(deps){
  const allowed=e=>e.senderFrame===e.sender.mainFrame&&[deps.origin+'/avatar.html',deps.origin+'/group.html',deps.origin+'/settings.html'].includes(e.sender.getURL());
  const progress=(sender,value)=>{const item={...value,at:Date.now()};if(!sender.isDestroyed())sender.send('gla:agent:progress',item);recent.push(item);recent=recent.slice(-40);};
  const approveRuntime=async p=>{const r=await dialog.showMessageBox({type:'question',title:'GPT-Live Avatar · '+p.character,message:p.character+' needs your approval',detail:[p.command,p.reason].filter(Boolean).join('\n\n').slice(0,12000),buttons:['Allow this action','Decline'],defaultId:1,cancelId:1,signal:p.signal});return r.response===0&&!p.signal.aborted;};
- const runtimes=Object.fromEntries(['openclaw','hermes','grok'].map(engine=>[engine,new (require('./acp-agent.cjs').AcpAgent)({engine,approve:approveRuntime})]));
+ const runtimes={...Object.fromEntries(['openclaw','hermes','grok'].map(engine=>[engine,new (require('./acp-agent.cjs').AcpAgent)({engine,approve:approveRuntime})])),enconvo:new (require('./enconvo-agent.cjs').EnconvoAgent)({approve:approveRuntime,fetchImpl:(url,init)=>require('electron').net.fetch(url,init)})};
  const codex=new (require('./codex-agent.cjs').CodexAgent)({
   approve:async p=>{
    const detail=p.command||p.reason||p.message||JSON.stringify(p.permissions||{});
@@ -46,7 +46,7 @@ function setupAgent(deps){
  }
  const handle=(channel,fn)=>ipcMain.handle(channel,async(e,...args)=>{try{if(!allowed(e))throw Error('Unavailable outside the app.');return {ok:true,...await fn(e,...args)};}catch(e){return {ok:false,error:String(e.message).slice(0,600)};}});
  handle('gla:agent:run',(e,r)=>answer(e.sender,r));
- handle('gla:agent:inventory',async()=>{const result={};for(const engine of ['openclaw','hermes','grok'])result[engine]=await require('./runtime-agents.cjs').discoverAgents(engine,deps.getConfig());return {runtimes:result};});
+ handle('gla:agent:inventory',async()=>{const result={};for(const engine of ['openclaw','hermes','grok','enconvo'])result[engine]=await require('./runtime-agents.cjs').discoverAgents(engine,deps.getConfig());return {runtimes:result};});
  handle('gla:agent:codex-status',()=>codex.status());
  handle('gla:agent:runtime-status',(_e,engine)=>{if(engine==='codex')return codex.status();if(!runtimes[engine])throw Error('Unknown agent runtime.');return runtimes[engine].status(deps.getConfig());});
  handle('gla:agent:cancel',(e,id)=>{deps.backend.cancel(e.sender.id,id);codex.cancel(e.sender.id,id);for(const r of Object.values(runtimes))r.cancel(e.sender.id,id);return {};});

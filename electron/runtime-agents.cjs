@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{execFile}=require('node:child_process'),{promisify}=require('node:util');
 const {findRuntime}=require('./acp-client.cjs');
-const validAgent=id=>typeof id==='string'&&/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id);
+const validAgent=id=>typeof id==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(id); // EnConvo custom agents have mixed-case ids
 function hermesRoot(){const configured=process.env.HERMES_HOME;const root=configured&&path.isAbsolute(configured)?configured:path.join(os.homedir(),'.hermes');return path.basename(path.dirname(root))==='profiles'?path.dirname(path.dirname(root)):root;}
 function hermesProfiles(root=hermesRoot()){
  if(!fs.existsSync(root))return [];
@@ -11,7 +11,8 @@ function hermesProfiles(root=hermesRoot()){
  for(const entry of result)entry.isDefault=entry.id===active;
  return result;
 }
-async function discoverAgents(engine,config={},exec=promisify(execFile)){
+async function discoverAgents(engine,config={},exec=promisify(execFile),fetchImpl=fetch){
+ if(engine==='enconvo')return require('./enconvo-agent.cjs').discoverEnconvoAgents(config,fetchImpl);
  let command;try{command=findRuntime(engine,config.agentRuntimePaths?.[engine]||'');}catch(error){return {installed:false,agents:[],error:error.message};}
  try{
   if(engine==='grok')return {installed:true,agents:[{id:'default',name:'Grok Build',isDefault:true}],kind:'runtime'};

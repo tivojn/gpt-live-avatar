@@ -8,11 +8,17 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 18, 2026 for **v0.2.20**. Use the matching
-[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.20)
+Updated September 18, 2026 for **v0.2.21**. Use the matching
+[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.21)
 to confirm Apple Silicon installer availability and checksums. Use the release
 tag and matching checksums for a reproducible reference.
 
+
+## 0.2.21 EnConvo engine
+
+EnConvo (Mavis and custom agents) is a reasoning and action engine through
+its local API, with a per-character agent column. See
+[Agent runtimes](AGENT-RUNTIMES.md).
 
 ## 0.2.20 Instinct update
 
@@ -74,8 +80,8 @@ Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
 1. Confirm availability on the matching release page, then download the official
-   signed v0.2.20 installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.20/GPT-Live.Avatar-0.2.20-arm64.dmg
+   signed v0.2.21 installer:
+   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.21/GPT-Live.Avatar-0.2.21-arm64.dmg
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Sarah appears in her tie top, chain pants and sandals, without a coat. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:

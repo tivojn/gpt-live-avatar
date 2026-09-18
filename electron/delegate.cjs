@@ -1,13 +1,13 @@
 'use strict';
 const {readJSON}=require('./delegate-auth.cjs');
-const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','openclaw:local_runtime':'','hermes:local_runtime':'','grok:local_runtime':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
-const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build'],openclaw:[],hermes:[],grok:[]};
+const DEFAULT_MODELS={'openai:api_key':'gpt-5.6-luna','openai:oauth2':'gpt-5.6-sol','openai:codex_app_server':'','openclaw:local_runtime':'','hermes:local_runtime':'','grok:local_runtime':'','enconvo:local_runtime':'','xai:api_key':'grok-4.6','xai:oauth2':'grok-4.6'};
+const MODEL_CHOICES={openai:['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6-astra'],xai:['grok-4.6','grok-build'],openclaw:[],hermes:[],grok:[],enconvo:[]};
 const validModel=m=>typeof m==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(m);
 function normalizeDelegate(config,patch={}){
   const mode=['managed','delegate'].includes(patch.reasoningMode)?patch.reasoningMode:(['managed','delegate'].includes(config.reasoningMode)?config.reasoningMode:'managed');
-  const provider=['openai','xai','openclaw','hermes','grok'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai','openclaw','hermes','grok'].includes(config.delegateProvider)?config.delegateProvider:'openai');
+  const provider=['openai','xai','openclaw','hermes','grok','enconvo'].includes(patch.delegateProvider)?patch.delegateProvider:(['openai','xai','openclaw','hermes','grok','enconvo'].includes(config.delegateProvider)?config.delegateProvider:'openai');
   let auth=['api_key','oauth2','codex_app_server','local_runtime'].includes(patch.delegateAuth)?patch.delegateAuth:(['api_key','oauth2','codex_app_server','local_runtime'].includes(config.delegateAuth)?config.delegateAuth:'api_key');
-  if(['openclaw','hermes','grok'].includes(provider))auth='local_runtime';
+  if(['openclaw','hermes','grok','enconvo'].includes(provider))auth='local_runtime';
   else if(auth==='local_runtime'||provider!=='openai'&&auth==='codex_app_server')auth='api_key';
   const models={...DEFAULT_MODELS};for(const key of Object.keys(models))if(validModel(config.delegateModels?.[key]))models[key]=config.delegateModels[key];
   if(validModel(patch.delegateModel)||['codex_app_server','local_runtime'].includes(auth)&&patch.delegateModel==='')models[provider+':'+auth]=patch.delegateModel;
@@ -16,7 +16,7 @@ function normalizeDelegate(config,patch={}){
 function selected(config){const c=normalizeDelegate(config);return {provider:c.delegateProvider,auth:c.delegateAuth,model:c.delegateModels[c.delegateProvider+':'+c.delegateAuth]};}
 function usesCodexServer(config){return config.reasoningMode==='delegate'&&selected(config).auth==='codex_app_server';}
 function reasoningEngine(config){const d=selected(config);return config.reasoningMode==='delegate'?(d.auth==='codex_app_server'?'codex':d.auth==='local_runtime'?d.provider:null):null;}
-function actionEngine(config){return (config.agentFollowReasoning!==false&&reasoningEngine(config))||(['codex','openclaw','hermes','grok'].includes(config.agentEngine)?config.agentEngine:'codex');}
+function actionEngine(config){return (config.agentFollowReasoning!==false&&reasoningEngine(config))||(['codex','openclaw','hermes','grok','enconvo'].includes(config.agentEngine)?config.agentEngine:'codex');}
 function usesCodexActions(config){return actionEngine(config)==='codex';}
 function runtimeConfig(config,engine=reasoningEngine(config)){if(engine!==reasoningEngine(config))return config;return engine==='codex'?codexConfig(config):engine?{...config,agentRuntimeModels:{...config.agentRuntimeModels,[engine]:selected(config).model}}:config;}
 function codexConfig(config){return usesCodexServer(config)?{...config,agentCodexModel:selected(config).model}:config;}

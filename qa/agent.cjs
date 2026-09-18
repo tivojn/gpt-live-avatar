@@ -18,20 +18,20 @@ const {actionEngine,reasoningEngine,runtimeConfig,normalizeDelegate}=require('..
  await assert.rejects(agent.execute('avatar_state',{path:'/tmp'},signal),/Invalid/);await assert.rejects(agent.execute('move_avatar',{character:'Tia',destination:'/tmp'},signal),/supported/);
  const cancelled=new AbortController();cancelled.abort();await assert.rejects(agent.execute('avatar_state',{},cancelled.signal));assert.equal(actions.length,6);
  const history=[{role:'user',text:'Old request'},{role:'assistant',text:'Done'},{role:'user',text:'Hi Sarah,'},{role:'user',text:'read this page.'}];assert.equal(latestUserRequest(history),'Hi Sarah, read this page.');
- assert.deepEqual(permissions({agentAccess:'auto_review'}),{codex:'auto_review',openclaw:'workspace',hermes:'workspace',grok:'workspace'});
+ assert.deepEqual(permissions({agentAccess:'auto_review'}),{codex:'auto_review',openclaw:'workspace',hermes:'workspace',grok:'workspace',enconvo:'workspace'});
  const saved={agentAccess:'full',agentPermissions:{codex:'workspace',hermes:'workspace'}};
  const changed=permissionPatch(saved,{grok:'workspace',hermes:'invalid',codex:'auto_review'});
- assert.deepEqual(changed,{codex:'auto_review',openclaw:'full',hermes:'workspace',grok:'workspace'});
+ assert.deepEqual(changed,{codex:'auto_review',openclaw:'full',hermes:'workspace',grok:'workspace',enconvo:'full'});
  assert.equal(engineConfig({...saved,agentPermissions:changed},'codex').agentAccess,'auto_review');
  assert.equal(actionEngine({agentEngine:'basic'}),'codex','Legacy built-in config migrates to Codex, never a hidden built-in fallback');
- const patches=[],available={codex:true,openclaw:false,hermes:true,grok:true};
+ const patches=[],available={codex:true,openclaw:false,hermes:true,grok:true,enconvo:true};
  const menu=providerMenu(saved,{active:'hermes',available,update:p=>patches.push(p),openSettings(){}});
  assert.equal(menu.label,'Action Engine & Permissions');
  const engineItem=name=>menu.submenu.find(x=>x.submenu&&x.label.includes(name));
  assert.match(engineItem('Hermes').label,/✓ Hermes/);assert.equal(engineItem('OpenClaw').submenu[0].enabled,false);
  engineItem('Grok Build').submenu[0].click();assert.deepEqual(patches[0],{agentEngine:'grok',agentFollowReasoning:false});
  engineItem('Hermes').submenu.find(x=>x.label==='Allow requests for this task').click();assert.deepEqual(patches[1],{agentPermissions:{hermes:'full'}});
- const engines=['codex','openclaw','hermes','grok'];
+ const engines=['codex','openclaw','hermes','grok','enconvo'];
  for(const reasoning of engines)for(const action of engines){
   const config={...normalizeDelegate({},selectEngine(reasoning)),agentEngine:action,agentCodexModel:'action-model',agentRuntimeModels:{[action]:'action-model'}};
   assert.equal(actionEngine(config),reasoning,'Default follows native reasoning');

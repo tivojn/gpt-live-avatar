@@ -59,6 +59,42 @@ class Client{
   const replacement=a.answer(9,'replacement',cfg,[],'third','Sarah');replacement.catch(()=>{});await assert.rejects(parallelSarah,/cancelled/);await tick();assert.equal(a.jobs.size,1);a.cancelAll();await assert.rejects(replacement,/cancelled/);assert.equal(a.jobs.size,0);
 
  }
+ // EnConvo: the app's local HTTP gateway rather than a child process.
+ {
+  const {EnconvoAgent,discoverEnconvoAgents,parseReply,validURL,baseURL}=require('../electron/enconvo-agent.cjs');
+  assert(validURL('http://localhost:54535')&&validURL('http://127.0.0.1:8080')&&!validURL('http://evil.test:54535')&&!validURL('localhost:54535')&&!validURL('http://localhost:54535/api'));
+  assert.equal(baseURL({}),'http://localhost:54535');assert.equal(baseURL({agentRuntimePaths:{enconvo:'http://127.0.0.1:6000'}}),'http://127.0.0.1:6000');
+  const list=[{title:'Mavis',name:'main',agent_id:'agent|main',command_type:'agent',description:'Personal assistant'},{title:'vivieen',name:'hMTWU_egVCH3lePD_pPx',agent_id:'agent|hMTWU_egVCH3lePD_pPx',command_type:'agent'},{title:'bad',name:'../x',command_type:'agent'},{title:'not an agent',name:'tool',command_type:'command'}];
+  const reply=text=>({type:'messages',messages:[{role:'user',content:[{type:'text',text:'ignored'}]},{role:'assistant',content:[{type:'flow_step',name:'file_system|read_file',status:'completed'},{type:'text',text}],additional:{metadata:{llmUsage:{model:'claude-fable-5-1'}}}}]});
+  let calls=[],pending=[],down=false;
+  const fetchImpl=async(url,init={})=>{calls.push({url,method:init.method||'GET',body:init.body?JSON.parse(init.body):null});
+   if(down)throw Error('ECONNREFUSED');
+   const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+   if(url.endsWith('/api/agent/list'))return json(list);if(url.endsWith('/'))return json({version:'1.0.0'});
+   if(url.endsWith('/api/agent/session/new'))return json({sessionId:'sess-1',commandKey:init.body&&JSON.parse(init.body).agentId});
+   if(url.endsWith('/api/agent/messages'))return new Promise((resolve,reject)=>{const p={resolve:text=>resolve(json(reply(text))),reject};pending.push(p);init.signal?.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})));});
+   return json({error:'Route not found'},404);};
+  const inventory=await discoverEnconvoAgents({},fetchImpl);
+  assert.deepEqual(inventory.agents.map(a=>[a.id,a.isDefault]),[['main',true],['hMTWU_egVCH3lePD_pPx',false]],'only real agents with safe ids, Mavis as default');
+  down=true;assert.equal((await discoverEnconvoAgents({},fetchImpl)).installed,false);down=false;
+  assert.deepEqual(parseReply(reply('  hi ')),{text:'hi',steps:[{type:'flow_step',name:'file_system|read_file',status:'completed'}],model:'claude-fable-5-1'});assert.equal(parseReply({}).text,'');
+  const a=new EnconvoAgent({fetchImpl});const progress=[],receipts=[];
+  const cfg={agentEnabled:true,agentAccess:'workspace',agentFolder:os.tmpdir(),avatarAgentBindings:{sarah:{enconvo:'hMTWU_egVCH3lePD_pPx'}}};
+  const status=await a.status({...cfg,personaName:'Tia'});assert.equal(status.agent,'main');assert.equal(status.connected,true);assert.equal(status.version,'1.0.0');
+  await assert.rejects(a.answer(1,'off',{...cfg,agentEnabled:false},[],'hello','Tia'),/Enable actions/);
+  const work=a.answer(1,'x',cfg,[{role:'assistant',text:'Tia created original.txt'},{role:'user',text:'Sarah read that file'}],'Sarah read that file','Sarah',null,r=>receipts.push(r),p=>progress.push(p));await tick();await tick();
+  const opened=calls.find(c=>c.url.endsWith('/api/agent/session/new'));assert.equal(opened.body.agentId,'agent|hMTWU_egVCH3lePD_pPx','the character\'s bound agent');
+  const sent=calls.find(c=>c.url.endsWith('/api/agent/messages'));assert.equal(sent.body.sessionId,'sess-1');assert(sent.body.message.includes('Sarah')&&sent.body.message.includes('original.txt')&&sent.body.message.includes(os.tmpdir()));
+  assert.deepEqual(progress.at(-1),{state:'working',tool:'runtime'});
+  pending.shift().resolve('Sarah: verified.');const result=await work;
+  assert.equal(result.text,'Sarah: verified.');assert.equal(result.engine,'enconvo');assert.equal(result.model,'claude-fable-5-1');assert.equal(receipts.length,1);assert.equal(receipts[0].tool,'flow_step');assert.equal(a.jobs.size,0);
+  const cancelled=a.answer(1,'y',cfg,[],'check','Sarah');cancelled.catch(()=>{});await tick();await tick();a.cancel(1,'unrelated');assert.equal(a.jobs.size,1);a.cancel(1,'y');await assert.rejects(cancelled,/cancelled/);assert.equal(a.jobs.size,0);
+  await assert.rejects(a.answer(1,'missing',{...cfg,avatarAgentBindings:{sarah:{enconvo:'deleted'}}},[],'hello','Sarah'),/no longer exists/);
+  down=true;await assert.rejects(a.answer(1,'down',cfg,[],'hello','Sarah'),/not reachable/);down=false;
+  const tia=a.answer(9,'p-tia',cfg,[],'first','Tia');tia.catch(()=>{});const sarah=a.answer(9,'p-sarah',cfg,[],'second','Sarah');sarah.catch(()=>{});await tick();await tick();assert.equal(a.jobs.size,2,'simultaneous characters');
+  a.cancelAll();await assert.rejects(tia,/cancelled/);await assert.rejects(sarah,/cancelled/);assert.equal(a.jobs.size,0);
+  const routed={...normalizeDelegate({},{reasoningMode:'delegate',delegateProvider:'enconvo'}),agentEngine:'codex'};assert.equal(reasoningEngine(routed),'enconvo');assert.equal(actionEngine(routed),'enconvo');
+ }
  const requested=createAvatarTools({config:{agentFolder:os.tmpdir()},request:'Sarah, play your boxing warmup.',avatarCommand:async()=>({ok:true})});assert.equal((await requested.execute('play_motion',{character:'Sarah',motion:'boxing-warmup'},new AbortController().signal)).ok,true);
  const abort=new AbortController(),executed=[],tool={tools:[{name:'play_motion'}],execute:async(name,args)=>{executed.push(args);return {ok:true};}};
  const bridge=await runtimeTools(tool,abort.signal);const url=bridge.instructions.match(/HTTP POST (http:\/\/\S+)/)[1];
@@ -67,5 +103,5 @@ class Client{
  assert.equal((await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:'shell',args:{}})})).status,400);
  assert.equal((await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:'play_motion',args:{motion:'wave'}})})).status,200);assert.equal(executed.length,1);
  abort.abort();await assert.rejects(fetch(url));bridge.close();
- console.log('Runtime routing, independent models/credentials, ACP progress/receipts, approval denial, cancellation, actions-off gate and request-scoped tool endpoint passed.');
+ console.log('Runtime routing, independent models/credentials, ACP progress/receipts, approval denial, cancellation, actions-off gate, EnConvo HTTP sessions and request-scoped tool endpoint passed.');
 })().catch(e=>{console.error(e);process.exitCode=1});
