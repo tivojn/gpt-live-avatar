@@ -31,11 +31,6 @@ footer{display:flex;justify-content:space-between;align-items:center;color:var(-
   <p class="brand">Powered by EnConvo</p>
   <span class="version" id="version">Loading version…</span><span class="meta" id="architecture"></span>
   <p id="description"></p>
-  <section class="card" aria-labelledby="new-heading">
-    <h2 id="new-heading">What’s new in this version</h2>
-    <p class="title" id="release-title"></p>
-    <ul id="highlights"></ul>
-  </section>
   <section class="card" aria-label="App updates">
     <p id="status" role="status" aria-live="polite">Check for a newer version</p>
     <p id="update-detail">Updates come from the official GPT-Live Avatar release service.</p>
@@ -48,6 +43,11 @@ footer{display:flex;justify-content:space-between;align-items:center;color:var(-
       <button id="release">Open Releases</button>
     </div>
     <p id="action-error" role="alert" hidden></p>
+  </section>
+  <section class="card" aria-labelledby="new-heading">
+    <h2 id="new-heading">What’s new in this version</h2>
+    <p class="title" id="release-title"></p>
+    <ul id="highlights"></ul>
   </section>
   <footer><span id="date"></span><button id="repository">View on GitHub ↗</button></footer>
 </main>

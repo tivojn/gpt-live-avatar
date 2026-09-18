@@ -25,6 +25,8 @@ app.whenReady().then(async()=>{let info;try{
  info=createAppInfo({origin,version:'0.2.23',fetchRelease:async()=>release,updater,quit:()=>{quits++;},openExternal:async url=>{opened.push(url);}});
  assert.deepEqual(info.menu().map(i=>i.label),['Check for Updates…','GPT-Live Avatar 0.2.23']);assert.equal(info.menu()[1].enabled,false,'the version is always in view, and is not a button');
  info.open(true);await until(()=>page(),'window');await until(async()=>await text('status')==='Version 0.3.0 is available','available');
+ // Checking, downloading and installing are why this window is opened: that card is first, and its button is in view without scrolling.
+ assert.deepEqual(await js("const cards=[...document.querySelectorAll('section.card')];const r=document.getElementById('download').getBoundingClientRect();return [cards[0].getAttribute('aria-label'),r.top>0&&r.bottom<=innerHeight,scrollY]"),['App updates',true,0]);
  assert.match(await text('update-detail'),/checksum, its signature and Apple’s notarization/);assert.equal(await hidden('download'),false);assert.equal(await hidden('install'),true);assert.equal(row().label,'Update to 0.3.0…');
  await js("document.getElementById('download').click();return 1");
  await until(async()=>/^Downloading version 0\.3\.0… 40%$/.test(await text('status')),'progress in the window');
