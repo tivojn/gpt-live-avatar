@@ -16,7 +16,11 @@ async function createScopedS3Reader(account,bucket,{credentialsPath=path.join(di
  const reader=createR2Reader({R2_STORAGE_ACCOUNT:account,R2_BUCKET:bucket,R2_READ_ACCESS_KEY_ID:credentials.accessKeyId,R2_READ_SECRET_ACCESS_KEY:credentials.secretAccessKey},async request=>{
   for(let attempt=0;attempt<4;attempt++){
    let response;
-   try{response=await fetcher(request,{redirect:'manual',signal:AbortSignal.timeout(5*60*1000)});}
+   // Ask for the stored bytes as they are. R2 compresses text such as releases/latest.json on the fly, Node's fetch
+   // then decodes it and drops Content-Length, and the reader (rightly) refuses an object without a size. The header
+   // is added after signing, so it is not part of the signature.
+   const headers=new Headers(request.headers);headers.set('accept-encoding','identity');
+   try{response=await fetcher(request,{headers,redirect:'manual',signal:AbortSignal.timeout(5*60*1000)});}
    catch{if(attempt===3)throw Error('R2 checksum request interrupted after 4 attempts.');await wait(1000*2**attempt);continue;}
    if(response.status===200)return response;
    const status=response.status;try{await response.body?.cancel();}catch{}
