@@ -8,7 +8,7 @@ delete process.env.GLA_OPENAI_KEY;
 fs.writeFileSync(path.join(app.getPath('userData'),'config.json'),JSON.stringify({avatar:'tia',quality:'best',bubbleMode:'always',windowWidth:500,windowHeight:820,avatarLooks:{tia:{},sarah:{}}}));
 app.whenReady().then(()=>fs.writeFileSync(path.join(app.getPath('userData'),'openai-key.bin'),safeStorage.isEncryptionAvailable()?safeStorage.encryptString('sk-local-regression-placeholder'):Buffer.from('sk-local-regression-placeholder')));
 let template;const buildMenu=Menu.buildFromTemplate;
-Menu.buildFromTemplate=function(items){const menu=buildMenu.call(Menu,items);menu.popup=()=>{template=items;};return menu;};
+Menu.buildFromTemplate=function(items){const menu=buildMenu.call(Menu,items);menu.popup=()=>{template=require('./menu-flat.cjs').flat(items);};return menu;};
 const errors=[],requests=[],screens=[];
 app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));
 require('../electron/main.cjs');
@@ -24,7 +24,7 @@ app.whenReady().then(async()=>{
   await loaded();
   const menu=async()=>{template=null;await js("gla.showMenu({live:gla_live.state,hasKey:true,bubbleMode:(await gla.getSettings()).bubbleMode,catalogue:gla_avatar.options.catalogue()})");return until(()=>template);};
   const nativeMenu=async()=>{template=null;await js("document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");return until(()=>template);};
-  let items=await nativeMenu();assert(items.some(x=>x.label==='Avatar'));assert(items.some(x=>x.label==='Voice'));
+  let items=await nativeMenu();assert(items.some(x=>x.label==='Character'));assert(items.some(x=>x.label==='Voice'));
   assert.equal(items.find(x=>x.label==='Original colors').submenu.reduce((n,x)=>n+x.submenu.length-1,0),87);
   await js("gla.setSettings({bubbleMode:'always'})");await wait(300);
   assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),false,'Always visible while idle');
@@ -56,7 +56,7 @@ app.whenReady().then(async()=>{
   }
   await js(`gla_avatar.options.select(Object.fromEntries(Object.entries(gla_avatar.options.selection).filter(([k])=>!k.startsWith('texture:'))));void 0`);
   const oldModelURL=await js('(await gla.getSettings()).avatar.modelURL');
-  items=await nativeMenu();items.find(x=>x.label==='Avatar').submenu.find(x=>x.label==='Sarah').click();await loaded();
+  items=await nativeMenu();items.find(x=>x.label==='Character').submenu.find(x=>x.label==='Sarah').click();await loaded();
   await until(()=>js("gla_avatar?.appearance?.items.filter(x=>x.kind==='texture').length===74"),'Sarah color library');
   assert.equal(await js(`(await (await fetch(${JSON.stringify(oldModelURL)})).json()).materials[1].name`),'Top_Tia01A_M','Previous package URL remains pinned');
   await js("Promise.all([gla.selectAvatar('tia'),gla.selectAvatar('sarah'),gla.selectAvatar('tia')])");await loaded();

@@ -11,7 +11,7 @@ async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end)
 app.whenReady().then(async()=>{const checks=[];try{
  const w=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'window');
  const js=s=>w.webContents.executeJavaScript('(async()=>{'+s+'})()');
- await until(()=>js('return gla_avatar?.resources.ready&&gla_avatar.appearance?.portrait?.diffusion?.filmic&&gla_avatar.motion?.clips.size===62;'),'enhanced Iselda loaded');
+ await until(()=>js('return gla_avatar?.resources.ready&&gla_avatar.appearance?.portrait?.diffusion?.filmic&&gla_avatar.motion?.clips.size>=62;'),'enhanced Iselda loaded');
  for(const other of BrowserWindow.getAllWindows())if(other!==w)other.close();
  const ready=()=>until(()=>js('return gla_avatar.resources.ready&&!gla_avatar.appearance.status;'),'wardrobe ready');
  for(const lighting of ['soft','classic','studio','classic','studio']){

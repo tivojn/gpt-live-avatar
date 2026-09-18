@@ -13,7 +13,9 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   const snapshot = () => ({ version, architecture: process.arch === 'arm64' ? 'Apple silicon' : process.arch === 'x64' ? 'Intel' : process.arch,
     date: details.date || '', title: details.title, description: details.description, highlights: details.highlights, update });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('gla:app-info:changed', snapshot()); };
-  async function check() {
+  // A quiet check (once, shortly after launch) only ever turns the menu row into
+  // “Update to …”; a failure stays silent instead of greeting the user with an error.
+  async function check({ quiet = false } = {}) {
     if (pending) return pending;
     const own = ++generation; abort = new AbortController(); update = { state: 'checking' }; publish();
     pending = (async () => {
@@ -24,7 +26,7 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
         update = { state: comparison > 0 ? 'available' : comparison < 0 ? 'ahead' : 'current', ...latest };
       } catch (error) {
         if (own !== generation) return;
-        update = { state: 'error', message: error.name === 'TimeoutError' ? 'The update check timed out. Please try again.' :
+        update = quiet ? { state: 'idle' } : { state: 'error', message: error.name === 'TimeoutError' ? 'The update check timed out. Please try again.' :
           /^(GitHub |No public |The release |The update)/.test(error.message) ? error.message : 'Could not check for updates. Check your connection and try again.' };
       } finally { if (own === generation) { pending = null; abort = null; publish(); } }
     })();
@@ -32,7 +34,7 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   }
   function open(checkNow = false) {
     if (!window || window.isDestroyed()) {
-      window = new BrowserWindow({ width: 540, height: 690, minWidth: 440, minHeight: 500, title: 'About GPT-Live Avatar',
+      window = new BrowserWindow({ width: 540, height: 690, minWidth: 440, minHeight: 500, title: 'GPT-Live Avatar · Version and updates',
         backgroundColor: '#f7f8fc', show: false, autoHideMenuBar: true,
         webPreferences: { preload: path.join(__dirname, 'app-info-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
       window.once('ready-to-show', () => { window?.show(); });
@@ -55,8 +57,11 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
     if (!url) throw Error('That release action is unavailable.');
     await openExternal(url); return true;
   }));
-  return { menu: () => [{ label: 'Check for Updates…', click: () => open(true) },
-    { label: 'About GPT-Live Avatar', click: () => open() }], open,
-    dispose() { generation++; abort?.abort(); window?.destroy(); for (const name of ['get', 'check', 'open']) ipcMain.removeHandler('gla:app-info:' + name); } };
+  const quietTimer = setTimeout(() => { if (update.state === 'idle') void check({ quiet: true }); }, 20000); quietTimer.unref?.();
+  // The version is always in view; what used to be About (what is new, licence,
+  // links) lives in the same window as the update check.
+  return { menu: () => [{ label: update.state === 'available' ? `Update to ${update.version}…` : 'Check for Updates…', click: () => open(update.state !== 'available') },
+    { label: `GPT-Live Avatar ${version}`, enabled: false }], open,
+    dispose() { clearTimeout(quietTimer); generation++; abort?.abort(); window?.destroy(); for (const name of ['get', 'check', 'open']) ipcMain.removeHandler('gla:app-info:' + name); } };
 }
 module.exports = { createAppInfo };

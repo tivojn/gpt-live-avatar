@@ -204,6 +204,26 @@ public iOS release. Its old raw GitHub endpoint is intentionally not a fallback
 in the Mac downloader. Owner-supplied local packages remain usable; migration
 never deletes their original licensed files.
 
+## Pruning superseded packs
+
+Uploads only add objects, so every new motion or character revision leaves the
+previous packs in the bucket. The gateway serves only what the live signed
+inventory names, which makes those leftovers unreachable by every app version:
+they cost storage and nothing else. `tools/cloud/prune-r2.cjs` removes exactly
+that remainder. It is a dry run by default, never touches a live object or
+anything under `releases/`, refuses packs that have no local copy in
+`build/protected` (so a removed pack can be uploaded again), stops if the
+bucket is missing a live object, and re-checks the live inventory afterwards.
+
+```sh
+node tools/cloud/prune-r2.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected            # lists what would go
+node tools/cloud/prune-r2.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected --apply    # permanent
+```
+
+Deletion in R2 is permanent; run `--apply` yourself after reading the list.
+On 2026-09-18 this took the bucket from 9.15 GB (152 objects) to 6.43 GB, the
+104 objects of the live release.
+
 ## Motion-only releases (0.2.11+)
 
 `node tools/build-motion-update.cjs REVISION` packages the complete motion library for each character into an encrypted `motions.gla`. It retains the existing model/texture archives and adds `motionUpdate: {revision, package}` outside the catalogue’s `mac` tiers. Earlier apps ignore that optional field and keep their existing downloads. The uploader includes both the old parts and new motion parts, checks the account-wide 10 GB cap before uploading, and the gateway serves only that verified inventory.

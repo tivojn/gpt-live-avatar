@@ -9,7 +9,7 @@ const root=path.resolve(__dirname,'..'),out=path.join(root,'build/qa-enconvo-app
 fs.mkdirSync(folder,{recursive:true});fs.rmSync(profile,{recursive:true,force:true});fs.mkdirSync(profile+'/avatars',{recursive:true});app.setPath('userData',profile);
 fs.symlinkSync(root+'/build/characters/tia',profile+'/avatars/tia');
 fs.writeFileSync(profile+'/config.json',JSON.stringify({avatar:'tia',quality:'friendly',bubbleMode:'off',agentEnabled:true,agentAccess:'full',agentFolder:folder,reasoningMode:'delegate',delegateProvider:'enconvo',delegateAuth:'local_runtime',avatarAgentBindings:{tia:{enconvo:'main'}},avatarLooks:{tia:{}}}));
-const errors=[],templates=[];const buildMenu=Menu.buildFromTemplate;Menu.buildFromTemplate=function(t){templates.push(t);return buildMenu.call(this,t);};
+const errors=[],templates=[];const buildMenu=Menu.buildFromTemplate;Menu.buildFromTemplate=function(t){templates.push(require('./menu-flat.cjs').flat(t));return buildMenu.call(this,t);};
 app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));
 require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms));async function until(fn,label){const end=Date.now()+180000;while(Date.now()<end){const v=await fn();if(v)return v;await wait(150);}throw Error('Timed out: '+label);}const run=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
 app.whenReady().then(async()=>{try{

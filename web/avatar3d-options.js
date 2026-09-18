@@ -425,6 +425,7 @@ export class Avatar3DOptions {
         : /standing/i.test(pose.label || pose.id)));
     this.playback = this.playbackAll;
     if (this.stageMode) this.setStageMode(true);
+    const retiredOutfits = data.characterId==='seraphim' ? new Set(['robot-armor','heavy-armor']) : new Set(); // Enclosed and Heavy Seraphim armor
     this.outfits = (data.outfits || []).map(outfit=>{
       if(data.characterId==='sarah'&&outfit.id==='tactical')return {...outfit,bodyMasks:{...outfit.bodyMasks,
         // The shirt's sleeves and back are covered by the coat in this
@@ -452,7 +453,12 @@ export class Avatar3DOptions {
         nodes:[...new Set([...outfit.nodes,'spaceJumpSuit','SpaceLegs','SpaceBoots'])],
         headClearance:'helmet'};
       return outfit.id==='robot-armor'?{...outfit,headClearance:'helmet'}:outfit;
-    });
+    // Outfits are authored into the model extras as well, inside a pack of about a
+    // gigabyte, so one that is not wanted is retired on read like the bag below:
+    // it stays on the list (that is what hides its meshes), is left out of the
+    // catalogue and refused as a selection, and a saved look that used it falls
+    // back to the default outfit.
+    }).map(outfit=>retiredOutfits.has(outfit.id)?{...outfit,retired:true}:outfit);
     // Props are authored into the character's own model extras, so the bag
     // cannot be taken out without re-exporting a half-gigabyte GLB. Retire it
     // on read instead. Scoped by character because a prop id is only unique
@@ -516,7 +522,7 @@ export class Avatar3DOptions {
 
   catalogue() {
     const choices = list => list.map(({id,label,group,pose})=>({id,label:String(label||id).slice(0,80),...(group?{group}:{}),...(pose?{pose}:{})}));
-    return {poses:choices([...this.poses.values()]),outfits:choices(this.outfits),props:choices(this.props.filter(p=>!p.retired)),accessories:choices(this.accessories),
+    return {poses:choices([...this.poses.values()]),outfits:choices(this.outfits.filter(o=>!o.retired)),props:choices(this.props.filter(p=>!p.retired)),accessories:choices(this.accessories),
       walkingStyles:[{id:'walking-woman',label:'Walking Woman'},{id:'walk',label:'Natural walk'},{id:'casual-walk',label:'Casual stroll'},{id:'stage-walk',label:'Runway walk'}].filter(x=>this.avatar.motion?.clips.has(x.id)),
       expressions:choices(this.avatar.appearance?.choices()||[]),
       lighting:[{id:'studio',label:'Studio portrait'},{id:'soft',label:'Soft studio'},{id:'classic',label:'Classic'}],

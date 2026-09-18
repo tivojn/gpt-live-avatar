@@ -7,7 +7,7 @@ app.setPath('userData',path.join(output,'profile'));fs.mkdirSync(app.getPath('us
 fs.writeFileSync(path.join(app.getPath('userData'),'config.json'),JSON.stringify({avatar:'tia',agentEnabled:false,quality:'friendly',bubbleMode:'off',avatarLooks:{tia:{}}}));
 app.whenReady().then(()=>fs.writeFileSync(path.join(app.getPath('userData'),'openai-key.bin'),safeStorage.encryptString('sk-test-not-a-real-key')));
 const calls=[],errors=[];let menu;
-const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const m=build.call(Menu,items);m.popup=()=>menu=items;return m;};
+const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const m=build.call(Menu,items);m.popup=()=>menu=require('./menu-flat.cjs').flat(items);return m;};
 const actualFetch=global.fetch;
 global.fetch=async(url,options={})=>{
  const address=String(url);if(!address.startsWith('https://api.openai.com/')&&!address.startsWith('https://api.x.ai/'))return actualFetch(url,options);

@@ -5,7 +5,7 @@ fs.mkdirSync(out+'/profile/avatars',{recursive:true});app.setPath('userData',out
 for(const slug of ['tia','sarah'])if(!fs.existsSync(out+'/profile/avatars/'+slug))fs.symlinkSync(root+'/build/characters/'+slug,out+'/profile/avatars/'+slug);
 const restart=process.argv.includes('--restart');
 if(!restart)fs.writeFileSync(out+'/profile/config.json',JSON.stringify({avatar:'tia',quality:'friendly',agentEnabled:true,agentEngine:'codex',voice:'marin',reasoningMode:'delegate'}));
-let menu;const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const native=build.call(Menu,items);native.popup=options=>{menu=items;options?.callback?.();};return native;};
+let menu;const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const native=build.call(Menu,items);native.popup=options=>{menu=require('./menu-flat.cjs').flat(items);options?.callback?.();};return native;};
 const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));
 require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms)),run=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
 async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end){const result=await fn();if(result)return result;await wait(100);}throw Error('Timed out: '+label);}

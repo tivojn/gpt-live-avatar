@@ -9,7 +9,7 @@ delete process.env.GLA_OPENAI_KEY;
 fs.writeFileSync(path.join(app.getPath('userData'),'config.json'),JSON.stringify({avatarDir:path.join(repo,'build/sarah/complete'),personaName:'Sarah',quality:'best',bubbleMode:'always'}));
 let template;
 const original=Menu.buildFromTemplate;
-Menu.buildFromTemplate=function(value){const menu=original.call(Menu,value);menu.popup=()=>{template=value;};return menu;};
+Menu.buildFromTemplate=function(value){const menu=original.call(Menu,value);menu.popup=()=>{template=require('./menu-flat.cjs').flat(value);};return menu;};
 const errors=[];
 app.on('browser-window-created',(_event,win)=>{
   win.webContents.setBackgroundThrottling(false);

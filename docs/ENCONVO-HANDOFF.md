@@ -47,7 +47,7 @@ installer rather than checksums from an older release.
 
 ## 0.2.19 music, input and deformation update
 
-- Right-click **Dance Along to Current Song** or **Stop Dancing** in solo or
+- Right-click → Perform → **Dance Along to Current Song** or **Stop** in solo or
   Together (sing-along was retired in 0.2.23). Together uses the clicked
   character; stopping one leaves the other performers running. Stop also
   cancels pending startup. Music controls need neither a voice API key nor an

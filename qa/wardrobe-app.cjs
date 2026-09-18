@@ -7,13 +7,15 @@ app.whenReady().then(async()=>{try{await new Promise(r=>server.listen(0,'127.0.0
 window.shots=[];const result={};
 for(const slug of (location.hash?'sarah'.split(','):['seraphim','sarah'])){const a=OpenClamAvatar3D.create({width:640,height:900});await a.load('/asset/'+slug+'/runtime/resident/model.gltf',{resources:true,pose:'rest',performance:'balanced',appearanceLibrary:'/asset/'+slug+'/appearance/index.json',motionLibrary:'/asset/'+slug+'/runtime/motions/library.json'});await a.resources.update('balanced',1200,true);
  a.options.select({prop:'none',hands:'none',leftHand:'none',rightHand:'none',performance:'balanced',playTransitions:'false',body:'Ps001.heart'});a.options.playback=[];
- for(const outfit of slug==='seraphim'?['light-armor','heavy-armor','robot-armor','pilot']:['tactical','casual','summer']){
+  // The Enclosed and Heavy Seraphim armors are retired: absent from the catalogue, refused as a selection, and its meshes stay hidden.
+ if(slug==='seraphim'){const ids=a.options.catalogue().outfits.map(o=>o.id);if(ids.includes('robot-armor')||ids.includes('heavy-armor')||ids.length!==3)throw Error('Retired outfit is still offered: '+ids);for(const gone of ['robot-armor','heavy-armor']){a.options.select({...a.options.selection,outfit:gone});if(a.options.selection.outfit===gone)throw Error('Retired outfit was selected: '+gone);}if(a.options.transition){a.options.current=a.options.transition.target;a.options.transition=null;}const retired={nodes:a.options.outfits.filter(o=>o.retired).flatMap(o=>o.nodes)},shared=new Set(a.options.outfits.filter(o=>o.id===(a.options.selection.outfit||a.options.data.defaultOutfit)).flatMap(o=>o.nodes));const shown=[];a.model.traverse(n=>{if(retired.nodes.includes(n.name)&&!shared.has(n.name)&&n.visible)shown.push(n.name);});if(shown.length)throw Error('Retired outfit meshes are visible: '+shown);result.retired={offered:ids,fallback:a.options.selection.outfit||a.options.data.defaultOutfit};}
+ for(const outfit of slug==='seraphim'?['light-armor','pilot','bodysuit']:['tactical','casual','summer']){
  a.options.select({...a.options.selection,outfit});if(a.options.transition){a.options.current=a.options.transition.target;a.options.transition=null;}a.options.write(a.options.current);
  for(const [index,yaw,pitch] of [[0,0,0],[1,1.15,.6],[2,-1.15,.6],[3,1.15,-.6],[4,-1.15,-.6],[5,Math.PI,0]]){a.setOrbit({yaw,pitch});await a.resources.update('balanced',1500,true);
  for(let j=0;j<8;j++){await a.resources.pending;a.render(1000+j*100,{projectedHeight:1500,audienceContact:true,cameraFocus:true,fitContent:true,bodyMotion:false});}
  window.shots.push({name:slug+'-'+outfit+'-'+index,data:a.canvas.toDataURL()});
  if(slug==='sarah'){const hip=a.options.bones.find(b=>b.name==='root.x').node.getWorldPosition(new T.Vector3()),c=a.project(hip);const view={x:c.x-120,y:c.y-145,w:240,h:290,pixelWidth:768,pixelHeight:928};a.render(1800,{projectedHeight:1500,audienceContact:true,cameraFocus:true,bodyMotion:false},view);window.shots.push({name:slug+'-'+outfit+'-'+index+'-fit',data:a.canvas.toDataURL()});}
- if(slug==='seraphim'&&['light-armor','heavy-armor','robot-armor'].includes(outfit)&&(a.smooth.headYaw!==0||a.smooth.headPitch!==0))throw Error('Head escapes helmet');
+ if(slug==='seraphim'&&outfit==='light-armor'&&(a.smooth.headYaw!==0||a.smooth.headPitch!==0))throw Error('Head escapes helmet');
  }
  result[slug+'-'+outfit]={outfit};
  }

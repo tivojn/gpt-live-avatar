@@ -47,7 +47,7 @@ the built-in rules decide as before. Design, measurements and tests:
 
 ## 0.2.19 music, input and deformation update
 
-- Right-click **Dance Along to Current Song** or **Stop Dancing** in solo or
+- Right-click → Perform → **Dance Along to Current Song** or **Stop** in solo or
   Together (sing-along was retired in 0.2.23: lip-syncing to another app's
   music never matched the quality of her own voice; a sing-along request now
   dances along and says so). Together uses the clicked
@@ -238,8 +238,10 @@ exist. A source branch or local build does not automatically publish a GitHub
 release. Push your branch and open a PR if you have repository access; otherwise
 use your own fork. The 3D asset licenses are separate from source-code rights.
 
-Right-click → **About GPT-Live Avatar** shows the installed version and bundled
-description; **Check for Updates…** reads `releases/latest.json` from the
+The right-click menu shows the installed version as a row of its own; the
+window behind **Check for Updates…** carries the bundled description that
+About used to show. Both windows build the same groups (Perform, Look, Agent,
+View) from `electron/avatar-menu.cjs`. **Check for Updates…** reads `releases/latest.json` from the
 release service on demand (the same Worker host as `electron/asset-download.json`,
 public routes under `releases/` only) and falls back to the GitHub releases API
 only when that service cannot be reached. It opens the official download and

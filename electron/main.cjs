@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const { AvatarAssets } = require('./assets.cjs');
 const { AudioTap, nowPlaying: playerNowPlaying, playerCommand } = require('./audio-tap.cjs');
 const { AudioTapOwner } = require('./audio-tap-owner.cjs');
-const { musicMenu } = require('./music-menu.cjs');
+const { performMenu, lookMenu, agentMenu, bubbleItems } = require('./avatar-menu.cjs');
 const { PERMISSION_CHOICES, validPermission, normalizePermission } = require('./agent-permissions.cjs');
 const { ENGINES, permissions, permissionPatch, installed:installedEngines, providerMenu, reasoningMenu } = require('./agent-engines.cjs');
 const { historyItems } = require('./live-config.cjs');
@@ -619,80 +619,44 @@ function avatarReasoningMenu() { return reasoningMenu(config,{active:reasoningEn
 function showAvatarMenu(state) {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   const send = id => () => { if (avatarWindow && !avatarWindow.isDestroyed()) avatarWindow.webContents.send('gla:menu-action', id); };
-  const live = state.live || 'idle';
+  const live = state.live || 'idle', talking = live === 'connected', name = avatarInfo().name || config.personaName;
+  // What you do now, then what you choose, then the app itself (see electron/avatar-menu.cjs).
   Menu.buildFromTemplate([
     { label: live === 'idle' ? 'Start Conversation' : live === 'connecting' ? 'Connecting…' : 'End Conversation', enabled: live !== 'connecting' && (live !== 'idle' || Boolean(state.hasKey)), click: send('call') },
-    { label: 'Mute Microphone', type: 'checkbox', checked: Boolean(state.muted), enabled: live === 'connected', click: send('mute') },
-    { label: 'Stop Talking', enabled: live === 'connected', click: send('hush') },
-    ...musicMenu(state, send, state.character),
-    { label: 'Ask '+(avatarInfo().name||config.personaName)+' to do something…', enabled:config.agentEnabled, click:send('agent') },
-    avatarReasoningMenu(),
-    avatarPermissionsMenu(),
-    { label: 'Steer Her…', enabled: live === 'connected', click: send('steer') },
+    { label: 'Mute Microphone', type: 'checkbox', checked: Boolean(state.muted), visible: talking, click: send('mute') },
+    { label: 'Stop Talking', visible: talking, click: send('hush') },
+    { label: 'Ask ' + name + '…', enabled: Boolean(config.agentEnabled) || talking, click: send('agent') },
     { type: 'separator' },
-    { label: 'Avatar', submenu: (assets?.avatars() || []).map(a => ({ label: a.name + (a.installed ? '' : ' · download in Settings'), type: 'radio', checked: !config.avatarDir && config.avatar === a.slug, enabled: a.installed, click: send('avatar:' + a.slug) })) },
-    { label: 'Avatar Show · Playwright & Director…', click: () => groupManager.open() },
-    { label: 'Voice', submenu: [
-      { label: 'Changing voice briefly reconnects a live conversation', enabled: false },
-      ...VOICES.map(v => ({ label: v[0].toUpperCase() + v.slice(1) + (v === config.voice ? ' ✓' : ''), submenu: [
-        { label: 'Preview voice', enabled: hasApiKey(), click: send('voice-preview:' + v) },
-        { label: 'Use this voice', type: 'checkbox', checked: config.voice === v, click: send('voice:' + v) },
-      ] })),
+    performMenu(state, send, state.character),
+    lookMenu(state, send),
+    { label: 'Character', submenu: [
+      ...(assets?.avatars() || []).map(a => ({ label: a.name + (a.installed ? '' : ' · download in Settings'), type: 'radio', checked: !config.avatarDir && config.avatar === a.slug, enabled: a.installed, click: send('avatar:' + a.slug) })),
       { type: 'separator' },
-      { label: 'Stop voice preview', enabled: voicePreview.state !== 'idle', click: send('voice-preview:') },
+      { label: 'Voice', submenu: [
+        { label: 'Changing voice briefly reconnects a live conversation', enabled: false },
+        ...VOICES.map(v => ({ label: v[0].toUpperCase() + v.slice(1) + (v === config.voice ? ' ✓' : ''), submenu: [
+          { label: 'Preview voice', enabled: hasApiKey(), click: send('voice-preview:' + v) },
+          { label: 'Use this voice', type: 'checkbox', checked: config.voice === v, click: send('voice:' + v) },
+        ] })),
+        { type: 'separator' },
+        { label: 'Stop voice preview', enabled: voicePreview.state !== 'idle', click: send('voice-preview:') },
+      ] },
+    ] },
+    agentMenu(avatarReasoningMenu(), avatarPermissionsMenu()),
+    { label: 'View', submenu: [
+      ...bubbleItems(state.bubbleMode, send),
+      { type: 'separator' },
+      { label: 'Avatar Close-up', accelerator: avatarShortcuts?.values.closeup || DEFAULT_SHORTCUTS.closeup, registerAccelerator: false, click: requestAvatarCloseup },
+      { label: 'Bring Avatar Back', accelerator: avatarShortcuts?.values.recover || DEFAULT_SHORTCUTS.recover, registerAccelerator: false, click: requestAvatarRecovery },
     ] },
     { type: 'separator' },
-    ...avatarCatalogueMenu(state.catalogue, send),
+    { label: 'Avatar Show · Playwright & Director…', click: () => groupManager.open() },
     { type: 'separator' },
-    { label: 'Bubble Only on Incoming Messages', type: 'radio', checked: (state.bubbleMode || 'auto') === 'auto', click: send('bubble:auto') },
-    { label: 'Bubble Always On', type: 'radio', checked: state.bubbleMode === 'always', click: send('bubble:always') },
-    { label: 'Bubble Off', type: 'radio', checked: state.bubbleMode === 'off', click: send('bubble:off') },
     { label: 'Settings…', accelerator: 'Cmd+,', click: () => openSettingsWindow() },
-    { label: 'Bring Avatar Back', accelerator:avatarShortcuts?.values.recover||DEFAULT_SHORTCUTS.recover, registerAccelerator:false, click: requestAvatarRecovery },
-    {label:'Avatar Close-up',accelerator:avatarShortcuts?.values.closeup||DEFAULT_SHORTCUTS.closeup,registerAccelerator:false,click:requestAvatarCloseup},
-    { type: 'separator' },
     ...appInfo.menu(),
     { type: 'separator' },
     { label: `Quit ${app.name}`, accelerator: 'Cmd+Q', click: send('quit') },
   ]).popup({ window: avatarWindow });
-}
-// Outfits, poses, props and motions from the avatar package, like OpenClam's pet menu.
-function avatarCatalogueMenu(cat, send) {
-  if (!cat || typeof cat !== 'object') return [];
-  const item = (kind, x, checked) => ({ label: String(x.label || x.id).slice(0, 60), type: checked === undefined ? 'normal' : 'radio', checked: Boolean(checked), click: send(`${kind}:${x.id}`) });
-  const byCategory = new Map();
-  for (const c of cat.clips || []) { const key = String(c.category || 'Motions'); if (!byCategory.has(key)) byCategory.set(key, []); byCategory.get(key).push(c); }
-  const motions = [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([category, clips]) => ({ label: category, submenu: clips.slice(0, 40).map(c => item('motion', c)) }));
-  const menu = [];
-  if (motions.length) menu.push({ label: 'Motions', submenu: [...motions, { type: 'separator' }, { label: 'Stay Still', click: send('stay') }] });
-  if ((cat.poses || []).length) menu.push({ label: 'Pose', submenu: [{ label: 'Natural', type: 'radio', checked: !cat.current.pose, click: send('pose:') }, ...cat.poses.slice(0, 60).map(p => item('pose', p, cat.current.pose === p.id))] });
-  if ((cat.outfits || []).length) menu.push({ label: 'Outfit', submenu: cat.outfits.map(o => item('outfit', o, cat.current.outfit === o.id)) });
-  if ((cat.props || []).length) menu.push({ label: 'Props', submenu: [{ label: 'None', type: 'radio', checked: !cat.current.prop, click: send('prop:') }, ...cat.props.map(p => item('prop', p, cat.current.prop === p.id))] });
-  if ((cat.accessories || []).length) menu.push({ label: 'Accessories', submenu: cat.accessories.map(x => item('appearance:accessory', x, cat.current.accessory === x.id)) });
-  menu.push({ label: 'Restore default look', click: send('appearance-reset') });
-  if ((cat.expressions || []).length) {
-    const presets = cat.expressions.filter(x => !x.id.startsWith('original-'));
-    const original = cat.expressions.filter(x => x.id.startsWith('original-'));
-    const sub = presets.map(x => item('appearance:expression', x, (cat.current.expression || 'neutral') === x.id));
-    for (const [prefix, label] of [['original-brow','Original brows'],['original-eye','Original eyes'],['original-mth','Original mouth']]) {
-      const choices = original.filter(x => x.id.startsWith(prefix));
-      if (choices.length) sub.push({ label, submenu: choices.map(x => item('appearance:expression', x, cat.current.expression === x.id)) });
-    }
-    menu.push({ label: 'Expression', submenu: sub });
-  }
-  if ((cat.lighting || []).length) menu.push({ label: 'Lighting', submenu: cat.lighting.map(x => item('appearance:lighting', x, cat.current.lighting === x.id)) });
-  const colors = new Map();
-  for (const asset of cat.assets || []) if (asset.kind === 'texture') {
-    if (!colors.has(asset.slot)) colors.set(asset.slot, []);
-    colors.get(asset.slot).push(asset);
-  }
-  if (colors.size) menu.push({ label: 'Original colors', submenu: [...colors].map(([slot, choices]) => ({
-    label: slot.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase()), submenu: [
-      { label: 'Original color', type: 'radio', checked: !cat.current['texture:'+slot], click: send('appearance:texture:'+slot+':') },
-      ...choices.map(x => item('appearance:texture:'+slot, x, cat.current['texture:'+slot] === x.id)),
-    ],
-  })) });
-  return menu;
 }
 // A live session may only run while she is on screen. The renderer reports
 // whether a session is active; if the window is hidden, minimized or fully
@@ -737,7 +701,7 @@ app.whenReady().then(async () => {
     const headers={...details.requestHeaders};if(own)headers['X-Gla-Asset-Key']=assetAccessKey;done({requestHeaders:headers});
   });
   agentManager=require('./agent.cjs').setupAgent({origin:serverOrigin,getConfig:()=>config,backend:delegateBackend,setFolder:folder=>{delegateBackend.cancelAll();agentManager?.cancelAll();config.agentFolder=folder;config.agentFolderDefaultVersion=1;saveConfig();broadcastSettings();}});
-  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarCatalogueMenu, avatarPermissionsMenu, avatarReasoningMenu, requestAvatarRecovery, shortcuts:()=>avatarShortcuts?.values||DEFAULT_SHORTCUTS, appInfoMenu:()=>appInfo.menu(), openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
+  groupManager = require('./group.cjs').setupGroup({getConfig:()=>config, getSettings:publicSettings, getAvatar:()=>avatarWindow, info:avatarInfo, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, readApiKey, voices:VOICES, avatarPermissionsMenu, avatarReasoningMenu, requestAvatarRecovery, shortcuts:()=>avatarShortcuts?.values||DEFAULT_SHORTCUTS, appInfoMenu:()=>appInfo.menu(), openSettingsWindow, agentAnswer:(sender,request)=>agentManager.answer(sender,request), agentCancel:(owner)=>agentManager.cancel(owner)});
   showManager = require('./show.cjs').setupShow({getConfig:()=>config, origin:serverOrigin, backend:delegateBackend, createSession:createLiveSession, voices:VOICES, root:path.join(__dirname,'..'), toolsDir:app.isPackaged?path.join(process.resourcesPath,'tools'):path.join(__dirname,'..','tools'), workDir:app.isPackaged?path.join(app.getPath('userData'),'show-motions'):'', characterDir:slug=>{const info=avatarInfo({...config,avatar:slug,avatarDir:''});return info.ok&&info.slug===slug?info.dir:'';}});
   avatarShortcuts=new AvatarShortcuts(globalShortcut,{recover:requestAvatarRecovery,closeup:requestAvatarCloseup});
   avatarShortcuts.start(config.shortcuts);

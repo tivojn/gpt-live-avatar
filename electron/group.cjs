@@ -2,7 +2,7 @@
 const {BrowserWindow,ipcMain,screen,Menu}=require('electron');
 const path=require('node:path');
 const {GroupContext}=require('./group-context.cjs');
-const {musicMenu}=require('./music-menu.cjs');
+const {performMenu,lookMenu,agentMenu,bubbleItems}=require('./avatar-menu.cjs');
 const {normalizeDelegate,usesCodexActions,actionEngine}=require('./delegate.cjs');
 const cleanText=(s,max)=>typeof s==='string'?s.trim().slice(0,max):'';
 function conversationRequest(request,catalogue){
@@ -72,23 +72,26 @@ function setupGroup(deps){
  ipcMain.handle('gla:group:menu',guard(async(_event,request={})=>{
   const actor=catalogue().find(a=>a.slug===request.slug);if(!actor)throw Error('This character is unavailable.');
   const send=action=>()=>{if(window&&!window.isDestroyed())window.webContents.send('gla:group:menu-action',{slug:actor.slug,action});};
+  // Same groups as the solo avatar's menu (electron/avatar-menu.cjs). The solo window is hidden while this one is open, so Settings and updates are reachable here too.
   await new Promise(resolve=>Menu.buildFromTemplate([
    {label:actor.name,enabled:false},
-   {label:'Ask '+actor.name+' to do something…',enabled:deps.getConfig().agentEnabled,click:send('agent')},
-   ...musicMenu(request,send,actor.slug),
-   deps.avatarReasoningMenu(),
-   deps.avatarPermissionsMenu(),
-   ...deps.avatarCatalogueMenu(request.catalogue,send),
+   {label:'Ask '+actor.name+'…',enabled:deps.getConfig().agentEnabled,click:send('agent')},
    {type:'separator'},
-   {label:'Follow cursor',type:'checkbox',checked:request.catalogue?.current?.followCursor==='true',click:send('follow-cursor')},
-   {label:'Face the audience',click:send('face-audience')},
-   {label:'Avatar Close-up',accelerator:deps.shortcuts().closeup,registerAccelerator:false,click:send('close-up')},
-   {label:'Restore this character’s size and position',click:send('recover')},
-   {label:'Bring Avatar Back',accelerator:deps.shortcuts().recover,registerAccelerator:false,click:deps.requestAvatarRecovery},
-   {type:'separator'},
-   ...[['auto','Bubble Only on Incoming Messages'],['always','Bubble Always On'],['off','Bubble Off']].map(([mode,label])=>({label,type:'radio',checked:(request.bubbleMode||'auto')===mode,click:send('bubble:'+mode)})),
+   performMenu(request,send,actor.slug),
+   lookMenu(request,send),
+   agentMenu(deps.avatarReasoningMenu(),deps.avatarPermissionsMenu()),
+   {label:'View',submenu:[
+    {label:'Follow cursor',type:'checkbox',checked:request.catalogue?.current?.followCursor==='true',click:send('follow-cursor')},
+    {label:'Face the audience',click:send('face-audience')},
+    {type:'separator'},
+    ...bubbleItems(request.bubbleMode,send),
+    {type:'separator'},
+    {label:'Avatar Close-up',accelerator:deps.shortcuts().closeup,registerAccelerator:false,click:send('close-up')},
+    {label:'Restore this character’s size and position',click:send('recover')},
+    {label:'Bring Avatar Back',accelerator:deps.shortcuts().recover,registerAccelerator:false,click:deps.requestAvatarRecovery},
+   ]},
    {type:'separator'},{label:'Settings…',click:deps.openSettingsWindow},
-   {type:'separator'},...(deps.appInfoMenu?.()||[]),
+   ...(deps.appInfoMenu?.()||[]),
   ]).popup({window,callback:resolve}));return {};
  }));
  ipcMain.handle('gla:group:close',guard(()=>{cancel();window.close();return {};}));
