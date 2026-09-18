@@ -80,7 +80,9 @@ Say **stop** or press **Stop** at any time; the Director keeps the script.
   EnConvo's Mavis agent (Claude Fable 5.1 with extended thinking, a 20k-token
   agent prompt) took 101 s, 8,700 output tokens for a 1,300-token script,
   about $0.48; its floor for any reply is 2 s. Direct API providers stream and
-  are several times faster. The panel therefore shows an **estimated**
+  are several times faster, which is why the Playwright has its own model
+  (Settings › Reasoning › Avatar Show script writer; OpenAI GPT-5.6 Luna by
+  default, independent of the reasoning provider). The panel therefore shows an **estimated**
   progress bar while writing (`web/show-progress.js`): it climbs to 90% at the
   median of the last five scripts of that length, then creeps, says "taking
   longer than usual" when it does, and never shows 100% before the answer.
