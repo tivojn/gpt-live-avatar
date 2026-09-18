@@ -32,13 +32,65 @@ available as the **Improvise together** format in the same window.
    read the line aloud (the Director's microphone hears it), type it and send,
    press **I said it**, or press **I'll pass**. If nothing arrives within 25
    seconds the standby character takes the line. **Standby takes the rest**
-   hands all remaining lines to the standby.
+   hands all remaining lines to the standby. Reading earns time: the 25
+   seconds extend while more of the line is heard, never past about a minute.
+   Something off-script while your line is up ("can you do this in an Irish
+   accent?") is taken as a note for the cast, not as your line, and the
+   prompter stays up.
+   **Notes mid-show.** Call out or type a note at any time during the
+   performance. The show holds after the current line; the Director (if the
+   voice is on) acknowledges it in one sentence, and the show continues by
+   itself. Say **continue** (or 继续) to resume sooner. Notes such as an
+   accent or a mood reach every later line as the director's ask.
+   **Private notes to one character.** During a show, a character's own
+   microphone (her bubble mic, or double-clicking her head) and her composer
+   are steering notes to her alone: "be furious about it", "slower", "say it
+   in Cantonese". By voice this is real time through gpt-live-1: the show
+   holds after the current line, a short live session opens in her own voice,
+   she hears you as you speak (your words appear in her bubble), and when you
+   press **Done** or the mic she acknowledges in one sentence in character.
+   The note then lands on her next lines and the show carries on. Typed notes
+   apply without a session. Other characters never see it.
 5. **Curtain call.** The Director asks how it was. Say what to change and
    press **Revise the show** (or say "revise the script"); the Playwright
    rewrites with the previous script and your feedback. **Play it again**
    repeats the performance.
 
 Say **stop** or press **Stop** at any time; the Director keeps the script.
+**Pause** (or say "pause", 等一下) holds the show after the current line;
+**Resume** (or "continue") carries on.
+
+## Recording
+
+Tick **Record to MP4** before the show starts and the performance is saved
+to *Movies › GPT-Live Avatar Shows* as `<title> <date>.mp4` when it finishes,
+is stopped, or is interrupted. The recording is made inside the app: the
+characters are composited from their own canvases onto a stage backdrop at
+1280×720, every voice (the cast and the Director) is mixed in, and captions
+show the speaker's role and line. A held or paused show pauses the recording.
+**Show recording in Finder** reveals the file; nothing leaves the Mac.
+
+## The panel is the window
+
+The characters stand on the transparent desktop stage; the Avatar Show panel
+is the window you work with. Its header has traffic-light close and minimize
+buttons, drags the panel, and double-clicks to minimize; the corner handle
+resizes it; position and size are remembered between sessions. The panel and
+the prompter share the overhead bubble's design. *I'll act a role* is off by
+default.
+
+## The Director's voice and cost
+
+The microphone button starts a live GPT-Live voice session with the Director
+(billed per connected minute, muting does not stop the meter). It shows its
+state: grey to start, green and breathing while listening, red with a slashed
+microphone while muted. **Hang up** ends the voice session and nothing else:
+the script, custom motions and the performance continue, and the phase chip
+keeps counting the elapsed time. The app hangs up by itself when the
+Playwright starts writing, because writing and motion preparation can take
+minutes; tap the microphone to talk again, and the Director rejoins with the
+current context. Joining during a performance is silent: the Director only
+speaks to answer a note.
 
 ## Custom motion configuration
 

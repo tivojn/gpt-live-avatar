@@ -8,11 +8,18 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 18, 2026 for **v0.2.21**. Use the matching
-[release page](https://github.com/tivojn/gpt-live-avatar/releases/tag/v0.2.21)
-to confirm Apple Silicon installer availability and checksums. Use the release
-tag and matching checksums for a reproducible reference.
+Updated September 18, 2026 for **v0.2.21**. Use the
+[release page](https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/)
+to confirm Apple Silicon installer availability and checksums
+(`releases/latest.json` on that host is the machine-readable record). Use the
+release tag and matching checksums for a reproducible reference.
 
+
+## 0.2.22 Avatar Show update
+
+Live voice steering through gpt-live-1, audience notes, pause/resume, MP4
+recording, the panel as the window and the shared bubble theme. See
+[Avatar Show](AVATAR-SHOW.md).
 
 ## 0.2.21 EnConvo engine
 
@@ -79,9 +86,13 @@ and [Finger audit](MESHY-HAND-AUDIT.md) for measured scope and limitations.
 Use an Apple Silicon Mac (M1 or newer) with macOS 14 or newer, Git and a current
 Node.js LTS with npm. Node 22.12.0 or newer is required by Electron.
 
-1. Confirm availability on the matching release page, then download the official
-   signed v0.2.21 installer:
-   https://github.com/tivojn/gpt-live-avatar/releases/download/v0.2.21/GPT-Live.Avatar-0.2.21-arm64.dmg
+1. Confirm availability on the release page, then download the official
+   signed installer for the current version:
+   https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/
+   (installers are served as
+   `releases/gpt-live-avatar-<version>-arm64.dmg` on that host; v0.2.21 and
+   earlier were published on GitHub releases, which the private repository no
+   longer exposes).
 2. Copy **GPT-Live Avatar.app** into Applications. Launch it while online and
    confirm Sarah appears in her tie top, chain pants and sandals, without a coat. This is also the reference app for comparing changes.
 3. Clone the source and create your own branch:
@@ -217,12 +228,15 @@ release. Push your branch and open a PR if you have repository access; otherwise
 use your own fork. The 3D asset licenses are separate from source-code rights.
 
 Right-click → **About GPT-Live Avatar** shows the installed version and bundled
-description; **Check for Updates…** queries this repository's published releases
-on demand. It opens the official download and does not auto-install. If you
-distribute a separate app/fork, update `electron/releases.cjs` and
+description; **Check for Updates…** reads `releases/latest.json` from the
+release service on demand (the same Worker host as `electron/asset-download.json`,
+public routes under `releases/` only) and falls back to the GitHub releases API
+only when that service cannot be reached. It opens the official download and
+does not auto-install. Publishing is `node tools/cloud/publish-release.cjs`
+(see [PROTECTED-ASSETS.md](PROTECTED-ASSETS.md), "Publishing an installer").
+If you distribute a separate app/fork, update `electron/releases.cjs` and
 `electron/release-info.json` for your own release destination and description;
-an EnConvo integration should use EnConvo's updater. Keep the R2 asset service
-configuration separate from the app-update destination.
+an EnConvo integration should use EnConvo's updater.
 
 ## What to test before handing back changes
 

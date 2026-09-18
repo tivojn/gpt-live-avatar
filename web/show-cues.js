@@ -7,10 +7,12 @@ const TAKEOVER=/\btake over (?:the rest|for me|my (?:role|part))\b|\b(?:understu
 const STOP=/\b(?:stop|end|cancel) the (?:show|play|performance)\b|\bstop the show\b|\u505c\u6b62(?:\u6f14\u51fa|\u8868\u6f14)|\u4e0d\u6f14\u4e86|\u7ed3\u675f(?:\u6f14\u51fa|\u8868\u6f14)/i;
 const PREPARE=/\b(?:prepare|write|create|make|build|generate|start|begin|do|revise|rewrite|redo|update|fix|change) (?:the |a |our |my )?(?:show|play|script|performance)\b|\u4fee\u6539(?:\u5267\u672c|\u4e00\u4e0b)|\u91cd\u5199|\u6539(?:\u4e00\u4e0b|\u6539)?\u5267\u672c|\blet(?:'|\u2019)?s (?:go|start|begin|do it)\b|\bplaces,? everyone\b|\u5f00\u59cb(?:\u51c6\u5907|\u5199\u5267\u672c|\u6f14\u51fa|\u8868\u6f14|\u5427)|\u51c6\u5907(?:\u6f14\u51fa|\u4e00\u4e0b|\u5267\u672c|\u597d\u4e86)|\u5199(?:\u4e00\u4e2a|\u4e2a)?\u5267\u672c|\u6392\u7ec3|\u5c31\u8fd9\u6837(?:\u5f00\u59cb|\u5427)/i;
 const START=/\b(?:start|begin|run|play|perform) (?:the |our )?(?:show|play|performance)\b|\bcurtain up\b|\baction!?\s*$|\u5f00\u6f14|\u5f00\u59cb\u6f14|\u5f00\u59cb\u8868\u6f14|\u6f14\u51fa\u5f00\u59cb/i;
+const PAUSE=/^\s*(?:please\s+)?(?:pause|hold on|hold it|hold the show|wait a (?:second|moment|minute|sec))(?: (?:the|please))?[.!]?\s*$|^\s*(?:请)?(?:暂停|等一下|等等|停一下)[。！!]?\s*$/i;
+const CONTINUE=/^\s*(?:ok(?:ay)?[,.!]?\s*)?(?:continue|go ahead|carry on|resume|keep going|go on|action|proceed)(?: (?:the|with the) (?:show|play|performance))?[.!]?\s*$|^\s*(?:好|好的|行)?[，,]?\s*(?:继续|接着演|接着来|开始吧|继续演)[。！!]?\s*$/i;
 const AGAIN=/\b(?:again|once more|replay|encore)\b|\u518d(?:\u6765|\u6f14|\u6765\u4e00\u6b21|\u6f14\u4e00\u904d)|\u91cd\u6f14/i;
 export function userCue(text,phase='planning'){
  const t=String(text||'').trim();if(!t)return '';
- if(phase==='performing')return PASS.test(t)?(TAKEOVER.test(t)?'takeover':'pass'):TAKEOVER.test(t)?'takeover':STOP.test(t)?'stop':'';
+ if(phase==='performing')return PASS.test(t)?(TAKEOVER.test(t)?'takeover':'pass'):TAKEOVER.test(t)?'takeover':STOP.test(t)?'stop':CONTINUE.test(t)?'continue':PAUSE.test(t)?'pause':'';
  if(phase==='ready'||phase==='finished'){if(START.test(t)||phase==='finished'&&AGAIN.test(t))return 'start';}
  if(phase==='planning'||phase==='finished'||phase==='ready'){if(PREPARE.test(t))return 'prepare';}
  return '';

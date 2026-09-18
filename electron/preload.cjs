@@ -45,9 +45,12 @@ contextBridge.exposeInMainWorld('gla', {
     playwright: request => ipcRenderer.invoke('gla:show:playwright', request),
     director: request => ipcRenderer.invoke('gla:show:director', request),
     directorLive: request => ipcRenderer.invoke('gla:show:director-live', request),
+    steerLive: request => ipcRenderer.invoke('gla:show:steer-live', request),
     pipeline: () => ipcRenderer.invoke('gla:show:pipeline'),
     generate: request => ipcRenderer.invoke('gla:show:generate', request),
-    cancel: () => ipcRenderer.invoke('gla:show:cancel'),
+    cancel: options => ipcRenderer.invoke('gla:show:cancel', options),
+    saveRecording: request => ipcRenderer.invoke('gla:show:save-recording', request),
+    reveal: request => ipcRenderer.invoke('gla:show:reveal', request),
     onProgress: callback => subscribe('gla:show:progress', callback),
   },
   // settings and secrets

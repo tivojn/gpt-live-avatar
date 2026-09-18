@@ -9,7 +9,7 @@ export function installGroupPanel(panel,{storage=localStorage,onInteraction=()=>
   if(value===panel.classList.contains('minimized'))return;
   if(value)expandedHeight=panel.style.height;
   panel.classList.toggle('minimized',value);panel.style.height=value?'auto':expandedHeight;
-  minimize.textContent=value?'Restore':'Minimize';minimize.setAttribute('aria-expanded',String(!value));clamp();save();
+  minimize.title=value?'Expand':'Minimize';minimize.setAttribute('aria-label',minimize.title);minimize.setAttribute('aria-expanded',String(!value));clamp();save();
  }
  const initial=panel.getBoundingClientRect();Object.assign(panel.style,{transform:'none',left:(finite(saved?.x)?saved.x:initial.x)+'px',top:(finite(saved?.y)?saved.y:initial.y)+'px'});
  if(finite(saved?.w))panel.style.width=Math.max(360,Math.min(innerWidth-16,saved.w))+'px';
@@ -28,6 +28,8 @@ export function installGroupPanel(panel,{storage=localStorage,onInteraction=()=>
  function release(event){if(!gesture||event?.pointerId!==undefined&&event.pointerId!==gesture.id)return;const {id}=gesture;gesture=null;if(panel.hasPointerCapture(id))panel.releasePointerCapture(id);save();}
  panel.addEventListener('pointerup',release);panel.addEventListener('pointercancel',release);addEventListener('blur',release);
  minimize.onclick=()=>setMinimized(!panel.classList.contains('minimized'));header.addEventListener('dblclick',e=>{if(!e.target.closest('button'))minimize.click();});
+ // A folded panel shows a plus in the yellow light, and any click on its header unfolds it.
+ header.addEventListener('click',e=>{if(panel.classList.contains('minimized')&&!e.target.closest('button'))setMinimized(false);});
  addEventListener('resize',()=>{panel.style.width=Math.min(innerWidth-16,panel.getBoundingClientRect().width)+'px';clamp();});
  return {get dragging(){return Boolean(gesture);},setMinimized,clamp};
 }

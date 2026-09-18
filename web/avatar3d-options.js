@@ -19,6 +19,10 @@ export const expressionChoices = [
   {id:'wink-right',label:'Wink · right',weights:{eyeBlinkRight:1,mouthSmileLeft:.4,mouthSmileRight:.4}},
 ];
 
+// Real firearm product names must not reach the UI or agent prompts; the
+// purchased packs label some props after the guns they were modelled on.
+const BRAND_LABELS=[[/\bFN[\s-]*SCAR[\s-]*20S?\b/i,'Rifle'],[/\bUnica\s*6\b(?:\s*revolver)?/i,'Revolver'],[/\b(?:Colt\s*)?1911\b(?:\s*pistol)?/i,'Pistol']];
+export function scrubBrandNames(text){let out=String(text??'');for(const [re,name] of BRAND_LABELS)out=out.replace(re,name);return out;}
 export class Avatar3DAppearance {
   constructor(avatar) {
     this.avatar=avatar;this.materials=new Map();this.generation=0;this.resources=[];this.maskUniforms=new Map();
@@ -413,10 +417,12 @@ export class Avatar3DOptions {
       return [pose.id, pose];
     }));
     // An authored playlist can opt into other poses. Without one, cycle
-    // upright social poses; seated poses and weapon grips remain explicit.
-    this.playbackAll = [...this.poses.values()].filter(pose => pose.group === 'body'
+    // upright standing poses only: seated poses and weapon grips remain
+    // explicit, and affectionate poses (the heart) never happen by themselves.
+    const affectionate = pose => /heart|love|cute|kiss|hug/i.test(pose.label || pose.id);
+    this.playbackAll = [...this.poses.values()].filter(pose => pose.group === 'body' && !affectionate(pose)
       && (Array.isArray(data.playback) ? data.playback.includes(pose.id)
-        : /standing|heart/i.test(pose.label || pose.id)));
+        : /standing/i.test(pose.label || pose.id)));
     this.playback = this.playbackAll;
     if (this.stageMode) this.setStageMode(true);
     this.outfits = (data.outfits || []).map(outfit=>{
@@ -459,7 +465,7 @@ export class Avatar3DOptions {
     // and is dropped from the catalogue and refused as a selection instead -
     // removed from the list outright, the bag rendered permanently.
     const retiredProps = data.characterId==='sarah' ? new Set(['bag']) : new Set();
-    this.props = (data.props || []).map(prop => retiredProps.has(prop.id) ? {...prop, retired:true} : prop);
+    this.props = (data.props || []).map(prop => ({...prop, label:scrubBrandNames(prop.label), ...(retiredProps.has(prop.id) ? {retired:true} : {})}));
     // An accessory's authoring origin can be displaced from the hand it is
     // bound to. Correct its bind-space attachment without changing the
     // mesh, skeleton, or the inverse transform used after skinning.
@@ -775,7 +781,9 @@ export class Avatar3DOptions {
     this.stageMode = Boolean(on);
     const all = this.playbackAll || this.playback || [];
     const social = pose => /heart|love|cute|kiss|hug/i.test(pose.label || pose.id);
-    this.playback = this.stageMode ? [] : all;
+    // On stage a resting character still shifts stance now and then, at its
+    // own unhurried pace, only through neutral poses; the speaker holds.
+    this.playback = this.stageMode ? all.filter(pose => !social(pose)) : all;
     this.playbackIndex = 0;
     if (!this.stageMode) return;
     const body = this.poses.get(this.selection?.body);
@@ -789,12 +797,16 @@ export class Avatar3DOptions {
     if (reduce || this.heldProp() || !this.enabled('playTransitions') || this.avatar.motion?.pending) {
       this.nextPlaybackAt = now + 4000;
     } else if (this.nextPlaybackAt === null) {
-      this.nextPlaybackAt = now + 4000;
+      this.nextPlaybackAt = now + 2500 + Math.random() * 5000;
     } else if (now >= this.nextPlaybackAt && this.playback.length) {
-      this.playbackIndex = (this.playbackIndex + 1) % this.playback.length;
-      this.applyPose({...this.selection, body:this.playback[this.playbackIndex].id,
+      // A random next stance, never the one she is in, at her own pace: a cast
+      // cycling the same poses in step reads as machinery.
+      const choices = this.playback.filter(pose => pose.id !== this.selection?.body);
+      const next = choices.length ? choices[Math.floor(Math.random() * choices.length)] : this.playback[0];
+      this.playbackIndex = this.playback.indexOf(next);
+      this.applyPose({...this.selection, body: next.id,
         hands:undefined,leftHand:undefined,rightHand:undefined}, now);
-      this.nextPlaybackAt = now + 4000;
+      this.nextPlaybackAt = now + (this.stageMode ? 9000 + Math.random() * 9000 : 4000 + Math.random() * 5000);
     }
     if (!this.transition) return;
     const {from,target,start,fromBounds,targetBounds}=this.transition;

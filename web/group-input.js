@@ -3,7 +3,9 @@
 export class GroupMicrophone {
  constructor(api,{onState=()=>{},onText=()=>{},onError=()=>{}}={}){Object.assign(this,{api,onState,onText,onError,generation:0,state:'idle'});}
  setState(state,seconds=0){this.state=state;this.onState(state,seconds);}
- release(){clearInterval(this.timer);this.timer=null;for(const track of this.stream?.getTracks()||[]){track.onended=null;track.stop();}this.stream=null;}
+ release(){clearInterval(this.timer);this.timer=null;for(const track of this.stream?.getTracks()||[]){track.onended=null;track.stop();}this.stream=null;this.analyser=null;void this.audio?.close().catch(()=>{});this.audio=null;}
+ // 0..1 loudness of what the microphone hears right now, for a wave hint.
+ level(){if(!this.analyser)return 0;this.analyser.getFloatTimeDomainData(this.samples);let sum=0;for(const v of this.samples)sum+=v*v;return Math.min(1,Math.sqrt(sum/this.samples.length)*9);}
  cancel(){const pending=this.state==='transcribing';this.generation++;if(this.recorder){this.recorder.onstop=null;this.recorder.ondataavailable=null;if(this.recorder.state!=='inactive')this.recorder.stop();this.recorder=null;}this.release();this.setState('idle');if(pending)void this.api.cancel();}
  finish(){if(this.recorder?.state==='recording'){this.recorder.stop();this.release();}}
  async start(){
@@ -11,6 +13,7 @@ export class GroupMicrophone {
   try{
    const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
    if(!current()){stream.getTracks().forEach(t=>t.stop());return;}this.stream=stream;
+   try{this.audio=new AudioContext();this.analyser=this.audio.createAnalyser();this.analyser.fftSize=256;this.samples=new Float32Array(256);this.audio.createMediaStreamSource(stream).connect(this.analyser);}catch{this.analyser=null;}
    const mime=['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(t=>MediaRecorder.isTypeSupported(t));if(!mime)throw Error('Microphone recording is unavailable. You can still type your reply.');
    const recorder=this.recorder=new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:64000}),chunks=[];let size=0;
    recorder.ondataavailable=e=>{if(current()&&e.data.size){chunks.push(e.data);size+=e.data.size;if(size>4*1024*1024)this.finish();}};

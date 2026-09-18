@@ -86,6 +86,7 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  assert.equal(cuesMod.userCue('please take over the rest for me','performing'),'takeover');assert.equal(cuesMod.userCue('剩下的替我','performing'),'takeover');
  assert.equal(cuesMod.userCue('stop the show','performing'),'stop');assert.equal(cuesMod.userCue('不演了','performing'),'stop');
  assert.equal(cuesMod.userCue('Where is my crown?','performing'),'','ordinary lines are not cues');
+ assert.equal(cuesMod.userCue('okay, continue','performing'),'continue');assert.equal(cuesMod.userCue('Go ahead','performing'),'continue');assert.equal(cuesMod.userCue('继续','performing'),'continue');assert.equal(cuesMod.userCue('Can you do this in an Irish accent?','performing'),'','a note is not a cue');assert.equal(cuesMod.userCue('Pause please','performing'),'pause');assert.equal(cuesMod.userCue('等一下','performing'),'pause');assert.equal(cuesMod.userCue('please pause the music while I think','performing'),'','a sentence about pausing is a note');
  assert.equal(cuesMod.userCue("let's start the show",'ready'),'start');assert.equal(cuesMod.userCue('开演','ready'),'start');assert.equal(cuesMod.userCue('again please','finished'),'start');
  assert.equal(cuesMod.userCue('please prepare the show','planning'),'prepare');assert.equal(cuesMod.userCue('写个剧本吧','planning'),'prepare');assert.equal(cuesMod.userCue('开始准备','planning'),'prepare');
  assert.equal(cuesMod.userCue('I want a comedy about cats','planning'),'','ideas are not cues');assert.equal(cuesMod.userCue('start the show','planning'),'prepare','starting from scratch prepares first');
@@ -135,5 +136,28 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  log.length=0;const stopper=new ShowPlayer({...stage(async()=>({result:'pass'})),speak:async(cue,slug)=>{log.push('speak:'+slug);stopper.stop();return '';}});
  result=await stopper.run(twoUser);assert.equal(result.finished,false);assert.ok(log.includes('stop'));assert.equal(stopper.running,false);
  await assert.rejects(new ShowPlayer(stage()).run({scenes:[]}),/no lines/);
+ // A hold between cues: the current line finishes, the next waits for resume, and stop releases a held show.
+ log.length=0;const holds=[];let held=null;
+ const holdStage={...stage(async()=>({result:'pass'})),paused:v=>holds.push(v),speak:async(cue,slug)=>{log.push('speak:'+slug+':'+cue.text);if(cue.text==='Two.'){held.pause();held.pause();}return '';}};
+ held=new ShowPlayer(holdStage);const holdRun=held.run(twoUser);
+ await new Promise(r=>setTimeout(r,60));assert.equal(held.paused,true);assert.deepEqual(holds,[true]);assert.ok(log.includes('speak:tia:Two.'));assert.ok(!log.some(l=>l.startsWith('speak:sarah:Three')),'the next line waits');
+ held.resume();result=await holdRun;assert.equal(result.finished,true);assert.ok(log.includes('speak:sarah:Three.'));assert.deepEqual(holds,[true,false]);assert.equal(held.paused,false);
+ log.length=0;const heldStop=new ShowPlayer({...holdStage,speak:async(cue,slug)=>{log.push('speak:'+slug);if(slug==='tia')heldStop.pause();return '';}});const stopRun=heldStop.run(twoUser);
+ await new Promise(r=>setTimeout(r,40));assert.equal(heldStop.paused,true);heldStop.stop();result=await stopRun;assert.equal(result.finished,false);assert.equal(heldStop.paused,false);
  console.log('show qa ok');
 })().catch(e=>{console.error(e);process.exit(1);});
+
+// Recording: the file's audio is held back by the live playback lag so the
+// recorded mouth lines up with the recorded voice (web/show-recorder.js).
+{
+ const recorder=fs.readFileSync(path.join(root,'web/show-recorder.js'),'utf8'),show=fs.readFileSync(path.join(root,'web/show.js'),'utf8');
+ assert.match(recorder,/import \{LIP_SYNC_DELAY\} from '\/lip-sync\.js'/,'recorder knows the lip-sync delay line');
+ assert.match(recorder,/addAudio\(stream,output=null\)[\s\S]*createDelay\(1\)[\s\S]*source\.connect\(delay\);delay\.connect\(this\.destination\)/,'every recorded voice passes through a delay line');
+ assert.match(recorder,/syncDelays\(\)\{[\s\S]*playbackLag|lagFor\(output\)\{const lag=output\?\.playbackLag\?\.\(\)/,'the delay follows the speaker output lag');
+ assert.match(recorder,/if\(!this\.active\|\|this\.paused\)return;\n\s*this\.syncDelays\(\);/,'the lag is re-read every recorded frame');
+ assert.match(show,/stream:\(stream,output\)=>recorder\?\.addAudio\(stream,output\)/,'the Director voice hands its output to the recorder');
+ assert.match(show,/function recordAudio\(stream,output\)\{recorder\?\.addAudio\(stream,output\);\}/,'cast voices hand their output to the recorder');
+ assert.match(fs.readFileSync(path.join(root,'web/group.js'),'utf8'),/tap\(stream,voice\.output\)/,'audio taps receive the speaking output');
+ assert.match(fs.readFileSync(path.join(root,'web/show-director.js'),'utf8'),/this\.emit\('stream',detail\.stream,this\.output\)/,'the Director emits its output with the stream');
+}
+console.log('Recorded voices are delayed to match the on-screen mouth.');

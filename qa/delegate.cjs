@@ -18,6 +18,16 @@ const checks=[];
  assert.equal(selected(normalizeDelegate({delegateProvider:'bad',delegateAuth:'bad'})).model,'gpt-5.6-luna');
  const enconvo=normalizeDelegate(config,{delegateProvider:'enconvo',delegateAuth:'api_key'});assert.equal(selected(enconvo).auth,'local_runtime','EnConvo is always an existing local connection');assert.equal(selected(enconvo).model,'','and keeps each agent\'s own model');
  checks.push('Defaults, validation and independent model persistence');
+ { // A spoken answer never aborts a long document (an Avatar Show script) for the same owner, and vice versa.
+  const slow=new DelegateBackend({auth:{bearer:async()=>({access:'t'})},fetchImpl:(url,init)=>new Promise((resolve,reject)=>{init.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})));})});
+  const cfg=normalizeDelegate({},{reasoningMode:'delegate'});
+  const script=slow.answer(7,'script-1',cfg,[{role:'user',text:'write'}],'',{long:true});script.catch(()=>{});
+  const spoken=slow.answer(7,'spoken-1',cfg,[{role:'user',text:'hi'}],'');spoken.catch(()=>{});
+  await new Promise(r=>setTimeout(r,20));assert.equal(slow.requests.size,2,'both in flight');
+  slow.cancel(7,undefined,{long:false});await new Promise(r=>setTimeout(r,10));assert.equal([...slow.requests.values()].map(r=>r.id).join(),'script-1','only the spoken class was cancelled');
+  slow.cancel(7,undefined,{long:true});await new Promise(r=>setTimeout(r,10));assert.equal(slow.requests.size,0);
+  checks.push('Cancellation by request class: a Director answer leaves the Playwright alone');
+ }
  const server=normalizeDelegate(config,{reasoningMode:'delegate',delegateAuth:'codex_app_server',delegateModel:'gpt-6-astra'});
  assert(usesCodexServer(server));assert(usesCodexActions({...server,agentEngine:'basic'}));assert.equal(codexConfig({...server,agentCodexModel:'legacy'}).agentCodexModel,'gpt-6-astra');
  assert.equal(selected(normalizeDelegate(server,{delegateAuth:'oauth2'})).model,'gpt-5.6-terra');

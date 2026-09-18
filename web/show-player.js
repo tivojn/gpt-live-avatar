@@ -6,12 +6,16 @@ export function cueSheet(script){
  return cues;
 }
 export class ShowPlayer {
- constructor(stage){this.stage=stage;this.running=false;this.generation=0;this.pendingHuman=null;this.takenOver=false;}
+ constructor(stage){this.stage=stage;this.running=false;this.generation=0;this.pendingHuman=null;this.takenOver=false;this.gate=null;}
+ // Hold between cues (the current line finishes first); resume continues from the next cue.
+ pause(){if(!this.running||this.gate)return;let open;this.gate={promise:new Promise(r=>{open=r;}),open};this.stage.paused?.(true);}
+ resume(){const gate=this.gate;if(!gate)return;this.gate=null;gate.open();this.stage.paused?.(false);}
+ get paused(){return Boolean(this.gate);}
  // External controls while a human line is pending.
  pass(){this.pendingHuman?.({result:'pass'});}
  takeover(){this.pendingHuman?.({result:'takeover'});}
  done(text=''){this.pendingHuman?.({result:'spoken',text});}
- stop(){if(!this.running)return;this.running=false;this.generation++;this.pendingHuman?.({result:'stop'});this.stage.stop?.();}
+ stop(){if(!this.running)return;this.running=false;this.generation++;this.pendingHuman?.({result:'stop'});const gate=this.gate;this.gate=null;gate?.open();this.stage.stop?.();}
  async run(script,{timeoutMs=25000,resolveMotion=id=>id}={}){
   if(this.running)throw Error('A show is already running.');
   const cues=cueSheet(script);if(!cues.length)throw Error('The script has no lines.');
@@ -30,6 +34,7 @@ export class ShowPlayer {
   try{
    for(let i=0;i<cues.length;i++){
     if(!current())break;const cue=cues[i];
+    if(this.gate){await this.gate.promise;if(!current())break;}
     if(cue.scene!==scene){scene=cue.scene;await this.stage.scene?.(script.scenes[scene],scene);if(!current())break;}
     const nextCue=cues[i+1];const next=nextCue?(nextCue.speaker==='user'?(this.takenOver?nextCue.understudy:'user'):nextCue.speaker):'';
     let performer=cue.speaker,forUser=false,heard='';

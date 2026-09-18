@@ -54,7 +54,9 @@ async function streamText(response,maxChars=12000){
 }
 class DelegateBackend {
   constructor({auth,fetchImpl=fetch,codex=null}){this.auth=auth;this.fetch=fetchImpl;this.codex=codex;this.requests=new Map();}
-  cancel(owner,id){this.codex?.cancel(owner,id);for(const [key,r] of this.requests)if(r.owner===owner&&(!id||r.id===id)){r.abort.abort();this.requests.delete(key);}}
+  // long selects the class: a spoken answer or a long document (an Avatar Show
+  // script). A new spoken answer must not abort a script being written.
+  cancel(owner,id,{long}={}){if(long===undefined)this.codex?.cancel(owner,id);for(const [key,r] of this.requests)if(r.owner===owner&&(!id||r.id===id)&&(long===undefined||Boolean(r.long)===long)){r.abort.abort();this.requests.delete(key);}}
   cancelAll(){this.codex?.cancelAll();for(const r of this.requests.values())r.abort.abort();this.requests.clear();}
   // options.long: a structured document (an Avatar Show script) instead of a
   // spoken 70-word answer; larger context and output budgets, JSON-only tail.
@@ -63,7 +65,7 @@ class DelegateBackend {
     const long=options.long===true;
     const context=long?messages(history,40000,60000):messages(history,2400);if(!context.some(m=>m.role==='user'))throw Error('The question transcript has not arrived yet. Please repeat the question.');
     if(reasoningEngine(config)){if(!this.codex)throw Error('The agent runtime is not connected.');return this.codex.answer(owner,id,runtimeConfig(config),history,long?String(instructions||'').slice(0,12000)+'\nReturn only the requested JSON document, complete, with no commentary.':instructions);}
-    this.cancel(owner);const abort=new AbortController(),request={owner,id,abort},key=owner+':'+id;this.requests.set(key,request);
+    this.cancel(owner,undefined,{long});const abort=new AbortController(),request={owner,id,abort,long},key=owner+':'+id;this.requests.set(key,request);
     try{
       const {provider,auth,model}=selected(config),credential=await this.auth.bearer(provider,auth);
       if(abort.signal.aborted)throw Error('Request cancelled.');

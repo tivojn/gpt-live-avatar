@@ -1,13 +1,13 @@
 {
-  "version": "0.2.21",
+  "version": "0.2.22",
   "date": "2026-09-18",
-  "title": "EnConvo as a reasoning and action engine",
-  "description": "EnConvo joins Codex, OpenClaw, Hermes and Grok Build. Mavis or any custom EnConvo agent can think and act for each character through EnConvo's local API, keeping its own model, tools and account.",
+  "title": "Avatar Show: live steering, notes, recording and a proper panel",
+  "description": "Talk to the cast mid-show without breaking it: real-time voice notes to one character in her own voice, audience notes the whole cast follows, pause and resume, MP4 recording, a movable panel window and the bubble theme throughout.",
   "highlights": [
-    "Settings → Reasoning → EnConvo · local agent, and Action engine → EnConvo. Uses the EnConvo app's local API (http://localhost:54535 by default, configurable).",
-    "Agents for each character gains an EnConvo column listing Mavis and every custom EnConvo agent; bind a different agent to each avatar.",
-    "Each EnConvo agent keeps its own model, tools, account and permissions; only transcript text and the avatar tool instructions are sent.",
-    "With actions enabled, requests go to the action engine: choose Follow reasoning agent or EnConvo there to route through EnConvo.",
-    "Facial expression timing refined: brow gestures flash and rest instead of holding, and repeated feelings never restart a wink."
+    "Press a character's mic during a show for a private note through gpt-live-1: she listens live in her own voice, acknowledges in one sentence, applies it from her next line, and the show carries on.",
+    "Call out a note for the whole cast and the show holds, the Director answers, and every later line follows it; say “continue” to resume. Pause, Resume and Stop live in the panel header.",
+    "Record to MP4: the performance is saved to Movies › GPT-Live Avatar Shows with captions and every voice mixed in, whenever it finishes or is stopped.",
+    "The Avatar Show panel is the window: traffic lights, drag, resize, remembered position; the stage stays transparent. The panel, prompter and bubble share one design, light and dark.",
+    "Fixes: the prompter's buttons take real clicks; the Director voice hangs up while the Playwright writes (no idle session cost); resting characters shift stance at their own pace; a put-away prop no longer leaves a weapon grip; scripted lines show in the bubble the moment they start."
   ]
 }

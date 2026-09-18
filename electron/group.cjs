@@ -34,12 +34,14 @@ function setupGroup(deps){
   pendingInput?.abort();pendingInput=null;
   if(scope!=='voice'&&window&&!window.isDestroyed()){deps.backend.cancel(window.webContents.id);deps.agentCancel?.(window.webContents.id);}
  };
- let hiddenSince=0;const visibilityTimer=setInterval(()=>{if(!window||window.isDestroyed()||window.isVisible()&&!window.isMinimized()){hiddenSince=0;return;}hiddenSince=hiddenSince||Date.now();if(Date.now()-hiddenSince>=15000){cancel();window.webContents.send('gla:group:stop');hiddenSince=0;}},1000);
+ let hiddenSince=0;const visibilityTimer=setInterval(()=>{if(!window||window.isDestroyed()||window.isVisible()||window.isMinimized()){hiddenSince=0;return;} /* minimized keeps running; only a hidden window ends the session */hiddenSince=hiddenSince||Date.now();if(Date.now()-hiddenSince>=15000){cancel();window.webContents.send('gla:group:stop');hiddenSince=0;}},1000);
  const guard=fn=>async(event,...args)=>{if(!window||window.isDestroyed()||event.sender!==window.webContents)return {ok:false,error:'Open the character group first.'};try{return {ok:true,...await fn(event,...args)};}catch(e){return {ok:false,error:e.status===401||e.status===403?'The voice API key was rejected. Check Settings.':e.message||'The conversation could not continue.'};}};
  const open=()=>{
   if(window&&!window.isDestroyed()){window.show();window.focus();return true;}
   closing=false;shared=new GroupContext();const primary=deps.getAvatar(),display=screen.getDisplayMatching(primary?.getBounds()||screen.getPrimaryDisplay().workArea);
   primary?.webContents.send('gla:menu-action','end:hidden');primary?.webContents.send('gla:avatar:suspended',true);primary?.hide();
+  // A transparent stage over the whole desktop; the Avatar Show panel inside
+  // it is the movable, resizable, minimizable window the user works with.
   window=new BrowserWindow({...display.workArea,show:false,transparent:true,frame:false,hasShadow:false,resizable:false,minimizable:false,fullscreenable:false,alwaysOnTop:true,skipTaskbar:true,backgroundColor:'#00000000',title:'GPT-Live Avatar · Avatar Show',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:false,backgroundThrottling:false}});
   window.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});window.setAlwaysOnTop(true,'floating');window.loadURL(deps.origin+'/group.html');
   window.once('ready-to-show',()=>window?.show());window.on('close',cancel);window.on('closed',()=>{window=null;if(!closing){deps.getAvatar()?.webContents.send('gla:avatar:suspended',false);deps.getAvatar()?.showInactive();}});

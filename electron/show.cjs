@@ -2,7 +2,8 @@
 // Avatar Show · Playwright and Director. The main process owns the model
 // calls (Playwright script, Director reasoning, Director live voice session)
 // and the custom-motion pipeline; the Together window owns the stage.
-const {ipcMain}=require('electron');
+const {ipcMain,app,shell}=require('electron');
+const fs=require('node:fs'),path=require('node:path');
 const {playwrightRequest,parseScript,scriptSummary,clean}=require('./show-script.cjs');
 const {ShowMotionPipeline}=require('./show-motions.cjs');
 const {normalizeDelegate}=require('./delegate.cjs');
@@ -59,7 +60,29 @@ function setupShow(deps){
  handle('gla:show:director-live',async(_e,request={})=>{
   if(!deps.voices.includes(request.voice))throw Error('Choose a supported voice for the Director.');
   pendingVoice?.abort();const abort=new AbortController();pendingVoice=abort;
-  try{return await deps.createSession({sdp:request.sdp,voice:request.voice,groupInstructions:directorInstructions(request.context,{live:true})+' Initially the floor is OPEN: greet the user in one sentence and ask what show they would like.'},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}
+  const opening=request.floorOpen===false?' Initially the floor is CLOSED: a performance is under way. Stay completely silent until the app opens the floor.':' Initially the floor is OPEN: greet the user in one sentence and ask what show they would like.';
+  try{return await deps.createSession({sdp:request.sdp,voice:request.voice,groupInstructions:directorInstructions(request.context,{live:true})+opening},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}
+  finally{if(pendingVoice===abort)pendingVoice=null;}
+ });
+ const showsDir=()=>path.join(app.getPath('videos'),'GPT-Live Avatar Shows');
+ handle('gla:show:save-recording',(_e,request={})=>{
+  const bytes=request.bytes instanceof ArrayBuffer?Buffer.from(request.bytes):ArrayBuffer.isView(request.bytes)?Buffer.from(request.bytes.buffer,request.bytes.byteOffset,request.bytes.byteLength):null;
+  if(!bytes||!bytes.length)throw Error('The recording is empty.');if(bytes.length>2*1024*1024*1024)throw Error('The recording is too large to save.');
+  const ext=request.ext==='webm'?'webm':'mp4',title=clean(request.title,60).replace(/[\\/:*?"<>|]+/g,' ').trim()||'Avatar Show';
+  const d=new Date(),two=n=>String(n).padStart(2,'0'),stamp=`${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}.${two(d.getMinutes())}`; // local time, as Finder shows it
+  fs.mkdirSync(showsDir(),{recursive:true});const file=path.join(showsDir(),`${title} ${stamp}.${ext}`);fs.writeFileSync(file,bytes);
+  return {path:file,bytes:bytes.length};
+ });
+ handle('gla:show:reveal',(_e,request={})=>{const file=path.resolve(String(request.path||''));if(!file.startsWith(showsDir()+path.sep)||!fs.existsSync(file))throw Error('That recording is not available.');shell.showItemInFolder(file);return {};});
+ // A private steering note mid-show: a short live session in the character's
+ // own voice. She listens in real time, acknowledges in one sentence, and the
+ // app applies the note to her next lines; no transcription step in between.
+ handle('gla:show:steer-live',async(_e,request={})=>{
+  if(!deps.voices.includes(request.voice))throw Error('Choose a supported voice.');
+  const name=clean(request.character,60)||'the character',role=clean(request.role,120),scene=clean(request.scene,300),lang=clean(request.language,40);
+  const instructions=`You are ${name}${role?', playing '+role:''}, in the middle of a live stage show that is on hold for a moment${scene?' ('+scene+')':''}. The person speaking to you now is your director, giving you a private note by voice about how to play the rest of the show (a mood, a pace, an accent, a language, a bit of business). Listen to the whole note. When they stop, reply in character with ONE short sentence that acknowledges the note and how you will apply it, for example "Got it, I'll give the rest a Cantonese lilt." Do not perform any lines of the play, do not ask questions, do not chat, and say nothing else. Answer in the language the director used${lang?' ('+lang+')':''}.`;
+  pendingVoice?.abort();const abort=new AbortController();pendingVoice=abort;
+  try{return await deps.createSession({sdp:request.sdp,voice:request.voice,groupInstructions:instructions},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}
   finally{if(pendingVoice===abort)pendingVoice=null;}
  });
  handle('gla:show:pipeline',()=>({status:pipeline.status()}));
@@ -78,7 +101,12 @@ function setupShow(deps){
    return {results,revision};
   }finally{if(jobs.get(e.sender.id)===abort)jobs.delete(e.sender.id);}
  });
- handle('gla:show:cancel',e=>{pendingVoice?.abort();pendingVoice=null;jobs.get(e.sender.id)?.abort();jobs.delete(e.sender.id);deps.backend.cancel(e.sender.id);return {};});
- return {pipeline,cancelAll(){pendingVoice?.abort();for(const job of jobs.values())job.abort();jobs.clear();}};
+ handle('gla:show:cancel',(e,options={})=>{
+  const id=typeof options?.id==='string'&&/^[a-zA-Z0-9_-]{1,160}$/.test(options.id)?options.id:'';
+  if(options?.scope==='director'){deps.backend.cancel(e.sender.id,id||undefined);return {};} // the Director's own delegation only
+  if(options?.scope==='playwright'){deps.backend.cancel(e.sender.id,undefined,{long:true});return {};} // the script being written
+  pendingVoice?.abort();pendingVoice=null;jobs.get(e.sender.id)?.abort();jobs.delete(e.sender.id);deps.backend.cancel(e.sender.id);return {};
+ });
+ return {pipeline,cancelAll(){pendingVoice?.abort();for(const job of jobs.values())job.abort();jobs.clear();deps.backend.cancelAll?.();}};
 }
 module.exports={setupShow,directorInstructions,showContext,CUE};

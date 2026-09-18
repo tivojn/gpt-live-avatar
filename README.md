@@ -1,6 +1,8 @@
 # GPT-Live Avatar
 
-[Download the signed and notarized Mac installer](https://github.com/tivojn/gpt-live-avatar/releases/latest).
+[Download the signed and notarized Mac installer](https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/).
+That page lists the current version, its SHA-256 checksum and the Apple Silicon DMG;
+`releases/latest.json` on the same host is the machine-readable release record.
 Open the DMG, copy GPT-Live Avatar to Applications, and launch it. Encrypted Sarah
 is included; the first launch needs internet for a brief unlock. Sarah is the
 default avatar, wearing **Tie top, chain pants & sandals** without the coat or a prop.
@@ -172,4 +174,4 @@ and test commands are documented in [Desktop controls](docs/DESKTOP-CONTROLS.md#
 
 Settings supports **Codex App Server**, **OpenClaw**, **Hermes**, **Grok Build** and **EnConvo** for delegated reasoning and enabled actions. Choose the runtime under Reasoning, then use **Agents for each character** to select an OpenClaw agent, Hermes profile or EnConvo agent (Mavis or any custom agent) for each avatar. Missing installations are disabled. Each runtime uses its own configured account and tools; GPT-Live voice still uses the voice API key. See [setup and connection details](docs/AGENT-RUNTIMES.md).
 
-Right-click any avatar → **Check for Updates…** or **About GPT-Live Avatar** for the installed version, release description and official downloads. Update checks are on demand.
+Right-click any avatar → **Check for Updates…** or **About GPT-Live Avatar** for the installed version, release description and official downloads. Update checks are on demand and read `releases/latest.json` from the private release service; no GitHub account or public repository is involved.
