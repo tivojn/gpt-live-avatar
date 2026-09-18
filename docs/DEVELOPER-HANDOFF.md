@@ -8,14 +8,14 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 18, 2026 for **v0.2.23**. Use the
+Updated September 18, 2026 for **v0.2.24**. Use the
 [release page](https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/)
 to confirm Apple Silicon installer availability and checksums
 (`releases/latest.json` on that host is the machine-readable record). Use the
 release tag and matching checksums for a reproducible reference.
 
 
-## After 0.2.23: grouped menu, Settings panes, one monochrome theme
+## 0.2.24: wardrobe flourish, grouped menu, Settings panes, one theme, in-app update
 
 - **Right-click menu.** Both windows build the same groups from
   `electron/avatar-menu.cjs`: talk and Ask… on top; Perform, Look, Character,
