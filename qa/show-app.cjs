@@ -20,7 +20,7 @@ const script=(title,userLine)=>({title,synopsis:'The royal crown vanishes minute
   {speaker:'tia',text:'Then we crown the cat and call it a day.',motion:'bow-courtly',expression:{smile:.9}}]}]});
 require('../electron/delegate.cjs').DelegateBackend.prototype.answer=async(owner,id,config,history,instructions,options={})=>{
  replies.push({id,history,instructions,options,persona:config.personaName});
- if(config.personaName==='Playwright'){const revised=/Previous script \(JSON\)/.test(history[0].text);return {text:'```json\n'+JSON.stringify(script(revised?'The Lost Crown, Revised':'The Lost Crown',revised?'Perhaps the cat took it, Majesty.':'Perhaps under the cushion, Majesty.'))+'\n```',provider:'qa',model:'qa'};}
+ if(config.personaName==='Playwright'){await new Promise(r=>setTimeout(r,1700));const revised=/Previous script \(JSON\)/.test(history[0].text);return {text:'```json\n'+JSON.stringify(script(revised?'The Lost Crown, Revised':'The Lost Crown',revised?'Perhaps the cat took it, Majesty.':'Perhaps under the cushion, Majesty.'))+'\n```',provider:'qa',model:'qa'};}
  const last=history[history.length-1]?.text||'';
  return {text:/ready|start|go ahead|places/i.test(last)?'A comedy about a lost crown with you as the jester. Places, everyone!':'Lovely idea. Should the show be a comedy, and would you like to play a role?',provider:'qa',model:'qa'};
 };
@@ -52,8 +52,16 @@ app.whenReady().then(async()=>{try{
  await until(()=>js('return gla_group.show.chat.length===2'),'director reply');assert.equal(replies[0].persona,'Director');assert(replies[0].instructions.includes('Adam wants to act one role'),replies[0].instructions);assert(replies[0].instructions.includes('Sarah is the standby'));
  assert.equal((await js('return gla_group.show.chat'))[1].text,'Lovely idea. Should the show be a comedy, and would you like to play a role?');
  fs.writeFileSync(out+'/planning.png',(await win.webContents.capturePage()).toPNG());
+ await js("window.__bar=[];window.__barTimer=setInterval(()=>{const b=document.querySelector('#showBar');__bar.push({phase:gla_group.show.phase,hidden:b.hidden,width:parseFloat(b.firstElementChild.style.width)||0,label:document.querySelector('#showPhase').textContent});},100);");
  await js("document.querySelector('#showText').value='Yes, a comedy. I am ready.';document.querySelector('#showSend').click();");
  await until(()=>js("return gla_group.show.phase==='ready'"),'prepared');
+ // While the script is being written the wait has a bar: an estimate, which is said in words, and it only ever grows.
+ {const bar=await js('clearInterval(__barTimer);return __bar'),writing=bar.filter(x=>x.phase==='writing');
+  assert(writing.length>=8,'sampled the writing phase');assert(writing.every(x=>!x.hidden),'the bar is up for the whole of it');
+  assert(writing.every((x,i)=>i===0||x.width>=writing[i-1].width)&&writing.at(-1).width>writing[0].width,'it grows and never goes back');assert(writing.at(-1).width<90,'and does not pretend to be nearly done after two seconds');
+  assert(writing.some(x=>/^writing the script · \d+% · about \d+:\d\d left$/.test(x.label)),'percent and time left: '+writing.at(-1).label);
+  assert(bar.filter(x=>x.phase!=='writing').every(x=>x.hidden),'hidden outside the writing phase');
+  const kept=await js("return JSON.parse(localStorage.getItem('gla_show_write_ms'))");assert(Object.values(kept)[0][0]>=1600,'how long it took is remembered for the next estimate');}
  const chat=await js('return gla_group.show.chat');assert.equal(chat[3].text,'A comedy about a lost crown with you as the jester.','cue phrase is stripped from the caption');
  const playwright=replies.find(r=>r.persona==='Playwright');assert(playwright.options.long,'the Playwright uses the long reasoning path');assert(playwright.history[0].text.includes('accuse-point — Accuse [Theatre]'));assert(playwright.history[0].text.includes('Director: Lovely idea'));
  const shown=await js('return gla_group.show.script');assert.equal(shown.title,'The Lost Crown');assert.deepEqual(shown.userRole,{name:'Adam',role:'Pip the Jester',understudy:'sarah',understudyName:'Sarah'});assert.equal(shown.wantedMotions.length,1);

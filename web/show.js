@@ -1,3 +1,4 @@
+import {estimateProgress,usualMs,remember,recall} from '/show-progress.js';
 import {ShowPlayer,cueSheet} from '/show-player.js';
 import {DirectorVoice} from '/show-director.js';
 import {userCue,directorCue,stripCue,lineCoverage} from '/show-cues.js';
@@ -7,11 +8,13 @@ import {ShowRecorder,recordingType} from '/show-recorder.js';
 // prepares motions (Meshy when configured) and runs the performance on the
 // Together stage. A standby character covers any line the human passes on.
 const $=s=>document.querySelector(s);
+const TALKING=['talk-with-hands-open','talk-with-left-hand-raised','talk-with-right-hand-open','stand-and-chat'];
 const PHASE_LABEL={planning:'planning',writing:'writing the script',preparing:'preparing motions',ready:'ready',performing:'performing',finished:'curtain call'};
 export function installShow({api,voice,actors,catalogue,hooks}){
  let phase='planning',chat=[],script=null,resolved=new Map(),pipeline={available:false,problems:[]},player=null,humanWait=null,countdown=0,lastShow=null,busy=false,liveDraft=null,starting=false,generation=0;
  // Notes from the audience mid-show ("do it in an Irish accent") reach every later line; the show holds while the Director acknowledges one.
 let castNotes={};
+ let writeKey='medium',writeUsual=75000;
  let notes=[],resumeTimer=0,phaseTimer=0,phaseStarted=0,connecting=false,recorder=null,recordingSink=null,savedRecording='',saving=false,savePromise=Promise.resolve();
  const PERFORMING='The show is being performed; the human may read lines aloud or call out notes for the cast. Stay silent unless the app opens the floor.';
  const director=new DirectorVoice(api,{
@@ -37,7 +40,12 @@ let castNotes={};
  const mmss=ms=>{const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
  const setPhase=next=>{phase=next;clearInterval(phaseTimer);phaseTimer=0;$('#showPhase').textContent=PHASE_LABEL[next]||next;
   // Waiting on a model or on Meshy: show the clock so nobody wonders whether anything is happening.
-  if(next==='writing'||next==='preparing'){phaseStarted=performance.now();phaseTimer=setInterval(()=>{$('#showPhase').textContent=(PHASE_LABEL[phase]||phase)+' · '+mmss(performance.now()-phaseStarted);},1000);}
+  const bar=$('#showBar');if(bar)bar.hidden=next!=='writing';
+  if(next==='writing'||next==='preparing'){phaseStarted=performance.now();const tick=()=>{const elapsed=performance.now()-phaseStarted;let label=(PHASE_LABEL[phase]||phase)+' · '+mmss(elapsed);
+    // Writing has no real progress signal, so the bar is an estimate from how long the last scripts took (show-progress.js).
+    if(phase==='writing'&&bar){const p=estimateProgress(elapsed,writeUsual);bar.firstElementChild.style.width=(p.fraction*100).toFixed(1)+'%';bar.setAttribute('aria-valuenow',String(p.percent));
+     label=PHASE_LABEL.writing+' · '+p.percent+'% · '+(p.late?'taking longer than usual · '+mmss(elapsed):'about '+mmss(p.leftMs)+' left');}
+    $('#showPhase').textContent=label;};tick();phaseTimer=setInterval(tick,500);}
   refresh();};
  function pushChat(role,text){chat.push({role,text,at:Date.now()});chat=chat.slice(-80);renderChat();}
  // The chat is a live region: only new lines are added to it and the running
@@ -153,6 +161,7 @@ let castNotes={};
   if(busy)return;const performers=cast();if(!performers.length){setStatus('Choose at least one character first.',true);return;}
   if(hooks.human().enabled&&performers.length<2){setStatus('With you in a role, choose at least two characters: one performs, one stands by.',true);return;}
   busy=true;const run=++generation,current=()=>run===generation;const revising=Boolean(script&&phase==='finished');const previous=revising?script:null;const feedback=revising?chat.filter(l=>l.role==='user'&&l.at>(lastShow||0)).map(l=>l.text).join(' '):'';
+  writeKey=$('#showLength').value+(revising?':revise':'');writeUsual=usualMs(recall(localStorage,writeKey));const writeStarted=performance.now();
   setPhase('writing');$('#showProgress').hidden=true;
   // Writing and motion preparation can take minutes; the live voice would only
   // sit there billing per minute, so hang it up and say so. The countdown still
@@ -162,6 +171,7 @@ let castNotes={};
   try{
    const request={id:'show-'+Date.now().toString(36),brief:{theme:hooks.topic()||(chat.some(l=>l.role==='user')?'':hooks.suggestion?.()||''),transcript:chat.map(l=>({role:l.role,text:l.text})),notes:''},characters:characterList(),user:hooks.human(),understudy:understudySlug(),length:$('#showLength').value,previous,feedback};
    const result=await api.playwright(request);if(!current())return;if(!result.ok)throw Error(result.error);
+   remember(localStorage,writeKey,performance.now()-writeStarted);
    script=result.script;resolved=new Map();renderScript();
    setPhase('preparing');await prepareMotions(current);if(!current())return;
    setPhase('ready');$('#showScript').open=Boolean(script.userRole);
@@ -206,6 +216,13 @@ let castNotes={};
    scene:async(scene,i)=>{setStatus(`Scene ${i+1}: ${scene.title}`);await pause(700);},
    floor:({speaker,listener,cue})=>{hooks.setFloor(speaker==='user'?'_human':speaker,listener==='user'?'_human':listener);for(const a of actors.values())a.el.classList.toggle('speaking',a.slug===speaker);document.querySelectorAll('#showScriptBody p.current').forEach(p=>p.classList.remove('current'));const p=document.querySelector(`#showScriptBody p[data-cue="${cue.scene}:${cue.index}"]`);if(p){p.classList.add('current');p.scrollIntoView({block:'nearest'});}},
    motion:async(slug,id,expression)=>{const a=actorOf(slug);if(!a)return;a.showMood=Object.keys(expression).length?expression:null;if(id&&a.avatar.motion?.clips.has(id)){a.el.classList.remove('standby');void a.avatar.motion.play(id,{loop:false}).catch(()=>{});}},
+   // Most lines carry no motion (the Playwright keeps motions for what a character is literally doing), so the
+   // speaker talks with her hands: a conversational clip on a line long enough to hold one (they run about four
+   // seconds), otherwise a shift of stance. Never the same clip twice running, and not on every line.
+   talk:(slug,cue)=>{const a=actorOf(slug),motion=a?.avatar.motion;if(!a||!motion||motion.active)return;
+    const words=String(cue.text||'').trim().split(/\s+/).filter(Boolean).length,pool=TALKING.filter(id=>motion.clips.has(id)&&id!==a.lastTalk);
+    if(words>=10&&pool.length&&Math.random()<.75){a.lastTalk=pool[Math.floor(Math.random()*pool.length)];a.el.classList.remove('standby');void motion.play(a.lastTalk,{loop:false}).catch(()=>{});}
+    else if(a.avatar.options&&a.avatar.options.nextPlaybackAt!==undefined)a.avatar.options.nextPlaybackAt=performance.now();},
    move:async(slug,destination)=>{const a=actorOf(slug);if(!a)return;a.el.classList.remove('standby');await hooks.walk(a,destination,()=>phase!=='performing');},
    // The line is scripted, so the bubble shows it the moment the cue starts; the
    // voice's own transcript trails the audio by a second and only ever confirms it.

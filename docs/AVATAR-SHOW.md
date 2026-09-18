@@ -60,6 +60,31 @@ Say **stop** or press **Stop** at any time; the Director keeps the script.
 **Pause** (or say "pause", 等一下) holds the show after the current line;
 **Resume** (or "continue") carries on.
 
+## Motions on stage, and how long a script takes
+
+- **Motions are for what a character is literally doing**: a wave on a
+  greeting, a bow when they bow, a dance clip while they dance. The Playwright
+  is told that most lines carry none and that a motion is never emphasis for
+  talk (no spin-jump on a line of conversation). The heart gesture and the
+  walk clips are not offered to it at all (`offStage` in
+  `electron/show-script.cjs`), and are dropped if it names them anyway;
+  crossing the stage is what a line's `move` is for.
+- **A line with no motion is still spoken by a body.** The stage gives the
+  speaker talking hands (one of four conversational clips of about four
+  seconds, on lines of ten words or more, never the same twice running) or a
+  shift of stance (`talk` in `web/show.js`).
+- **What the user says about length wins** over the panel's Length menu
+  ("very short" is not 20 to 28 lines).
+- **How long writing takes depends on the reasoning provider.** The script is
+  one non-streaming request. Measured on 2026-09-18 with the same brief:
+  EnConvo's Mavis agent (Claude Fable 5.1 with extended thinking, a 20k-token
+  agent prompt) took 101 s, 8,700 output tokens for a 1,300-token script,
+  about $0.48; its floor for any reply is 2 s. Direct API providers stream and
+  are several times faster. The panel therefore shows an **estimated**
+  progress bar while writing (`web/show-progress.js`): it climbs to 90% at the
+  median of the last five scripts of that length, then creeps, says "taking
+  longer than usual" when it does, and never shows 100% before the answer.
+
 ## Recording
 
 Tick **Record to MP4** (or click the **Record** light in the panel header,

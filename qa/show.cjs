@@ -23,6 +23,11 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  plan=script.castPlan({characters,user:{enabled:false}});assert.equal(plan.understudy,null);assert.equal(plan.performers.length,3);
  const catalogue=script.motionCatalogue(characters);
  assert.equal(catalogue.length,3);assert.deepEqual(catalogue.find(m=>m.id==='wave').missing,['iselda']);
+ // Not for the stage: a heart made with the hands, and walk clips (a walk on the spot is a treadmill; crossing is what `move` is for).
+ const social=[...clips,{id:'heart-gesture',label:'Overhead Heart',category:'Gestures'},{id:'stage-walk',label:'Runway Walk',category:'Walking'},{id:'hip-hop-dance',label:'Hip Hop Dance',category:'Dances'}];
+ assert.deepEqual(script.motionCatalogue([{slug:'tia',name:'Tia',clips:social}]).map(m=>m.id),['bow-courtly','plead-beg','wave','hip-hop-dance']);
+ const prudish=script.parseScript(JSON.stringify({title:'T',synopsis:'s',cast:[{slug:'tia',role:'The Host'}],scenes:[{title:'A',setting:'x',lines:[{speaker:'tia',text:'I love you all.',motion:'heart-gesture'},{speaker:'tia',text:'Watch me cross.',motion:'stage-walk'},{speaker:'tia',text:'And now I dance.',motion:'hip-hop-dance'}]}],wantedMotions:[]}),{characters:[{slug:'tia',name:'Tia',clips:social}]});
+ assert.deepEqual(prudish.scenes[0].lines.map(l=>l.motion||''),['','','hip-hop-dance'],'a heart or a walk clip the Playwright asks for anyway is dropped, the line stays');
 
  // ------------------------------------------------------------- playwright
  assert.throws(()=>script.playwrightRequest({id:'bad id',characters}),/Invalid/);
@@ -31,6 +36,9 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  assert.equal(request.id,'show-1');assert.match(request.instructions,/Playwright/);assert.match(request.history[0].text,/lost crown/);assert.match(request.history[0].text,/User: Make it funny/);
  assert.match(request.history[0].text,/Sarah \(slug "sarah"\) is the standby/);assert.match(request.history[0].text,/bow-courtly — Courtly Bow \[Theatre\]/);assert.match(request.history[0].text,/wave .*not installed for: iselda/);
  assert.ok(!/- Sarah \(slug/.test(request.history[0].text),'standby is not a performer');
+ // Motions are for what a character is literally doing, never decoration for talk; and "very short" beats the panel's length.
+ assert.match(request.instructions,/Most lines have none/);assert.match(request.instructions,/never emphasis or decoration for talk/);assert.ok(!/roughly half of the lines/.test(request.instructions));
+ assert.match(request.history[0].text,/Length: about 12 to 16 lines[^\n]*the conversation wins/);
 
  // ---------------------------------------------------------------- parsing
  const raw={title:'The Lost Crown',synopsis:'A crown goes missing.',cast:[{slug:'tia',role:'Queen'},{slug:'iselda',role:'Guard'},{slug:'sarah',role:'Should be ignored'}],userRole:{role:'Jester'},
@@ -122,6 +130,9 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  };
  await new ShowPlayer(walkStage).run({title:'T',cast:[{slug:'tia',name:'Tia',role:'The Queen'},{slug:'iselda',name:'Iselda',role:'The Steward'}],scenes:[{title:'The hall',lines:[{speaker:'tia',text:'One.',move:'center',motion:'wave'},{speaker:'iselda',text:'Two.'}]}]});
  assert.deepEqual(beats,['walk-start','speak-while-walking','walk-end','gesture-on-arrival','speak-standing-still'],'the actor speaks while crossing and gestures on arrival');
+ // A line with no motion of its own gets talking hands (or a shift of stance) from the stage; a line with one does not.
+ {const talked=[];await new ShowPlayer({...walkStage,move:undefined,talk:(slug,cue)=>talked.push(slug+':'+cue.text)}).run({title:'T',cast:[{slug:'tia',name:'Tia',role:'A'},{slug:'iselda',name:'Iselda',role:'B'}],scenes:[{title:'S',lines:[{speaker:'tia',text:'Hello.',motion:'wave'},{speaker:'iselda',text:'Plain talk.'},{speaker:'tia',text:'Smiling talk.',expression:{smile:.6}}]}]});
+  assert.deepEqual(talked,['iselda:Plain talk.','tia:Smiling talk.']);}
  assert.deepEqual(seen[0],{role:'The Queen',scene:'The hall',to:'The Steward',after:'',note:''},'the voice is told who it plays, where it stands and who it addresses');
  assert.equal(seen[1].after,'The Queen: One.','the voice hears the line it answers');
  log.length=0;result=await new ShowPlayer(stage(async()=>({result:'pass'}))).run(parsed);

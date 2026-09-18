@@ -56,7 +56,10 @@ export class ShowPlayer {
     // cue's gesture waits for the feet to stop so a gait and a gesture never
     // fight over the same body.
     const gesture=()=>{const motion=cue.motion?resolveMotion(cue.motion,performer):'';
-     if(motion||Object.keys(cue.expression||{}).length)return this.stage.motion?.(performer,motion,cue.expression||{});};
+     const played=motion||Object.keys(cue.expression||{}).length?this.stage.motion?.(performer,motion,cue.expression||{}):undefined;
+     // A line with no motion of its own is still spoken by a body: the stage gives it talking hands or a shift of stance.
+     if(!motion)this.stage.talk?.(performer,cue);
+     return played;};
     const walking=cue.move?Promise.resolve(this.stage.move?.(performer,cue.move)).catch(()=>{}):null;
     const staging=Promise.resolve(walking?walking.then(gesture):gesture()).catch(()=>{});
     if(!current())break;
