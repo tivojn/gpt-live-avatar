@@ -569,6 +569,7 @@ export class Avatar3DOptions {
     }
     // Refresh descendants as well as the arm bones before measuring props.
     this.avatar.root.updateMatrixWorld(true);
+    this.avatar.hipCorrective?.update();
   }
 
   // A render crop must include the visible wardrobe and hair as well as
@@ -593,6 +594,7 @@ export class Avatar3DOptions {
     const box=new THREE.Box3(),point=new THREE.Vector3(),local=new THREE.Vector3();
     const corners=b=>{const out=[];if(!b.isEmpty())for(const x of [b.min.x,b.max.x])for(const y of [b.min.y,b.max.y])for(const z of [b.min.z,b.max.z])out.push(new THREE.Vector3(x,y,z));return out;};
     this.avatar.root.updateMatrixWorld(true);
+    this.avatar.hipCorrective?.update();
     for(const mesh of meshes){
       const geometry=mesh.geometry,position=geometry?.attributes.position;
       if(!position?.count)continue;
@@ -683,6 +685,7 @@ export class Avatar3DOptions {
       node.matrixWorldNeedsUpdate = true;
     });
     this.avatar.root.updateMatrixWorld(true);
+    this.avatar.hipCorrective?.update();
   }
 
   targetFor(pose) {

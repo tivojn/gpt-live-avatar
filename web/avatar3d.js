@@ -12,6 +12,7 @@
 // that when a runtime manifest declares `renderer: "3d"`.
 import * as THREE from '/vendor/three/three.module.js';
 import { GLTFLoader } from '/vendor/three/GLTFLoader.js';
+import { AvatarHipCorrective } from '/avatar3d-hip-corrective.js';
 import { AvatarVolumeSkin } from '/avatar3d-volume.js';
 import { NaturalAttention } from '/avatar3d-attention.js';
 import { fitGarment } from '/avatar3d-garment-fit.js';
@@ -252,6 +253,7 @@ class Avatar3D {
       const names=[];this.model.traverse(node=>{if(node.isSkinnedMesh)names.push(node.userData.sourceName);});
       this.volumeSkin=new AvatarVolumeSkin(this,names,{armOnly:true});
     }
+    if(['sarah','seraphim'].includes(this.characterId))this.hipCorrective=new AvatarHipCorrective(this);
     this.authoredExpressions = (library?.expressions || []).slice(0,128);
     this.authoredChannels = library?.channelAliases || {};
     this.resolveChannels();
@@ -1098,6 +1100,7 @@ class Avatar3D {
     this.hairContact?.update();
     this.appearance?.portrait?.beforeRender();
     this.volumeSkin?.beforeRender();
+    this.hipCorrective?.beforeRender();
     this.clothOcclusion?.beforeRender();
     const portrait=this.appearance?.portrait;
     if(portrait?.active&&portrait.diffusion?.filmic)portrait.diffusion.render(portrait.profile==='quality');
@@ -1248,6 +1251,7 @@ class Avatar3D {
     this.motion?.dispose();
     this.appearance?.dispose();
     this.volumeSkin?.dispose();
+    this.hipCorrective?.dispose();
     this.clearance?.dispose();
     this.hairContact?.dispose();
     this.clothOcclusion?.dispose();

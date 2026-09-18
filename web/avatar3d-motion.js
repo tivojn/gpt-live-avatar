@@ -57,6 +57,7 @@ export class Avatar3DMotion {
         ||data.bones.length!==bones.length||new Set(data.bones).size!==bones.length
         ||!Array.isArray(data.frames)||data.frames.length<2||data.frames.length>900
         ||!(data.fps>=1&&data.fps<=120))throw Error('Invalid motion clip');
+      this.options.avatar?.hipCorrective?.register(data.hipCorrective);
       const indices=bones.map(b=>data.bones.indexOf(b.name));
       if(indices.includes(-1))throw Error('Motion does not match this avatar');
       const frames=data.frames.map(frame=>{
