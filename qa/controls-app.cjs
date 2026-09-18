@@ -40,7 +40,9 @@ app.whenReady().then(async()=>{
   await js("gla_live.dispatchEvent(new CustomEvent('transcript',{detail:{role:'user',text:'Dance',final:true,id:'user-one'}}))");
   assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),true,'Outgoing messages do not wake auto');
   await js("gla_live.dispatchEvent(new CustomEvent('transcript',{detail:{role:'assistant',text:'Here is your message.',final:true,id:'reply-one'}}))");
-  for(let i=0;i<6;i++){await wait(200);assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),false,'Incoming messages remain visible during motion');}
+  // Whatever it shows, the bubble steps aside while a motion plays; the message gets its reading time once the motion ends.
+  for(let i=0;i<6;i++){await wait(200);assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),true,'The bubble stays off while a motion plays, even for an incoming message');}
+  await js("gla_play('stay')");await until(()=>js("!document.querySelector('#bubble').classList.contains('hidden')"),'the message returns when the motion ends');
   await wait(8100);assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),true,'Incoming bubble expires');
   await js("gla_play('stay')");
   const snapshot=async name=>{await wait(500);fs.writeFileSync(path.join(output,name+'.png'),(await win.webContents.capturePage()).toPNG());screens.push(name);};

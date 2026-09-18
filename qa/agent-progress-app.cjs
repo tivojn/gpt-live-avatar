@@ -18,7 +18,9 @@ app.whenReady().then(async()=>{try{
  for(const w of BrowserWindow.getAllWindows())if(w!==solo)w.close();solo.setBounds({x:30,y:50,width:650,height:880});
  send(solo,{id:'long',character:'Tia',state:'thinking'});send(solo,{id:'long',character:'Tia',state:'working',tool:'imageGeneration'});send(solo,{id:'long',character:'Tia',state:'update',text:'I’m creating your image now. Next I’ll save it to your Desktop and check the result.'});await wait(400);
  let r=await rects(solo);assert(!r.hidden);assert(r.text.includes('creating your image'));assert(!r.text.includes('imageGeneration'));assert(!r.toast.includes('show'));assert(r.x>=0&&r.y>=0&&r.right<=r.w&&r.bottom<=r.h,JSON.stringify(r));await snap(solo,'solo-working');
- await run(solo,"gla_avatar.motion.play('kung-fu-punch',{loop:true})");await wait(10000);assert(!(await rects(solo)).hidden,'Long work remains visible during motion');
+ // The bubble steps aside for any motion, task progress included, and returns when the motion ends.
+ await run(solo,"gla_avatar.motion.play('kung-fu-punch',{loop:true})");await wait(1500);assert((await rects(solo)).hidden,'Long work steps aside during a motion');
+ await run(solo,"gla_avatar.motion.stop()");await wait(600);assert(!(await rects(solo)).hidden,'Long work returns after the motion');
  await run(solo,"gla.setSettings({bubbleMode:'off'})");await wait(250);assert((await rects(solo)).hidden,'Off remains off during task');
  await run(solo,"gla.setSettings({bubbleMode:'auto'})");await wait(250);assert(!(await rects(solo)).hidden,'Auto returns to active work');
  send(solo,{id:'long',state:'tool-error'});await wait(200);assert(!(await rects(solo)).hidden);

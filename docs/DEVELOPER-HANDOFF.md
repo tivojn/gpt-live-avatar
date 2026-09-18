@@ -8,12 +8,20 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 18, 2026 for **v0.2.21**. Use the
+Updated September 18, 2026 for **v0.2.23**. Use the
 [release page](https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/)
 to confirm Apple Silicon installer availability and checksums
 (`releases/latest.json` on that host is the machine-readable record). Use the
 release tag and matching checksums for a reproducible reference.
 
+
+## 0.2.23 QA pass, new motions, sing-along retired
+
+A full test-engineering pass: 27 fixes (Show cost and recording leaks first),
+the header Record light, captions during gestures, bubble-off-during-motion
+with restore, seven new motions for every character (motion revision
+`presets-20260918`) and the removal of sing-along. Results, method and open
+items: [Test report](TEST-REPORT-0.2.22.md).
 
 ## 0.2.22 Avatar Show update
 
@@ -38,7 +46,7 @@ the built-in rules decide as before. Design, measurements and tests:
 ## 0.2.19 music, input and deformation update
 
 - Right-click **Dance Along to Current Song** or **Stop Dancing** in solo or
-  Together (sing-along was retired after 0.2.22: lip-syncing to another app's
+  Together (sing-along was retired in 0.2.23: lip-syncing to another app's
   music never matched the quality of her own voice; a sing-along request now
   dances along and says so). Together uses the clicked
   character; stopping one leaves the other performers running. Stop also

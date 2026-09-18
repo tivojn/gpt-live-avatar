@@ -15,7 +15,7 @@ UI and UX), with authority to fix what is clearly worth fixing.
 | Defects fixed | **27** product defects (4 high, 15 medium, 8 low) + copy and accessibility items |
 | Your five reports from this afternoon | all five fixed and verified (section 4) |
 | Requested changes | Sing-along removed; seven Meshy motions added to all five characters (section 5) |
-| Test-suite repairs | 9 stale assertions corrected, 1 assertion restored, 12 new regression checks added |
+| Test-suite repairs | 11 stale assertions corrected, 12 new regression checks added |
 | Left open | 2 stale QA scripts (`props-app`, `portrait-app`) handed off as a task; items in section 8 |
 
 The most valuable findings were not crashes but **quiet failures**: Meshy jobs
@@ -81,7 +81,7 @@ behaviour · **L** polish, robustness.
 | # | Sev | Symptom | Root cause | Fix | Verified by |
 | --- | --- | --- | --- | --- | --- |
 | 22 | H | **Show captions appeared late or not at all** | a bubble is hidden while its character's motion is active, and nearly every show line plays a gesture, so the caption only appeared once the gesture ended | a show line's caption stays up for the whole line | real show: **519 caption samples while speaking, 0 hidden, 345 of them during a gesture**; `qa/show-app` |
-| 23 | M | The same rule hid her words and task progress during any gesture in the solo and Together windows (two 14 September tests asserted the opposite and had silently broken in 0.2.19) | the 0.2.19 "keep status bubbles off the performance" rule hid everything | a bare status ("Ready", "Listening") still steps aside; a fresh message or work in progress stays readable; a dance-along still clears the stage for the whole song | `controls-app`, `agent-progress-app` (restored to its original assertion), `music-bubbles` |
+| 23 | M | Outside shows the bubble rule was under-specified: two 14 September tests expected messages and task progress to stay visible during a motion, 0.2.19 hid everything, and nothing brought a missed message back afterwards | no single stated rule | **Owner’s rule, now implemented and tested:** whenever a motion plays the bubble steps aside, whatever it shows; when the motion ends it returns if it should be on (Always mode, work in progress, or a message that was up or arrived during the motion, which then gets its reading time). Agent questions and an input you opened stay reachable. The only exception is a show line’s caption (defect 22). An interim version of this pass kept messages visible during gestures; that was reverted on the owner’s instruction | `controls-app` (hidden during the dance, returns after, then expires), `agent-progress-app`, `music-bubbles` |
 | 24 | M | **The bubble covered her face** when she stood near the top of the screen | the bubble was clamped to the screen and slid down over her head | when there is no room above, the bubble sits beside her head (side chosen by available room), located from the rig's own head projection | measured on the live app: no overlap, fully on screen, Chinese caption wrapping intact |
 | 25 | M | **Steering bubbles lingered** after the note was taken | a voice note opened the composer and nothing closed it | the bubble closes when the note is applied, dropped or times out | `qa/show-app` |
 | 26 | M | The panel's resize corner could not be grabbed: a drag on the corner fell through to the stage | the themed rule made the grip `position:absolute` but the older rule's `margin-bottom:-15px` pushed it under the panel's clipped edge; its triangular `clip-path`, its own rounded corner and the panel's 17 px radius removed the rest of the hit area (**present in 0.2.22**) | grip inset 6 px, 20×20, unclipped | real CDP mouse drag: pointer target is the grip, 610×599 → 670×649; `group-controls-app` |
@@ -181,8 +181,9 @@ That is an outward-facing publish, so it was not done here.
   (which now contains the composer tip) in three places; muted listening-pill
   opacity `0.6` → `0.75`; "Always mode during dance" (a status bubble does step
   aside); the group music menu still dispatched `music:sing`.
-- Restored rather than rewritten: "Long work remains visible during motion"
-  was right all along; the product was wrong (defect 23).
+- Two 14 September assertions ("Long work remains visible during motion",
+  "Incoming messages remain visible during motion") contradicted the owner’s
+  rule; both now assert: off during the motion, back afterwards (defect 23).
 - New regression checks: cue anchoring; hold timing; three-strike bail-out;
   captions during gestures; composer closes after a voice note; Record light
   on/off; Stop during the countdown.

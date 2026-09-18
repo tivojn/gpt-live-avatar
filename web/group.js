@@ -337,12 +337,11 @@ function refreshBubble(actor){
  actor.bubble.classList.toggle('task-update',Boolean(activity));actor.bubble.setAttribute('aria-label',activity?actor.info.name+' task progress':actor.info.name+' speech');
  updateComposer(actor);
  // Explicit input and questions must be visible before focus can enter them.
- // A dance hides the ordinary bubble, but a show line is scripted and almost
- // always carries a gesture: its caption stays up for the whole line.
+ // While a motion plays the bubble steps aside and returns when it ends. The one
+ // exception is a show line: it is scripted and almost always carries a
+ // gesture, so its caption stays up for the whole line.
  const showing=typeof show!=='undefined'&&Boolean(show?.active);
- // Outside a show the same holds for anything worth reading: her words or a task update stay up while she moves; a bare status steps aside.
- const meaningful=!window.gla_sing_sample?.(actor.slug)&&Boolean(activity||actor.message); // a dance-along still clears the stage
- actor.bubble.hidden=!(actor.composerOpen||actor.questionOpen||((!performing||showing||meaningful)&&actor.bubbleMode!=='off'&&Boolean(text||actor.slug===speaker)));
+ actor.bubble.hidden=!(actor.composerOpen||actor.questionOpen||((!performing||showing)&&actor.bubbleMode!=='off'&&Boolean(text||actor.slug===speaker)));
  if(actor.bubbleText.textContent!==text)actor.bubbleText.textContent=text;actor.bubbleText.hidden=!text;
  actor.bubble.classList.toggle('wave-only',false);
  placeBubble(actor);

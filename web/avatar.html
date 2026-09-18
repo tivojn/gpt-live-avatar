@@ -142,7 +142,7 @@ const taskStatus = (_message, update) => { if(!update||!isCurrentCharacter(updat
 const bubblePolicy = new BubblePolicy();
 const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'off' : 'auto');
 const singing = () => { try { return window.gla_sing?.() || null; } catch { return null; } };
-let wasPerforming = false;
+let wasPerforming = false, performingSince = 0;
 // Whatever she is doing, this ends it. The music stopping is handled inside the
 // music session, but a viewer who simply wants her to stand still needs a way in
 // that does not depend on her hearing anything.
@@ -155,8 +155,11 @@ const stopPerforming = () => {
 const showBubble = (ms = 9000) => { bubblePolicy.incoming(performance.now(), ms); syncBubble(); };
 const syncBubble = () => {
   const performing = Boolean(singing() || avatar?.motion?.active);
-  const beganPerforming = performing && !wasPerforming;
+  const beganPerforming = performing && !wasPerforming, endedPerforming = !performing && wasPerforming;
   wasPerforming = performing; // update before blur can re-enter syncBubble
+  if (beganPerforming) performingSince = performance.now();
+  // A message she could not show during the motion gets its reading time afterwards.
+  if (endedPerforming && bubblePolicy.until > performingSince) bubblePolicy.incoming(performance.now(), 6000);
   if (beganPerforming && !questionOpen) {
     composerOpen = false;
     if (bubble.contains(document.activeElement)) document.activeElement.blur();
@@ -172,12 +175,11 @@ const syncBubble = () => {
   bubblePolicy.setMode(bubbleMode());
   if (bubbleMode() === 'off' && !forced && bubble.contains(document.activeElement)) document.activeElement.blur();
   bubblePolicy.editor = connected && bubble.contains(document.activeElement);
-  // Keep automatic status bubbles off the performance, but never what she is
-  // saying or a task update: those stay readable while she gestures (a
-  // dance-along still clears the stage for the whole song). A newly
-  // opened input or agent question stays visible, including before it receives focus.
-  const now = performance.now();
-  bubble.classList.toggle('hidden', !(forced || (performing ? !singing() && bubblePolicy.meaningful(now) : bubblePolicy.visible(now))));
+  // While any motion plays the bubble steps aside, whatever it was showing, and
+  // comes back when the motion ends if it should be on (Always, work in
+  // progress, or a message that was up or arrived meanwhile). A newly opened
+  // input or agent question stays visible, including before it receives focus.
+  bubble.classList.toggle('hidden', !(forced || (!performing && bubblePolicy.visible(performance.now()))));
   $('#steerRow').hidden = false; // Every visible bubble accepts a typed request.
   $('#composerClose').hidden = !composerOpen;
   $('#composerTip').hidden = !forced || live.state !== 'idle';

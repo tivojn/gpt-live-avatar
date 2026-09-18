@@ -1,13 +1,13 @@
 {
-  "version": "0.2.22",
+  "version": "0.2.23",
   "date": "2026-09-18",
-  "title": "Avatar Show: live steering, notes, recording and a proper panel",
-  "description": "Talk to the cast mid-show without breaking it: real-time voice notes to one character in her own voice, audience notes the whole cast follows, pause and resume, MP4 recording, a movable panel window and the bubble theme throughout.",
+  "title": "Show polish, seven new motions, and a full QA pass",
+  "description": "A test-engineering pass over the whole app: 27 fixes (money and data leaks first), a Record light in the show header, captions that stay up while a gesture plays, seven new dance and kung fu motions for every character, and sing-along retired in favour of dance-along.",
   "highlights": [
-    "Press a character's mic during a show for a private note through gpt-live-1: she listens live in her own voice, acknowledges in one sentence, applies it from her next line, and the show carries on.",
-    "Call out a note for the whole cast and the show holds, the Director answers, and every later line follows it; say “continue” to resume. Pause, Resume and Stop live in the panel header.",
-    "Record to MP4: the performance is saved to Movies › GPT-Live Avatar Shows with captions and every voice mixed in, whenever it finishes or is stopped.",
-    "The Avatar Show panel is the window: traffic lights, drag, resize, remembered position; the stage stays transparent. The panel, prompter and bubble share one design, light and dark.",
-    "Fixes: the prompter's buttons take real clicks; the Director voice hangs up while the Playwright writes (no idle session cost); resting characters shift stance at their own pace; a put-away prop no longer leaves a weapon grip; scripted lines show in the bubble the moment they start."
+    "Avatar Show: Stop really cancels Meshy motion jobs, recordings no longer lose the end of a line on a pause, stream to disk, survive closing the window and never overwrite each other; hiding the window hangs up the Director’s voice session.",
+    "A Record light in the panel header: grey when off, red when armed, breathing while a show records; click it mid-show to start or stop. Loading characters shows a spinner.",
+    "Show captions appear with the line and stay up while its gesture plays. Everywhere else the bubble steps aside for any motion and returns when it ends, if it was on. Near the top of the screen it sits beside her head instead of over her face; a steering bubble closes once the note is taken.",
+    "Seven new motions for all five characters: Pop Dance LSA2, Denim Pop Dance, Love You Pop Dance, Superlove Pop Dance, Break Dance, Flying Fist Kick and Counter Strike (motion update presets-20260918; use Motion update in Settings for characters you already have).",
+    "Sing-along is retired; dance-along stays, and “sing along” now dances along. The panel’s resize corner can be grabbed, the Playwright follows what you told the Director over the pre-filled topic, and Settings, README and accessibility labels were corrected."
   ]
 }
