@@ -72,24 +72,40 @@ function plan(inventory,buckets,target){
  if(peak>CAP)throw Error(`Upload blocked: ${peak} bytes would exceed the ${CAP}-byte storage cap. Retire a verified old release first.`);
  return {current,peak,existing,missing};
 }
-async function main(){
- const [account,bucket]=process.argv.slice(2);if(!/^[a-f0-9]{32}$/.test(account||'')||!/^gpt-live-avatar-protected$/.test(bucket||''))throw Error('Usage: node tools/cloud/upload-r2.cjs ACCOUNT_ID gpt-live-avatar-protected [--apply]');
- const inventory=JSON.parse(fs.readFileSync(path.join(directory,'inventory.json')));
+// Shared by publish-release.cjs: the active Wrangler login or CLOUDFLARE_API_TOKEN, never printed.
+function cloudflareToken(){
  const token=process.env.CLOUDFLARE_API_TOKEN||JSON.parse(cp.execFileSync(process.env.WRANGLER_BIN||'wrangler',['auth','token','--json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']})).token;
  if(!token)throw Error('Sign in to Wrangler first.');
- const s3Reader=await createScopedS3Reader(account,bucket);
+ return token;
+}
+// Retrying Cloudflare R2 REST client for one account. Object bodies may be a
+// function returning a fresh stream so retries never resend a consumed body.
+function createCloudflareClient(account,token,{fetcher=fetch,wait=delay}={}){
  const prefix=`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets`;
  async function request(suffix,init={}){
   for(let attempt=0;attempt<4;attempt++){
-   let response;try{response=await fetch(prefix+suffix,{...init,body:typeof init.body==='function'?init.body():init.body,headers:{Authorization:'Bearer '+token,...init.headers},redirect:'error',signal:AbortSignal.timeout(5*60*1000)});}catch(e){if(attempt===3)throw e;await delay(1000*2**attempt);continue;}
+   let response;try{response=await fetcher(prefix+suffix,{...init,body:typeof init.body==='function'?init.body():init.body,headers:{Authorization:'Bearer '+token,...init.headers},redirect:'error',signal:AbortSignal.timeout(5*60*1000)});}catch(e){if(attempt===3)throw e;await wait(1000*2**attempt);continue;}
    if(response.ok)return response;
    const status=response.status;await response.body?.cancel();if(attempt===3||![408,429,500,502,503,504,520,521,522,523,524].includes(status))throw Error(`Cloudflare request failed (HTTP ${status}).`);
-   await delay(1000*2**attempt);
+   await wait(1000*2**attempt);
   }
  }
  async function json(suffix,init){const data=await (await request(suffix,init)).json();if(data.success!==true)throw Error('Cloudflare could not complete this storage request.');return data;}
- const list=await json(''),buckets=[];if(!Array.isArray(list.result?.buckets)||list.result_info?.is_truncated)throw Error('Cannot verify the complete account bucket inventory.');
- for(const b of list.result.buckets){if(b.jurisdiction&&b.jurisdiction!=='default')throw Error('Account has other storage jurisdictions; verify their usage before uploading.');let cursor='',objects=[];do{const result=await json('/'+encodeURIComponent(b.name)+'/objects'+(cursor?'?cursor='+encodeURIComponent(cursor):''));if(!Array.isArray(result.result))throw Error('Unexpected R2 object inventory.');objects.push(...result.result);const next=result.result_info?.is_truncated?result.result_info.cursor:'';if(result.result_info?.is_truncated&&(!next||next===cursor))throw Error('Incomplete R2 pagination.');cursor=next;}while(cursor);buckets.push({name:b.name,objects});}
+ return {request,json};
+}
+// Every bucket and object in the account, for the storage-cap plan. Fails closed on truncation.
+async function accountInventory(client){
+ const list=await client.json(''),buckets=[];if(!Array.isArray(list.result?.buckets)||list.result_info?.is_truncated)throw Error('Cannot verify the complete account bucket inventory.');
+ for(const b of list.result.buckets){if(b.jurisdiction&&b.jurisdiction!=='default')throw Error('Account has other storage jurisdictions; verify their usage before uploading.');let cursor='',objects=[];do{const result=await client.json('/'+encodeURIComponent(b.name)+'/objects'+(cursor?'?cursor='+encodeURIComponent(cursor):''));if(!Array.isArray(result.result))throw Error('Unexpected R2 object inventory.');objects.push(...result.result);const next=result.result_info?.is_truncated?result.result_info.cursor:'';if(result.result_info?.is_truncated&&(!next||next===cursor))throw Error('Incomplete R2 pagination.');cursor=next;}while(cursor);buckets.push({name:b.name,objects});}
+ return buckets;
+}
+async function main(){
+ const [account,bucket]=process.argv.slice(2);if(!/^[a-f0-9]{32}$/.test(account||'')||!/^gpt-live-avatar-protected$/.test(bucket||''))throw Error('Usage: node tools/cloud/upload-r2.cjs ACCOUNT_ID gpt-live-avatar-protected [--apply]');
+ const inventory=JSON.parse(fs.readFileSync(path.join(directory,'inventory.json')));
+ const token=cloudflareToken();
+ const s3Reader=await createScopedS3Reader(account,bucket);
+ const {request,json}=createCloudflareClient(account,token);
+ const buckets=await accountInventory({json});
  if(!buckets.some(b=>b.name===bucket))throw Error('Create the private Standard bucket after activating R2, then rerun.');
  const p=plan(inventory,buckets,bucket);console.log(JSON.stringify({mode:process.argv.includes('--apply')?'upload':'dry-run',verificationTransport:s3Reader?'bucket-read-only-s3':'cloudflare-api',objects:inventory.objects.length,releaseBytes:inventory.bytes,currentAccountBytes:p.current,maximumAccountBytes:p.peak,cap:CAP}));
  for(const item of inventory.objects){const file=path.join(directory,item.file);if(fs.statSync(file).size!==item.bytes||await hash(file)!==item.sha256)throw Error('Local package verification failed: '+item.file);}
@@ -110,4 +126,4 @@ async function main(){
  console.log('Every remote object matches its local SHA-256 checksum.');
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={plan,verifyRemoteObject,createScopedS3Reader};
+module.exports={plan,verifyRemoteObject,createScopedS3Reader,cloudflareToken,createCloudflareClient,accountInventory,interruptedBody};

@@ -1,7 +1,16 @@
 'use strict';
-const REPOSITORY = 'https://github.com/tivojn/gpt-live-avatar';
-const RELEASES = REPOSITORY + '/releases';
-const API = 'https://api.github.com/repos/tivojn/gpt-live-avatar/releases/latest';
+// Update checks read releases/latest.json from the private Cloudflare Worker
+// that already serves protected downloads (no GitHub account or public
+// repository required). The GitHub releases API remains a fallback only while
+// that service cannot be reached.
+const DOWNLOAD_CONFIG = require('./asset-download.json');
+const GITHUB_REPOSITORY = 'https://github.com/tivojn/gpt-live-avatar';
+const GITHUB_RELEASES = GITHUB_REPOSITORY + '/releases';
+const GITHUB_API = 'https://api.github.com/repos/tivojn/gpt-live-avatar/releases/latest';
+const RELEASE_BASE = /^https:\/\/[-a-z0-9.]+\/$/.test(DOWNLOAD_CONFIG.baseURL || '') ? DOWNLOAD_CONFIG.baseURL + 'releases/' : null;
+const LATEST_URL = RELEASE_BASE ? RELEASE_BASE + 'latest.json' : null;
+const REPOSITORY = GITHUB_REPOSITORY;
+const RELEASES = RELEASE_BASE || GITHUB_RELEASES;
 
 function versionParts(value) {
   const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(String(value));
@@ -25,16 +34,39 @@ function compareVersions(left, right) {
   }
   return 0;
 }
+// releases/latest.json as written by tools/cloud/publish-release.cjs.
+function installerDetails(doc, { arch = process.arch, platform = process.platform } = {}) {
+  const unsupported = () => Error('The release service returned an unsupported release.');
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc) || typeof doc.version !== 'string' || /^v/.test(doc.version)) throw unsupported();
+  let parts; try { parts = versionParts(doc.version); } catch { throw unsupported(); }
+  if (parts.pre.length) throw unsupported();
+  const version = doc.version;
+  const installers = doc.installers && typeof doc.installers === 'object' && !Array.isArray(doc.installers) ? doc.installers : {};
+  let downloadURL = null, sha256 = null, bytes = null;
+  if (RELEASE_BASE && platform === 'darwin' && ['arm64', 'x64'].includes(arch)) {
+    const entry = installers[arch] || (doc.arch === arch ? doc : null);
+    // Only an installer on the configured release service, named for this exact version and architecture.
+    if (entry && typeof entry === 'object' && entry.url === RELEASE_BASE + 'gpt-live-avatar-' + version + '-' + arch + '.dmg' &&
+        /^[a-f0-9]{64}$/.test(entry.sha256 || '') && Number.isSafeInteger(entry.bytes) && entry.bytes > 0) {
+      downloadURL = entry.url; sha256 = entry.sha256; bytes = entry.bytes;
+    }
+  }
+  return { version, title: String(doc.title || 'GPT-Live Avatar ' + version).slice(0, 160),
+    notes: String(doc.notes || 'See the release page for details.').slice(0, 10000),
+    publishedAt: typeof doc.publishedAt === 'string' ? doc.publishedAt.slice(0, 40) : null,
+    releaseURL: RELEASE_BASE, downloadURL, sha256, bytes };
+}
+// Legacy GitHub releases API document.
 function releaseDetails(doc, { arch = process.arch, platform = process.platform } = {}) {
   if (!doc || doc.draft || doc.prerelease || typeof doc.tag_name !== 'string' || versionParts(doc.tag_name).pre.length) throw Error('GitHub returned an unsupported release.');
   const tag = doc.tag_name;
-  const page = RELEASES + '/tag/' + tag;
+  const page = GITHUB_RELEASES + '/tag/' + tag;
   if (doc.html_url !== page) throw Error('The release link could not be verified.');
   let downloadURL = null;
   if (platform === 'darwin' && ['arm64', 'x64'].includes(arch)) {
     const asset = (Array.isArray(doc.assets) ? doc.assets : []).find(a => {
       if (a.state !== 'uploaded' || typeof a.name !== 'string' || !a.name.endsWith('-' + arch + '.dmg')) return false;
-      const prefix = RELEASES + '/download/' + tag + '/';
+      const prefix = GITHUB_RELEASES + '/download/' + tag + '/';
       if (typeof a.browser_download_url !== 'string' || !a.browser_download_url.startsWith(prefix)) return false;
       try {
         const url = new URL(a.browser_download_url);
@@ -47,20 +79,45 @@ function releaseDetails(doc, { arch = process.arch, platform = process.platform 
     notes: String(doc.body || 'See the release page for details.').slice(0, 10000),
     releaseURL: page, downloadURL };
 }
-async function latestRelease({ signal, fetchImpl = fetch, arch, platform } = {}) {
-  const response = await fetchImpl(API, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-    redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000) });
+async function readJSON(response) {
+  const reader = response.body.getReader(); let size = 0; const chunks = [];
+  try {
+    while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength;
+      if (size > 1024 * 1024) throw Error('The release response was too large.'); chunks.push(Buffer.from(value)); }
+  } finally { await reader.cancel().catch(() => {}); }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+const timeout = signal => signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000);
+async function serviceRelease({ signal, fetchImpl, arch, platform }) {
+  let response;
+  try { response = await fetchImpl(LATEST_URL, { headers: { Accept: 'application/json' }, redirect: 'error', signal: timeout(signal) }); }
+  catch (error) { if (signal?.aborted) throw error; throw Object.assign(Error('The update service could not be reached. Please try again later.'), { cause: error }); }
+  if (!response.ok) {
+    await response.body?.cancel();
+    if (response.status === 404) throw Error('No public release is available yet. Try again later.');
+    throw Error('The update service could not be reached. Please try again later.');
+  }
+  let doc; try { doc = await readJSON(response); } catch (error) { if (/too large/.test(error.message)) throw error; throw Error('The release service returned an unsupported release.'); }
+  return installerDetails(doc, { arch, platform });
+}
+async function githubRelease({ signal, fetchImpl, arch, platform }) {
+  const response = await fetchImpl(GITHUB_API, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, redirect: 'error', signal: timeout(signal) });
   if (!response.ok) {
     await response.body?.cancel();
     if ([403, 429].includes(response.status)) throw Error('GitHub is temporarily limiting update checks. Try again later, or open Releases.');
     if (response.status === 404) throw Error('No public release is available yet. Try again later.');
     throw Error('GitHub could not be reached. Please try again later.');
   }
-  const reader = response.body.getReader(); let size = 0; const chunks = [];
-  try {
-    while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength;
-      if (size > 1024 * 1024) throw Error('The release response was too large.'); chunks.push(Buffer.from(value)); }
-  } finally { await reader.cancel().catch(() => {}); }
-  return releaseDetails(JSON.parse(Buffer.concat(chunks).toString('utf8')), { arch, platform });
+  return releaseDetails(await readJSON(response), { arch, platform });
 }
-module.exports = { REPOSITORY, RELEASES, compareVersions, releaseDetails, latestRelease };
+async function latestRelease({ signal, fetchImpl = fetch, arch, platform } = {}) {
+  if (!LATEST_URL) return githubRelease({ signal, fetchImpl, arch, platform });
+  try { return await serviceRelease({ signal, fetchImpl, arch, platform }); }
+  catch (serviceError) {
+    if (signal?.aborted) throw serviceError;
+    // The release service is authoritative; GitHub only covers an outage or a not-yet-published service.
+    try { return await githubRelease({ signal, fetchImpl, arch, platform }); }
+    catch (githubError) { if (signal?.aborted) throw githubError; throw serviceError; }
+  }
+}
+module.exports = { REPOSITORY, RELEASES, GITHUB_RELEASES, RELEASE_BASE, LATEST_URL, compareVersions, installerDetails, releaseDetails, latestRelease };

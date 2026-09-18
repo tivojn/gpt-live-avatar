@@ -63,14 +63,19 @@ export class SpeechOutput {
     value=Boolean(value);if(value===this.active||this.closed)return;this.active=value;this.input.gain.value=value?1:0;this.clear();this.updateVolume();
   }
   clear(){this.epoch++;this.timeline.clear();this.peak=.025;this.node?.port.postMessage({type:'reset',epoch:this.epoch,active:this.active&&!this._muted});this.rebuildDelay();}
+  // Context time of the sample the device is emitting right now.
+  audibleTime(){const stamp=this.context.getOutputTimestamp?.();return stamp?.contextTime>0?stamp.contextTime+(performance.now()-stamp.performanceTime)/1000:this.context.currentTime-(this.context.outputLatency||0);}
+  // How far the speaker trails the raw stream: the delay line plus the
+  // device's playback latency. The mouth follows the speaker, so a recording
+  // of the raw stream must be held back by this much to line up with it.
+  playbackLag(){return (this.analysisOnly?0:LIP_SYNC_DELAY)+Math.max(0,this.context.currentTime-this.audibleTime());}
   sample(){
     if(this.closed||!this.active||this._muted)return silentSpeech();
     this.analyser.getFloatTimeDomainData(this.samples);let sum=0;for(const v of this.samples)sum+=v*v;
     const rms=Math.sqrt(sum/this.samples.length);this.peak=Math.max(.025,rms,this.peak*.995);const relative=Math.min(1,rms/this.peak);
     // The output timestamp includes the device's actual playback latency.
     // Mouth targets lead their audible timestamp by 25 ms for morph blending.
-    const stamp=this.context.getOutputTimestamp?.();
-    const audible=stamp?.contextTime>0?stamp.contextTime+(performance.now()-stamp.performanceTime)/1000:this.context.currentTime-(this.context.outputLatency||0);
+    const audible=this.audibleTime();
     const viseme=this.failed?(rms>.008?'aa':'sil'):this.timeline.sample(this.analysisOnly?this.context.currentTime:audible-LIP_SYNC_DELAY+.025);
     return {rms,relative,viseme,visemeWeights:viseme==='sil'?{}:{[viseme]:1},speaking:viseme!=='sil'||rms>.008,lipSyncSource:this.failed?'fallback':'audio-model'};
   }

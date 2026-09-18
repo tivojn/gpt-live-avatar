@@ -11,9 +11,11 @@ All five motion overlays use `music-pelvis-20260917`. Sarah's bundled encrypted
 base is 588,233,232 bytes and her matching overlay is 60,108,916 bytes.
 Earlier immutable parts remain in the gateway allowlist for existing releases.
 
-GitHub hosts source and the installer; purchased character files are
-not source-code dependencies and must not be uploaded to public releases as
-GLB, Blender, texture ZIP, or plaintext avatar folders.
+The installer and its release record are served by the same Worker under the
+public `releases/` prefix (see "Publishing an installer" below); the source
+repository is private. Purchased character files are not source-code
+dependencies and must not be uploaded anywhere as GLB, Blender, texture ZIP,
+or plaintext avatar folders.
 
 ## Protection
 
@@ -42,10 +44,19 @@ GLB, Blender, texture ZIP, or plaintext avatar folders.
 Use a **dedicated Workers Free account**. Do not downgrade an account running
 other paid services. Workers Free has a hard 100,000-request daily limit; this
 Worker does at most one R2 read for each accepted file GET. Catalogue, key
-wrapping, rejected requests and HEAD checks perform no R2 operations. This
-bounds public downloads to at most 3.1 million R2 reads in a 31-day month, below
-R2 Standard's 10 million monthly Class B allowance. Requests stop when Workers
-Free reaches its limit; they do not automatically upgrade the account.
+wrapping, rejected requests and HEAD checks on encrypted parts perform no R2
+operations. This bounds public downloads to at most 3.1 million R2 reads in a
+31-day month, below R2 Standard's 10 million monthly Class B allowance.
+Requests stop when Workers Free reaches its limit; they do not automatically
+upgrade the account.
+
+The unauthenticated `releases/` routes share that daily request budget: anyone
+can request them, so a flood of release-page hits would exhaust the Worker's
+daily limit and pause avatar downloads for the rest of the day. That is the
+cost of a public installer link on this account; if it becomes a problem, move
+`releases/` to a second Workers Free account or a static host. Each accepted
+`releases/` GET or HEAD is still at most one R2 read; malformed names, extra
+query strings and ranged requests are rejected before storage.
 
 The public gateway and R2 can live in separate accounts. In this deployment,
 R2 stays in the existing storage account and a new Workers Free account hosts
@@ -56,11 +67,14 @@ it never returns credentials or presigned URLs to clients. Redirects and
 automatic storage retries are disabled to preserve the one-read bound.
 
 The uploader sums objects across the account's buckets and refuses a planned
-peak above **10,000,000,000 bytes**, including retained releases. It accepts only
-the signed catalogue and encrypted download parts, uses Standard storage, and
-verifies every remote SHA-256 checksum. It never uploads the duplicate complete
-archives, private build files or raw sources. Unknown inventory, pagination or
-storage classes fail closed.
+peak above **10,000,000,000 bytes**, including retained releases and any
+installers under `releases/`. It accepts only the signed catalogue and
+encrypted download parts, uses Standard storage, and verifies every remote
+SHA-256 checksum. It never uploads the duplicate complete archives, private
+build files or raw sources. Unknown inventory, pagination or storage classes
+fail closed. The installer publisher applies the same cap; with ~8 GB of
+encrypted parts only one ~1 GB installer fits, so each publish normally
+retires the previous one (`--retire-previous`).
 
 For maintainer verification, an existing bucket-scoped Object Read only S3
 credential is used only when its account and bucket match exactly; otherwise
@@ -73,8 +87,10 @@ This is an enforced upload-workflow cap, not a native R2 account quota. Keep
 other writers and uploads away from the avatar bucket and reserve the remaining
 R2 free allowance in its storage account. Manual
 uploads or changing to Workers Paid can bypass these cost assumptions. Keep
-`r2.dev` and public custom bucket domains disabled. The Worker needs only GET;
-do not add listing, upload, transcoding, AI or other billable routes.
+`r2.dev` and public custom bucket domains disabled. The Worker needs only GET
+(plus the `authorize` POST); do not add listing, upload, transcoding, AI or
+other billable routes. The public `releases/` routes are the one intentional
+exception and are read-only.
 
 Current inventory includes the new packages and retained previous release parts:
 **7,999,497,171 bytes** across 130 objects, including the signed catalogue.
@@ -121,10 +137,67 @@ Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
    signing, notarization and the absence of raw model files and content keys.
    Confirm bundled encrypted Sarah unlocks without downloading her base. Install with
    existing settings preserved, and repeat a real download from the installer.
-8. Publish the new DMG and source. Only after the new release downloads work,
-   remove the old public `assets-v1` model/ZIP files and any old installers that
+8. Publish the new DMG with `node tools/cloud/publish-release.cjs` (below).
+   Only after the new release downloads work, remove any old installers that
    embed unprotected models. Keep private backups. Removing release files does
    not revoke copies other people have already downloaded.
+
+## Publishing an installer
+
+The Worker serves three unauthenticated routes under `releases/` on the
+gateway host from `electron/asset-download.json`
+(`https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/`):
+
+- `releases/latest.json` — the release record the app's **Check for
+  Updates…** reads: `{version, title, notes, publishedAt, arch, url, sha256,
+  bytes, installers: {arm64: {file, url, sha256, bytes}}}`. Cached for five
+  minutes.
+- `releases/gpt-live-avatar-<version>-<arch>.dmg` — the Apple-signed,
+  notarized installer, streamed from the private bucket with
+  `Content-Disposition: attachment`. Installers are immutable per version.
+- `releases/` — a small HTML landing page rendered from `latest.json` for the
+  README link (version, checksum, download button, notes). It links only
+  same-origin installer names.
+
+`index.json`, `authorize` and every encrypted part remain token-authenticated;
+`deploy.cjs` and `publish-release.cjs` both verify that an unauthenticated
+`index.json` request is still refused.
+
+One-time setup:
+
+1. Redeploy the gateway so it has the routes: `node tools/cloud/prepare-worker.cjs
+   FREE_GATEWAY_ACCOUNT_ID` then `node tools/cloud/deploy.cjs --workers-free-confirmed`.
+2. In the storage account, create a bucket-scoped **Object Read & Write** R2
+   API token for `gpt-live-avatar-protected` and save it privately as
+   `build/protected/r2-writer-secret.json` (mode 600, outside git):
+   `{"account": "...", "bucket": "gpt-live-avatar-protected",
+   "permission": "object-read-write", "accessKeyId": "...",
+   "secretAccessKey": "..."}`. The Cloudflare REST API caps single objects at
+   300 MiB, so the publisher uploads the DMG through S3 multipart with this
+   credential; the Wrangler login is still used for the account-wide storage
+   inventory. Never package or upload this file.
+
+Each release:
+
+```bash
+npm version patch            # or edit package.json + electron/release-info.json
+npm test && npm run dmg      # signed, notarized dist/GPT-Live Avatar-<version>-arm64.dmg
+node tools/cloud/publish-release.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected            # dry run: checksum, cap plan
+node tools/cloud/publish-release.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected --apply --retire-previous
+```
+
+The publisher hashes the DMG, builds `latest.json` from
+`electron/release-info.json` (or `--notes FILE`) and checks it with the app's
+own parser, plans the storage cap across the account, uploads the installer in
+64 MiB parts, re-reads and verifies its SHA-256, writes `latest.json`, retires
+older `releases/*.dmg` objects when asked, records
+`build/published-release-<version>.json` and `build/SHA256SUMS-<version>.txt`,
+then confirms the public routes and the still-closed catalogue on the live
+gateway. `--verify-live` repeats only the live check. When the previous
+installer must be retired to fit under the cap it is removed before the
+upload, so its download link is unavailable for the minutes the upload takes.
+`node qa/publish-release.cjs` covers the plan, multipart transport and
+verification locally without credentials.
 
 The legacy iOS client requires a separate protected-loader port before another
 public iOS release. Its old raw GitHub endpoint is intentionally not a fallback

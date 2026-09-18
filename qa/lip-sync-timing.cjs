@@ -10,4 +10,8 @@ const voice=output(false),music=output(true);
 for(const s of [voice,music]){s.timeline.push({time:.88,viseme:0});s.timeline.push({time:.97,viseme:9});}
 assert.equal(voice.sample().viseme,'PP','spoken playback preserves its delayed audio clock');
 assert.equal(music.sample().viseme,'aa','already-audible music samples the current input clock without an extra playback delay');
+assert.equal(voice.playbackLag(),.08,'a recording of the raw voice is held back by the delay line when the device adds no latency');
+assert.equal(music.playbackLag(),0,'tapped music has no delay line to compensate');
+const late=output(false);late.context={currentTime:1.25,getOutputTimestamp:()=>({contextTime:1,performanceTime:1000})};
+assert.ok(Math.abs(late.playbackLag()-.33)<1e-9,'device output latency is added to the recording delay');
 console.log('Conversation playback timing preserved; tapped music avoids the extra 80 ms output-delay offset.');

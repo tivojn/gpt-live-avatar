@@ -22,6 +22,8 @@ const repo=path.resolve(__dirname,'../..'),dir=path.join(repo,'build/protected')
  if(!response.ok||!crypto.verify(null,Buffer.from(envelope.payload),privateBuild.publicKey,Buffer.from(envelope.signature,'base64')))throw Error('The live signed catalogue did not verify.');
  if(envelope.payload!==JSON.parse(fs.readFileSync(path.join(dir,'index.json'))).payload)throw Error('The live catalogue is not the uploaded release.');
  if((await fetch(baseURL+'index.json',{redirect:'error'})).status!==401)throw Error('The gateway must reject unauthenticated downloads.');
+ // Public installer routes need no token; 404 before the first publish-release.cjs run, 200 afterwards.
+ const releases=await fetch(baseURL+'releases/latest.json',{redirect:'error',signal:AbortSignal.timeout(15000)});await releases.body?.cancel();if(![200,404].includes(releases.status))throw Error('The public release route is not being served (HTTP '+releases.status+').');
  const inventory=JSON.parse(fs.readFileSync(path.join(dir,'inventory.json'))),part=inventory.objects.filter(p=>p.file!=='index.json').reduce((smallest,p)=>!smallest||p.bytes<smallest.bytes?p:smallest,null);
  const download=await fetch(baseURL+part.file,{headers:{Authorization:'Bearer '+privateBuild.downloadToken},redirect:'error',signal:AbortSignal.timeout(120000)});
  if(!download.ok)throw Error('The deployed gateway could not read an encrypted download part.');

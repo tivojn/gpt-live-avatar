@@ -199,8 +199,8 @@ def complete(base, extras, surfaces=None):
         ('summer','Tie top, Brazilian bottoms & sandals',[top,*bikini,sandals])]
     lib['defaultOutfit']='dress';lib['outfits']=[dict(id=i,label=l,nodes=n) for i,l,n in recipes]
     lib['props']=[dict(id='bag',label='Tommy shoulder bag',nodes=['Ac_Tommy_Bag']),
-        dict(id='pistol',label='1911 pistol',nodes=['Weap_1911'],pose='Ps052.pistol',hands='Hndgrp_pistol'),
-        dict(id='rifle',label='FN SCAR 20S',nodes=['Weap_FN-SCAR-20S.001'],pose='Ps071.rifle',hands='Hndgrp.rifle')]
+        dict(id='pistol',label='Pistol',nodes=['Weap_1911'],pose='Ps052.pistol',hands='Hndgrp_pistol'),
+        dict(id='rifle',label='Rifle',nodes=['Weap_FN-SCAR-20S.001'],pose='Ps071.rifle',hands='Hndgrp.rifle')]
     body=next(n for n in doc['nodes'] if n.get('name')=='Fem-A__Whl_BY_Sarah.export')
     shapes = doc['meshes'][body['mesh']]['extras']['targetNames']
     def expression_label(s):
