@@ -3,7 +3,7 @@
 // calls (Playwright script, Director reasoning, Director live voice session)
 // and the custom-motion pipeline; the Together window owns the stage.
 const {ipcMain,app,shell}=require('electron');
-const fs=require('node:fs'),path=require('node:path');
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {playwrightRequest,parseScript,scriptSummary,clean}=require('./show-script.cjs');
 const {ShowMotionPipeline}=require('./show-motions.cjs');
 const {normalizeDelegate}=require('./delegate.cjs');
@@ -60,18 +60,42 @@ function setupShow(deps){
  handle('gla:show:director-live',async(_e,request={})=>{
   if(!deps.voices.includes(request.voice))throw Error('Choose a supported voice for the Director.');
   pendingVoice?.abort();const abort=new AbortController();pendingVoice=abort;
-  const opening=request.floorOpen===false?' Initially the floor is CLOSED: a performance is under way. Stay completely silent until the app opens the floor.':' Initially the floor is OPEN: greet the user in one sentence and ask what show they would like.';
+  // The greeting matches where the show stands, so a Director who rejoins after the curtain does not ask what show the user would like.
+  const phase=String(request.context?.phase||'');
+  const opening=request.floorOpen===false?' Initially the floor is CLOSED: a performance is under way. Stay completely silent until the app opens the floor.'
+   :phase==='finished'?' Initially the floor is OPEN: the performance has just ended. In one sentence, ask how they liked it and what to change, or whether to play it again.'
+   :phase==='ready'?' Initially the floor is OPEN: the script is ready and the show is about to start. Say so in one sentence and offer to start whenever they like.'
+   :phase==='writing'||phase==='preparing'?' Initially the floor is OPEN: the show is still being prepared. Say so in one sentence and offer to talk while they wait.'
+   :' Initially the floor is OPEN: greet the user in one sentence and ask what show they would like.';
   try{return await deps.createSession({sdp:request.sdp,voice:request.voice,groupInstructions:directorInstructions(request.context,{live:true})+opening},AbortSignal.any([abort.signal,AbortSignal.timeout(30000)]));}
   finally{if(pendingVoice===abort)pendingVoice=null;}
  });
  const showsDir=()=>path.join(app.getPath('videos'),'GPT-Live Avatar Shows');
- handle('gla:show:save-recording',(_e,request={})=>{
-  const bytes=request.bytes instanceof ArrayBuffer?Buffer.from(request.bytes):ArrayBuffer.isView(request.bytes)?Buffer.from(request.bytes.buffer,request.bytes.byteOffset,request.bytes.byteLength):null;
-  if(!bytes||!bytes.length)throw Error('The recording is empty.');if(bytes.length>2*1024*1024*1024)throw Error('The recording is too large to save.');
+ // A recording is written to disk as it is made: the window opens a file, appends
+ // each encoded chunk, and closes it at the curtain call, so a long show never
+ // sits in memory twice. Files are named by title and local time; a second
+ // recording in the same minute gets a number rather than replacing the first.
+ const recordings=new Map(),RECORDING_LIMIT=2*1024*1024*1024;
+ const toBuffer=bytes=>bytes instanceof ArrayBuffer?Buffer.from(bytes):ArrayBuffer.isView(bytes)?Buffer.from(bytes.buffer,bytes.byteOffset,bytes.byteLength):null;
+ const recordingOf=(e,id)=>{const r=typeof id==='string'?recordings.get(id):null;if(!r||r.owner!==e.sender.id)throw Error('That recording is not open.');return r;};
+ const closeRecording=(id,{keep})=>{const r=recordings.get(id);if(!r)return null;recordings.delete(id);try{fs.closeSync(r.fd);}catch{}if(!keep||!r.bytes){try{fs.unlinkSync(r.file);}catch{}}return r;};
+ handle('gla:show:recording-open',(e,request={})=>{
   const ext=request.ext==='webm'?'webm':'mp4',title=clean(request.title,60).replace(/[\\/:*?"<>|]+/g,' ').trim()||'Avatar Show';
   const d=new Date(),two=n=>String(n).padStart(2,'0'),stamp=`${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}.${two(d.getMinutes())}`; // local time, as Finder shows it
-  fs.mkdirSync(showsDir(),{recursive:true});const file=path.join(showsDir(),`${title} ${stamp}.${ext}`);fs.writeFileSync(file,bytes);
-  return {path:file,bytes:bytes.length};
+  fs.mkdirSync(showsDir(),{recursive:true});
+  let file=path.join(showsDir(),`${title} ${stamp}.${ext}`);for(let n=2;fs.existsSync(file);n++)file=path.join(showsDir(),`${title} ${stamp} (${n}).${ext}`);
+  for(const [id,r] of recordings)if(r.owner===e.sender.id)closeRecording(id,{keep:true}); // one open recording per window
+  const id=crypto.randomBytes(12).toString('hex');recordings.set(id,{owner:e.sender.id,file,fd:fs.openSync(file,'w'),bytes:0});
+  return {id,path:file};
+ });
+ handle('gla:show:recording-chunk',(e,request={})=>{
+  const r=recordingOf(e,request.id),bytes=toBuffer(request.bytes);if(!bytes?.length)return {bytes:r.bytes};
+  if(r.bytes+bytes.length>RECORDING_LIMIT){closeRecording(request.id,{keep:true});throw Error('The recording reached the 2 GB limit and was closed.');}
+  fs.writeSync(r.fd,bytes);r.bytes+=bytes.length;return {bytes:r.bytes};
+ });
+ handle('gla:show:recording-close',(e,request={})=>{
+  recordingOf(e,request.id);const r=closeRecording(request.id,{keep:request.keep!==false});
+  if(request.keep===false)return {};if(!r.bytes)throw Error('Nothing was recorded.');return {path:r.file,bytes:r.bytes};
  });
  handle('gla:show:reveal',(_e,request={})=>{const file=path.resolve(String(request.path||''));if(!file.startsWith(showsDir()+path.sep)||!fs.existsSync(file))throw Error('That recording is not available.');shell.showItemInFolder(file);return {};});
  // A private steering note mid-show: a short live session in the character's
@@ -105,8 +129,9 @@ function setupShow(deps){
   const id=typeof options?.id==='string'&&/^[a-zA-Z0-9_-]{1,160}$/.test(options.id)?options.id:'';
   if(options?.scope==='director'){deps.backend.cancel(e.sender.id,id||undefined);return {};} // the Director's own delegation only
   if(options?.scope==='playwright'){deps.backend.cancel(e.sender.id,undefined,{long:true});return {};} // the script being written
+  if(options?.scope==='generate'){jobs.get(e.sender.id)?.abort();jobs.delete(e.sender.id);return {};} // motions being generated
   pendingVoice?.abort();pendingVoice=null;jobs.get(e.sender.id)?.abort();jobs.delete(e.sender.id);deps.backend.cancel(e.sender.id);return {};
  });
- return {pipeline,cancelAll(){pendingVoice?.abort();for(const job of jobs.values())job.abort();jobs.clear();deps.backend.cancelAll?.();}};
+ return {pipeline,cancelAll(){pendingVoice?.abort();for(const job of jobs.values())job.abort();jobs.clear();for(const id of [...recordings.keys()])closeRecording(id,{keep:true});deps.backend.cancelAll?.();}};
 }
 module.exports={setupShow,directorInstructions,showContext,CUE};

@@ -3,7 +3,7 @@
 #
 # Deployment target is 14.4, not the app's 14.0: process taps did not exist
 # before then. The app runs fine on 14.0 - AudioTap.available() simply reports
-# false and singing along is the only thing missing - so the app's own minimum
+# false and dancing along is the only thing missing - so the app's own minimum
 # stays where it is.
 set -euo pipefail
 

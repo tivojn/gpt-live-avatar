@@ -1,6 +1,6 @@
 # Local agent engines
 
-GPT-Live Avatar v0.2.11 can use Codex App Server, OpenClaw, Hermes or Grok Build for delegated reasoning and enabled actions. These are separate local runtimes. Installing the avatar app does not install them or configure their provider accounts.
+GPT-Live Avatar can use Codex App Server, OpenClaw, Hermes, Grok Build or EnConvo for delegated reasoning and enabled actions. These are separate local runtimes. Installing the avatar app does not install them or configure their provider accounts.
 
 ## Choose a connection
 

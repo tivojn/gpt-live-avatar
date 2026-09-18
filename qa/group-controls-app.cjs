@@ -39,13 +39,13 @@ app.whenReady().then(async()=>{try{const primary=await until(()=>BrowserWindow.g
  assert(await js('return gla_group.state.running&&gla_group.liveGroup.running'),'Manipulation must not stop live talk');
  assert(await js('return gla_group.actorCatalogue(gla_group.actors.get("tia")).assets.some(a=>a.kind==="texture")'),'Original colors are present');
  await js(`await gla_group.actorMenuAction({slug:'tia',action:'bubble:always'});`);await wait(100);
- assert.equal(await js(`return gla_group.actors.get('tia').bubble.textContent`),'Speaking…');
+ assert.equal(await js(`return gla_group.actors.get('tia').bubbleText.textContent`),'Speaking…');
  await js(`gla_group.liveGroup.emit('floor',{speaker:'sarah',listener:'tia'});`);await wait(100);
- assert.equal(await js(`return gla_group.actors.get('tia').bubble.textContent`),'Listening');
+ assert.equal(await js(`return gla_group.actors.get('tia').bubbleText.textContent`),'Listening');
  await js(`await gla_group.actorMenuAction({slug:'tia',action:'bubble:off'});`);await wait(100);
  assert.equal(await js(`return gla_group.actors.get('tia').bubble.hidden`),true);
  await js(`await gla_group.actorMenuAction({slug:'tia',action:'bubble:auto'});`);await wait(100);
- assert.equal(await js(`return gla_group.actors.get('tia').bubble.textContent`),'');
+ assert.equal(await js(`return gla_group.actors.get('tia').bubbleText.textContent`),'');
  await js(`await gla.setSettings({quality:'friendly'});`);
  await until(()=>js(`return [...gla_group.actors.values()].every(a=>a.avatar.options.selection.performance==='eco'&&a.avatar.appearance.portrait.fastPortraitLights?.visible)`),'live quality change');
  assert(await js('return gla_group.state.running&&gla_group.liveGroup.running'),'Changing rendering quality keeps the live session');

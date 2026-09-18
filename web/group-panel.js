@@ -1,7 +1,7 @@
 // The floating controls move independently of the transparent avatar stage.
 export function installGroupPanel(panel,{storage=localStorage,onInteraction=()=>{}}={}){
  const key='gla-together-panel-v1',header=panel.querySelector('header'),minimize=panel.querySelector('#minimize');
- let gesture=null,expandedHeight='',saved;try{saved=JSON.parse(storage.getItem(key));}catch{}
+ let gesture=null,expandedHeight='',saved,unfoldedAt=0;try{saved=JSON.parse(storage.getItem(key));}catch{}
  const finite=n=>Number.isFinite(n);
  function clamp(){const r=panel.getBoundingClientRect();Object.assign(panel.style,{left:Math.max(8,Math.min(innerWidth-r.width-8,r.left))+'px',top:Math.max(8,Math.min(innerHeight-r.height-8,r.top))+'px'});}
  function save(){const r=panel.getBoundingClientRect();try{storage.setItem(key,JSON.stringify({x:r.x,y:r.y,w:r.width,h:panel.classList.contains('minimized')?Number.parseFloat(expandedHeight)||null:r.height,minimized:panel.classList.contains('minimized')}));}catch{}}
@@ -27,9 +27,12 @@ export function installGroupPanel(panel,{storage=localStorage,onInteraction=()=>
  });
  function release(event){if(!gesture||event?.pointerId!==undefined&&event.pointerId!==gesture.id)return;const {id}=gesture;gesture=null;if(panel.hasPointerCapture(id))panel.releasePointerCapture(id);save();}
  panel.addEventListener('pointerup',release);panel.addEventListener('pointercancel',release);addEventListener('blur',release);
- minimize.onclick=()=>setMinimized(!panel.classList.contains('minimized'));header.addEventListener('dblclick',e=>{if(!e.target.closest('button'))minimize.click();});
- // A folded panel shows a plus in the yellow light, and any click on its header unfolds it.
- header.addEventListener('click',e=>{if(panel.classList.contains('minimized')&&!e.target.closest('button'))setMinimized(false);});
+ minimize.onclick=()=>setMinimized(!panel.classList.contains('minimized'));
+ // A folded panel shows a plus in the yellow light, and any click on its header
+ // unfolds it; a double-click on an open header folds it (the first click of a
+ // double-click has already unfolded a folded one, so it never folds back).
+ header.addEventListener('dblclick',e=>{if(!e.target.closest('button')&&!panel.classList.contains('minimized')&&performance.now()-unfoldedAt>400)setMinimized(true);});
+ header.addEventListener('click',e=>{if(panel.classList.contains('minimized')&&!e.target.closest('button')){setMinimized(false);unfoldedAt=performance.now();}});
  addEventListener('resize',()=>{panel.style.width=Math.min(innerWidth-16,panel.getBoundingClientRect().width)+'px';clamp();});
  return {get dragging(){return Boolean(gesture);},setMinimized,clamp};
 }

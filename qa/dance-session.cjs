@@ -21,8 +21,8 @@ async function fixture(){
 }
 (async()=>{
  const f=await fixture();try{
-  const r=await f.ctx.gla_sing_command('sing_along',{character:'sarah'});
-  assert.equal(r.ok,true);assert.equal(f.ctx.gla_sing_sample('sarah').viseme,'PP');
+  const r=await f.ctx.gla_sing_command('dance_along',{character:'sarah'});
+  assert.equal(r.ok,true);assert.equal(f.ctx.gla_sing_sample('sarah').viseme,'sil','dance-along keeps the mouth still');
   assert.equal(f.ctx.gla_speech,f.originalSpeech,'music never replaces live conversation output');
   assert.equal(f.contexts.length,1);assert.equal(f.ctx.gla_sing_sample('tia'),null);
   await f.ctx.gla_sing_command('dance_along',{character:'tia'});
@@ -35,11 +35,11 @@ async function fixture(){
   f.ctx.gla_sing_stop('sarah');assert.equal(f.ctx.gla_sing_pending(),false);await assert.rejects(pending,/cancelled/i);assert.equal(f.ctx.gla_sing(),null,'stop cancels startup before session exists');
   f.setLatency(10);const first=f.ctx.gla_sing_along({character:'sarah'});const caught=assert.rejects(first,/cancelled/i);const second=f.ctx.gla_sing_along({character:'tia',mode:'dance'});await caught;await second;assert.deepEqual(Array.from(f.ctx.gla_sing().targets,x=>x.id),['tia'],'latest start wins');
   assert.equal(f.ctx.gla_sing_sample('tia').speaking,false);f.ctx.gla_sing_stop();
-  await assert.rejects(f.ctx.gla_sing_command('sing_along',{character:'missing'}),/not visible/);
+  await assert.rejects(f.ctx.gla_sing_command('dance_along',{character:'missing'}),/not visible/);
   f.setLatency(0);await f.ctx.gla_sing_along({character:'sarah'});
   const originalPlay=f.targets[1].play;f.targets[1].play=async()=>{throw Error('Missing clip');};
   await assert.rejects(f.ctx.gla_sing_command('dance_along',{character:'tia'}),/Missing clip/);
-  assert.equal(f.ctx.gla_sing_sample('tia'),null);assert.equal(f.targets[1].avatar.motion.__singWrapped,undefined,'failed add releases expression ownership');
+  assert.equal(f.ctx.gla_sing_sample('tia'),null);assert.equal(f.targets[1].avatar.motion.__danceWrapped,undefined,'failed add releases expression ownership');
   let complete;f.targets[1].play=()=>new Promise(r=>complete=r);const adding=f.ctx.gla_sing_command('dance_along',{character:'tia'});await sleep(5);f.ctx.gla_sing_stop('tia');complete(true);await assert.rejects(adding,/cancelled/i);assert.equal(f.ctx.gla_sing_sample('tia'),null);
   f.targets[1].play=originalPlay;
   const before=f.starts.length;await f.ctx.gla_sing_along({character:'sarah',pid:999});assert.equal(f.starts.length,before+1,'explicit new PID must retap');

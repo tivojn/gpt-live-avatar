@@ -23,7 +23,7 @@ function fixture() {
 const f = fixture(); let music = null, stopCalls = 0;
 const solo = { ...f, document: f.document, window: { gla_sing_stop: () => { stopCalls++; return true; } },
   currentTask: () => null, displayText: text => text, paintStatus() {}, bubbleMode: () => 'auto',
-  bubblePolicy: { setMode() {}, visible: () => true }, live: { state: 'connected' }, singing: () => music,
+  bubblePolicy: { setMode() {}, visible: () => true, meaningful: () => true }, live: { state: 'connected' }, singing: () => music,
   avatar: { motion: { active: null } }, performance: { now: () => 100 }, currentCharacter: () => 'Sarah', agentUI: { isBusy: () => false } };
 vm.createContext(solo);
 const sync = soloSource.slice(soloSource.indexOf('const syncBubble = () => {'), soloSource.indexOf('const openComposer ='));

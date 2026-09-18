@@ -8,9 +8,8 @@ const TOOLS=[
  shape('move_avatar','Move a visible character across the screen. Screen positions are unrelated to file folders.',{character:str('Visible character name or slug.'),destination:{type:'string',enum:['upper-left','upper-right','lower-left','lower-right','center','left','right','top','bottom']}}),
  shape('play_motion','Play an installed motion on a visible character. Get avatar_state first for exact IDs.',{character:str('Visible character name or slug.'),motion:str('Exact installed motion ID.')}),
  // Music controls are verified by the renderer after actual player PCM arrives.
- shape('sing_along','Lip-sync and dance along with music already playing in Spotify or Music. This animates the avatar to the original singer; it does not generate a new singing voice. Use for explicit sing-along requests. Wait for the result before claiming it started. A stopped or unavailable player returns an actionable error.',{character:str('Visible character name or slug.')}),
- shape('dance_along','Dance along with music already playing in Spotify or Music, without lip-syncing. Use when the user asks to dance to the current song. This follows the music continuously; play_motion is for a single installed animation. Wait for verified audio before claiming it started.',{character:str('Visible character name or slug.')}),
- shape('stop_singing','Stop the named character singing or dancing along and return to normal idle behaviour.',{character:str('Visible character name or slug.')}),
+ shape('dance_along','Dance along with music already playing in Spotify, Music or a browser. Use when the user asks to dance (or sing) along to the current song; the avatar does not sing or lip-sync to other apps. This follows the music continuously; play_motion is for a single installed animation. Wait for verified audio before claiming it started. A stopped or unavailable player returns an actionable error.',{character:str('Visible character name or slug.')}),
+ shape('stop_dancing','Stop the named character dancing along and return to normal idle behaviour.',{character:str('Visible character name or slug.')}),
 ];
 function latestUserRequest(history){
  const items=Array.isArray(history)?history.slice(-48):[];

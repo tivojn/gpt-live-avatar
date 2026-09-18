@@ -76,7 +76,7 @@
   <div class="head"><span class="dot" id="dot"></span><span class="name" id="name">Avatar</span><span class="meter" id="meter" title="Voice level: blue is you, green is her"><i></i><i></i><i></i><i></i><i></i></span><span class="status" id="status">Loading…</span><button type="button" class="icon" id="composerClose" hidden title="Close typing controls" aria-label="Close typing controls"><svg viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
   <div id="taskUpdate" hidden role="status" aria-live="polite"></div>
   <div class="lines"><div class="line user" id="lineUser"></div><div class="line assistant" id="lineAssistant"></div></div>
-  <p id="composerTip" hidden>Try “Sing along”, “Dance along”, or “Do a backflip”. Tap the mic or double-click my head to talk.</p>
+  <p id="composerTip" hidden>Try “Dance along” or “Do a backflip”. Tap the mic or double-click my head to talk.</p>
   <div class="row" id="steerRow" hidden>
     <button class="icon" id="muteBtn" title="Mute microphone"><svg class="on" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5"/></svg><svg class="off" viewBox="0 0 20 20"><rect x="7" y="2.5" width="6" height="10" rx="3"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M3 17 17 3"/></svg></button>
     <button class="icon" id="hushBtn" title="Stop talking"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg></button>
@@ -144,7 +144,7 @@ const bubbleMode = () => settings.bubbleMode || (settings.bubble === false ? 'of
 const singing = () => { try { return window.gla_sing?.() || null; } catch { return null; } };
 let wasPerforming = false;
 // Whatever she is doing, this ends it. The music stopping is handled inside the
-// sing session, but a viewer who simply wants her to stand still needs a way in
+// music session, but a viewer who simply wants her to stand still needs a way in
 // that does not depend on her hearing anything.
 const stopPerforming = () => {
   let stopped = false;
@@ -172,9 +172,12 @@ const syncBubble = () => {
   bubblePolicy.setMode(bubbleMode());
   if (bubbleMode() === 'off' && !forced && bubble.contains(document.activeElement)) document.activeElement.blur();
   bubblePolicy.editor = connected && bubble.contains(document.activeElement);
-  // Keep automatic status bubbles off the performance. A newly opened input
-  // or agent question stays visible, including before it receives focus.
-  bubble.classList.toggle('hidden', !(forced || (!performing && bubblePolicy.visible(performance.now()))));
+  // Keep automatic status bubbles off the performance, but never what she is
+  // saying or a task update: those stay readable while she gestures (a
+  // dance-along still clears the stage for the whole song). A newly
+  // opened input or agent question stays visible, including before it receives focus.
+  const now = performance.now();
+  bubble.classList.toggle('hidden', !(forced || (performing ? !singing() && bubblePolicy.meaningful(now) : bubblePolicy.visible(now))));
   $('#steerRow').hidden = false; // Every visible bubble accepts a typed request.
   $('#composerClose').hidden = !composerOpen;
   $('#composerTip').hidden = !forced || live.state !== 'idle';
@@ -724,7 +727,7 @@ agentUI=installAgentUI({api:gla.agent,name:currentCharacter,onStatus:taskStatus,
   if(companion?.destination)throw Error('Movement has not reached the destination yet.');return {ok:true,character:slug,destination:args.destination,reached:true};
  }
  if(action==='play_motion'){if(!avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');await performAction('clip:'+args.motion);return {ok:avatar.motion.active?.id===args.motion,character:slug,motion:args.motion};}
- if(['sing_along','dance_along','stop_singing'].includes(action))return window.gla_sing_command(action,args,cancelled);
+ if(['dance_along','stop_dancing'].includes(action))return window.gla_sing_command(action,args,cancelled);
  throw Error('Unknown avatar action.');
 }});
 
@@ -910,7 +913,7 @@ gla.onMenuAction(id => {
   else if (id === 'mute') toggleMute();
   else if (id === 'hush') { stopPerforming(); delegate.cancel(); live.stopSpeaking(); toast('Asked her to stop.'); }
   else if (id === 'stop-performing') { toast(stopPerforming() ? 'Stopped.' : 'She is already still.'); syncBubble(); }
-  else if (id === 'music:sing' || id === 'music:dance') void musicRouter.run(id === 'music:sing' ? 'Sing along to the current song' : 'Dance along to the current song', {id:'menu-music-'+crypto.randomUUID(),character:settings.avatar?.slug}).catch(e=>toast(e.message));
+  else if (id === 'music:dance') void musicRouter.run('Dance along to the current song', {id:'menu-music-'+crypto.randomUUID(),character:settings.avatar?.slug}).catch(e=>toast(e.message));
   else if (id === 'steer') agentUI.open(currentCharacter());
   else if (id.startsWith('avatar:')) void gla.selectAvatar(id.slice(7));
   else if (id.startsWith('voice-preview:')) { const voice = id.slice(14); if (voice) void preview.start(voice); else preview.stop(); }
@@ -1083,7 +1086,8 @@ async function flushPinch(){
   lastFrame=0;wake();
 }
 addEventListener('wheel',event=>{
-  if(!avatar||bubble.contains(event.target)||$('#listen').contains(event.target))return;
+  const over=event.target instanceof Node?event.target:null; // a synthetic wheel on window has no node to test
+  if(!avatar||over&&(bubble.contains(over)||$('#listen').contains(over)))return;
   event.preventDefault();
   const unit=event.deltaMode===1?16:event.deltaMode===2?innerHeight:1;
   if(event.ctrlKey){

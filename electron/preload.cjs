@@ -49,7 +49,9 @@ contextBridge.exposeInMainWorld('gla', {
     pipeline: () => ipcRenderer.invoke('gla:show:pipeline'),
     generate: request => ipcRenderer.invoke('gla:show:generate', request),
     cancel: options => ipcRenderer.invoke('gla:show:cancel', options),
-    saveRecording: request => ipcRenderer.invoke('gla:show:save-recording', request),
+    recordingOpen: request => ipcRenderer.invoke('gla:show:recording-open', request),
+    recordingChunk: request => ipcRenderer.invoke('gla:show:recording-chunk', request),
+    recordingClose: request => ipcRenderer.invoke('gla:show:recording-close', request),
     reveal: request => ipcRenderer.invoke('gla:show:reveal', request),
     onProgress: callback => subscribe('gla:show:progress', callback),
   },
@@ -118,7 +120,7 @@ contextBridge.exposeInMainWorld('gla', {
     setIgnoreMouse: ignore => ipcRenderer.send('gla:window:ignore-mouse', Boolean(ignore)),
   },
   openSettings: () => ipcRenderer.invoke('gla:open-settings'),
-  // Hearing another application, so she can sing along to what is playing.
+  // Hearing another application, so she can dance along to what is playing.
   tap: {
     available: () => ipcRenderer.invoke('gla:tap:available'),
     list: () => ipcRenderer.invoke('gla:tap:list'),

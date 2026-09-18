@@ -47,8 +47,8 @@ installer rather than checksums from an older release.
 
 ## 0.2.19 music, input and deformation update
 
-- Right-click **Sing Along to Current Song**, **Dance Along to Current Song** or
-  **Stop Singing & Dancing** in solo or Together. Together uses the clicked
+- Right-click **Dance Along to Current Song** or **Stop Dancing** in solo or
+  Together (sing-along was retired after 0.2.22). Together uses the clicked
   character; stopping one leaves the other performers running. Stop also
   cancels pending startup. Music controls need neither a voice API key nor an
   external agent, but require macOS 14.4 or newer, audible music and audio-capture permission.
@@ -61,9 +61,9 @@ installer rather than checksums from an older release.
   `electron/audio-tap-owner.cjs` owns the shared native capture helper.
   `electron/music-menu.cjs` supplies both menus. Reuse the existing request
   route and keep music audio separate from conversational voice output.
-- Local bundled vocal-activity detection reduces mouth motion during
-  instrumental passages. Music visemes are estimates; this is not exact lyric
-  alignment or separated vocals. Dance-only mode keeps mouth output silent.
+- Dance along reads the tempo from the captured mix and paces the dance
+  clips; the mouth stays still. The former vocal detector and music visemes
+  went with sing-along.
 - Sarah's immutable `sarah-wardrobe-v10` packages restore authored pelvis
   weights on body, fitted brief, side ties, pants, belt and dress. Geometry and
   morphs are unchanged. All five characters use motion overlay
@@ -87,7 +87,6 @@ cached catalogue selects the repaired bundle and preserves its tactical outfit.
 The installed DMG retains existing settings and credential files. `qa/music-controls-app.cjs` exercises the real solo
 and Together windows with stubbed music requests; session and native-menu
 regressions separately cover scoped startup/stop and routing. See
-[Singing QA](SING-ALONG-QA.md), [Vocal detector QA](SINGING-DETECTOR-QA.md),
 [Pelvis weight QA](PELVIS-WEIGHT-QA.md), [Motion deformation QA](MOTION-DEFORMATION-QA.md)
 and [Finger audit](MESHY-HAND-AUDIT.md) for measured scope and limitations.
 

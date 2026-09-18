@@ -18,7 +18,7 @@ const smooth = t => {t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 // pack; dropping it as the library is read retires it in one place instead,
 // and keeps it retired across pack updates. A clip that is absent here is
 // absent everywhere downstream - the motion menu, the agent's vocabulary,
-// and the sing-along dance pool all read this same map.
+// and the dance-along pool all read this same map.
 const RETIRED = new Set(['indoor-swing','cardio-dance','jazz-hands']);
 
 // Optional local motion clips. The API credential and donor character never

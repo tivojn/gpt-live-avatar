@@ -1,7 +1,7 @@
 'use strict';
 // Listening to another app's audio.
 //
-// The avatar cannot "sing along" to Spotify by decoding the song: the file is
+// The avatar cannot dance along to Spotify by decoding the song: the file is
 // DRM'd and there is no waveform to read. A Core Audio process tap solves that
 // from the other end - it reads the PCM the player hands to the speakers, after
 // the player has decoded it. Whatever the user can hear, she can hear.
@@ -80,7 +80,7 @@ class AudioTap {
     // A named request must never start following some different application.
     if (preferred) return null;
     // Nothing from a known player: fall back to whatever else is audible, so
-    // "sing along" still works for a browser tab or a video.
+    // dancing along still works for a browser tab or a video.
     const other = audible.find(p => typeof p.bundleId === 'string'
       && !p.bundleId.startsWith('com.apple.')
       && !p.bundleId.startsWith('com.github.Electron')

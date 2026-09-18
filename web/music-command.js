@@ -30,26 +30,28 @@ export function musicCommand(text,{characters=[],character=''}={}) {
  t=t.replace(/\s+(?:right now|now|please)$/i,'').trim();
  t=t.replace(/^(?:start|begin|keep|continue)\s+(?:to\s+)?(singing|dancing|sing|dance)(?=\s)/i,(_m,v)=>/^sing/i.test(v)?'sing':'dance');
  t=t.replace(/^sing along and dance(?: along)?/i,'sing and dance along').replace(/^dance along and sing(?: along)?/i,'dance and sing along');
- let action,mode;
- if(/^(?:stop|end|quit|finish)\s+(?:the\s+)?(?:singing(?:\s+along)?|dancing(?:\s+along)?|sing[ -]?along|dance[ -]?along)(?:\s+(?:and|&)\s+(?:singing(?:\s+along)?|dancing(?:\s+along)?))?$/i.test(t)||/^(?:stop|end)\s+(?:the\s+)?(?:music\s+)?performance$/i.test(t))action='stop_singing';
+ // She dances along; a request to sing along is honoured the same way (there is
+ // no lip-sync to other apps' music any more), and the reply says so.
+ let action,asked='';
+ if(/^(?:stop|end|quit|finish)\s+(?:the\s+)?(?:singing(?:\s+along)?|dancing(?:\s+along)?|sing[ -]?along|dance[ -]?along)(?:\s+(?:and|&)\s+(?:singing(?:\s+along)?|dancing(?:\s+along)?))?$/i.test(t)||/^(?:stop|end)\s+(?:the\s+)?(?:music\s+)?performance$/i.test(t))action='stop_dancing';
  else {
   const along=/^(sing(?:\s+(?:and|&)\s+dance)?|dance(?:\s+(?:and|&)\s+sing)?)\s+along(?:\s+(?:(?:with|to)\s+)?(?:me|us|it|(?:the|this|that|current|playing|a)\s+(?:(?:current|playing)\s+)?(?:song|music|track|tune)|whatever(?:'s| is)\s+playing|what(?:'s| is)\s+playing)(?:\s+(?:(?:that(?:'s| is)|which is|is)\s+)?(?:playing(?:\s+now)?|on))?)?$/i;
   const toSong=/^(sing(?:\s+(?:and|&)\s+dance)?|dance(?:\s+(?:and|&)\s+sing)?)\s+(?:(?:with|to)\s+)?(?:the|this|that|current|playing)\s+(?:(?:current|playing)\s+)?(?:song|music|track|tune)(?:\s+(?:(?:that(?:'s| is)|which is|is)\s+)?(?:playing(?:\s+now)?|on))?$/i;
   const m=t.match(along)||t.match(toSong);
-  if(m){mode=/sing/i.test(m[1])?'sing':'dance';action=mode==='sing'?'sing_along':'dance_along';}
+  if(m){action='dance_along';asked=/sing/i.test(m[1])?'sing':'dance';}
  }
  // Direct multilingual commands share exactly the same execution path.
- if(!action&&/^(?:请|麻烦)?(?:跟着|随着|随|跟随)(?:这首歌|歌曲|音乐|歌)(?:一起)?(?:唱|唱歌|唱一下)(?:吧)?$|^(?:请)?(?:跟唱|一起跟唱)(?:这首歌)?(?:吧)?$/.test(t)){action='sing_along';mode='sing';}
- if(!action&&/^(?:请|麻烦)?(?:跟着|随着|随|跟随)(?:这首歌|歌曲|音乐|歌)(?:一起)?(?:跳舞|跳)(?:吧)?$/.test(t)){action='dance_along';mode='dance';}
- if(!action&&/^(?:停止|别再)(?:跟唱|唱歌|跳舞)(?:了)?$/.test(t))action='stop_singing';
+ if(!action&&/^(?:请|麻烦)?(?:跟着|随着|随|跟随)(?:这首歌|歌曲|音乐|歌)(?:一起)?(?:唱|唱歌|唱一下)(?:吧)?$|^(?:请)?(?:跟唱|一起跟唱)(?:这首歌)?(?:吧)?$/.test(t)){action='dance_along';asked='sing';}
+ if(!action&&/^(?:请|麻烦)?(?:跟着|随着|随|跟随)(?:这首歌|歌曲|音乐|歌)(?:一起)?(?:跳舞|跳)(?:吧)?$/.test(t)){action='dance_along';asked='dance';}
+ if(!action&&/^(?:停止|别再)(?:跟唱|唱歌|跳舞)(?:了)?$/.test(t))action='stop_dancing';
  if(!action)return null;
- return {action,mode:mode||'stop',args:{character:target,...(player?{player}:{})}};
+ return {action,mode:action==='dance_along'?'dance':'stop',asked,args:{character:target,...(player?{player}:{})}};
 }
 
 export function musicCommandMessage(command,result){
- if(command.action==='stop_singing')return result.stopped===false?'Already stopped.':'Stopped singing and dancing along.';
+ if(command.action==='stop_dancing')return result.stopped===false?'Already stopped.':'Stopped dancing along.';
  const track=String(result.track||'').trim(),source=String(result.listeningTo||result.source||'the music player').trim();
- return `${command.mode==='dance'?'Dancing':'Lip-syncing and dancing'} along${track?' to '+track:' with '+source}.`;
+ return `${command.asked==='sing'?'I don’t sing along, but I’ll dance':'Dancing'} along${track?' to '+track:' with '+source}.`;
 }
 
 export class MusicCommandRouter {

@@ -11,8 +11,11 @@ export function recordingType(){
  return mimeType?{mimeType,ext:mimeType.startsWith('video/mp4')?'mp4':'webm'}:null;
 }
 export class ShowRecorder {
- constructor({width=1280,height=720,fps=30}={}){
-  this.width=width;this.height=height;this.fps=fps;this.chunks=[];this.sources=[];this.delays=[];this.recorder=null;this.started=0;this.held=0;this.heldAt=0;this.cache=new Map();
+ // With `onChunk`, each second of encoded video is handed over as it is
+ // produced (the app appends it to the file on disk) instead of piling up in
+ // memory until the curtain call; the chunks concatenate to the same file.
+ constructor({width=1280,height=720,fps=30,onChunk=null}={}){
+  this.width=width;this.height=height;this.fps=fps;this.onChunk=onChunk;this.chunks=[];this.bytes=0;this.sources=[];this.delays=[];this.recorder=null;this.started=0;this.held=0;this.heldAt=0;this.cache=new Map();
  }
  get active(){return Boolean(this.recorder&&this.recorder.state!=='inactive');}
  get paused(){return this.recorder?.state==='paused';}
@@ -20,10 +23,13 @@ export class ShowRecorder {
   const type=recordingType();if(!type)throw Error('Video recording is not available in this build.');
   this.type=type;this.canvas=document.createElement('canvas');this.canvas.width=this.width;this.canvas.height=this.height;this.ctx=this.canvas.getContext('2d');
   this.context=new AudioContext();this.destination=this.context.createMediaStreamDestination();
-  const stream=new MediaStream([...this.canvas.captureStream(this.fps).getVideoTracks(),...this.destination.stream.getAudioTracks()]);
-  this.recorder=new MediaRecorder(stream,{mimeType:type.mimeType,videoBitsPerSecond:6_000_000,audioBitsPerSecond:128_000});
-  this.recorder.ondataavailable=e=>{if(e.data?.size)this.chunks.push(e.data);};
-  this.recorder.start(1000);this.started=performance.now();this.paint();
+  try{
+   const stream=new MediaStream([...this.canvas.captureStream(this.fps).getVideoTracks(),...this.destination.stream.getAudioTracks()]);
+   this.recorder=new MediaRecorder(stream,{mimeType:type.mimeType,videoBitsPerSecond:6_000_000,audioBitsPerSecond:128_000});
+   this.recorder.ondataavailable=e=>{if(!e.data?.size)return;this.bytes+=e.data.size;if(this.onChunk)this.onChunk(e.data);else this.chunks.push(e.data);};
+   this.recorder.start(1000);
+  }catch(e){this.recorder=null;void this.context.close().catch(()=>{});this.context=null;throw e;}
+  this.started=performance.now();this.paint();
  }
  // Every voice stream (each line, the Director) is mixed into the file. The
  // mouth on screen follows what the speaker emits, which trails the raw
@@ -92,7 +98,7 @@ export class ShowRecorder {
   if(recorder.state!=='inactive')recorder.stop();await done;
   for(const s of this.sources){try{s.disconnect();}catch{}}this.sources=[];this.delays=[];void this.context?.close().catch(()=>{});this.context=null;
   const blob=new Blob(this.chunks,{type:this.type.mimeType});this.chunks=[];this.recorder=null;
-  return {blob,ext:this.type.ext,mimeType:this.type.mimeType,seconds:Math.round((performance.now()-this.started-this.held)/1000)};
+  return {blob,bytes:this.bytes,ext:this.type.ext,mimeType:this.type.mimeType,seconds:Math.round((performance.now()-this.started-this.held)/1000)};
  }
 }
 function wrap(ctx,text,maxWidth){

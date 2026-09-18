@@ -20,7 +20,7 @@ app.whenReady().then(async()=>{try{
  assert.deepEqual(await js('return __musicCalls[0]'),{action:'dance_along',args:{character:'sarah'}});
  await js("const e=document.querySelector('#steer');e.focus();e.value='Sing along';e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");
  await until(()=>js('return __musicCalls.length===2'),'Enter routing');
- assert.equal(await js('return __musicCalls[1].action'),'sing_along');
+ assert.equal(await js('return __musicCalls[1].action'),'dance_along','a sing-along request dances along');
  await js("window.gla_sing_command=__originalMusic;await gla_avatar.motion.play('kung-fu-punch',{loop:false});");
  await until(()=>js("return document.querySelector('#bubble').classList.contains('hidden')"),'bubble hides during motion');
  solo.webContents.send('gla:menu-action','agent');await until(()=>js("return !document.querySelector('#bubble').classList.contains('hidden')&&document.activeElement.id==='steer'"),'explicit composer reopens');
@@ -30,7 +30,7 @@ app.whenReady().then(async()=>{try{
  await js('await gla.group.open();');const group=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/group.html')),'group');
  const gj=code=>group.webContents.executeJavaScript('(async()=>{'+code+'})()');
  await until(()=>gj('return window.gla_group&&!gla_group.state.loading&&gla_group.actors.size>=2'),'group cast');
- await gj("for(const a of gla_group.actors.values())await gla_group.actorMenuAction({slug:a.slug,action:'bubble:always'});window.__musicCalls=[];window.gla_sing_command=async(action,args)=>{__musicCalls.push({action,args});return {ok:true,source:'Test player'};};await gla_group.actorMenuAction({slug:'tia',action:'music:sing'});");
+ await gj("for(const a of gla_group.actors.values())await gla_group.actorMenuAction({slug:a.slug,action:'bubble:always'});window.__musicCalls=[];window.gla_sing_command=async(action,args)=>{__musicCalls.push({action,args});return {ok:true,source:'Test player'};};await gla_group.actorMenuAction({slug:'tia',action:'music:dance'});");
  assert.equal(await gj('return __musicCalls[0].args.character'),'tia','Menu uses clicked avatar');
  assert.equal(await gj('return [...gla_group.actors.values()].every(a=>!a.bubble.hidden&&!a.composer.hidden)'),true,'Every group bubble accepts input');
  await gj("const a=gla_group.actors.get('sarah');a.askInput.focus();a.askInput.value='Dance along';a.askInput.dispatchEvent(new Event('input',{bubbles:true}));a.askSend.click();");

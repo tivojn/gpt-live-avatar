@@ -61,15 +61,15 @@ be revised or played again.
 
 Tick **I'll act a role** to be cast yourself. A prompter shows each of your
 lines; read it aloud into the microphone, type it, or press **I'll pass** (or
-simply wait) and the standby character delivers it. Choose three or more
-characters when you act, so the play keeps several performers plus a standby.
+simply wait) and the standby character delivers it. When you act, pick at
+least two characters: one performs, one stands by for lines you pass.
 See [Avatar Show details](docs/AVATAR-SHOW.md).
 
 ## Together live conversations
 
 Right-click an avatar and choose **Avatar Show · Playwright & Director**. The
-window opens with the show format selected; choose **Improvise together** for
-the earlier free conversation. Each character
+window opens with the show format selected; choose **Have a conversation** (or
+one of the other formats) for the earlier free conversation. Each character
 keeps independent drag, pinch, rotation and right-click controls. Transparent
 spaces let clicks reach the app underneath. Drag the Together title bar, resize
 its bottom-right corner, or minimize it to a title bar while talk continues.

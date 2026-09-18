@@ -20,7 +20,7 @@ app.whenReady().then(async()=>{
  try{
   const win=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'avatar window');
   const js=code=>win.webContents.executeJavaScript(code.includes('await')&&!code.trim().startsWith('window.') ? '(async()=>('+code+'))()' : code).catch(error=>{console.error('QA expression:',code.slice(0,180));throw error;});
-  const loaded=()=>until(()=>js("Boolean(gla_avatar?.model && gla_avatar?.motion?.clips.size===62 && !document.querySelector('#status').textContent.startsWith('Loading'))"),'avatar loaded');
+  const loaded=()=>until(()=>js("Boolean(gla_avatar?.model && gla_avatar?.motion?.clips.size>=62 && !document.querySelector('#status').textContent.startsWith('Loading'))"),'avatar loaded');
   await loaded();
   const menu=async()=>{template=null;await js("gla.showMenu({live:gla_live.state,hasKey:true,bubbleMode:(await gla.getSettings()).bubbleMode,catalogue:gla_avatar.options.catalogue()})");return until(()=>template);};
   const nativeMenu=async()=>{template=null;await js("document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");return until(()=>template);};
@@ -30,7 +30,7 @@ app.whenReady().then(async()=>{
   assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),false,'Always visible while idle');
   await js("gla_play('dance')");await until(()=>js("gla_debug().motionActive==='joyful-sway'"),'dance started');
   const poses=[];
-  for(let i=0;i<8;i++){await wait(250);poses.push(await js("gla_avatar.options.current.map(x=>x.m.elements.slice(0,12))"));assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),false,'Always mode during dance');}
+  for(let i=0;i<8;i++){await wait(250);poses.push(await js("gla_avatar.options.current.map(x=>x.m.elements.slice(0,12))"));assert.equal(await js("document.querySelector('#bubble').classList.contains('hidden')"),true,'Ordinary bubbles step aside during a dance, even in Always mode');}
   assert(new Set(poses.map(JSON.stringify)).size>1,'Dance changes rig transforms');
   await js("gla.setSettings({bubbleMode:'off'})");await wait(300);
   await js("gla_live.dispatchEvent(new CustomEvent('transcript',{detail:{role:'assistant',text:'Hello!',final:false,id:'bubble-one'}}))");
@@ -83,7 +83,7 @@ app.whenReady().then(async()=>{
   await until(()=>js("gla_live.state==='connected' && gla_live.voice==='ripple'"),'Dynamic voice reconnect');
   assert.equal(requests.at(-1).history[0].text,'Please remember our dance.');assert.equal(await js('gla_live.muted'),true);
   await js("gla.setSettings({bubbleMode:'off'})");await wait(300);
-  assert.equal(await js("getComputedStyle(document.querySelector('#listen')).opacity"),'0.6','Muted listening pill visible');
+  assert.equal(await js("getComputedStyle(document.querySelector('#listen')).opacity"),'0.75','Muted listening pill visible');
   await snapshot('listening-gap');
   await js("gla.setSettings({bubbleMode:'always'})");await wait(300);
   assert.equal(await js("getComputedStyle(document.querySelector('#listen')).opacity"),'0','Muted pill stays hidden when bubble shown');

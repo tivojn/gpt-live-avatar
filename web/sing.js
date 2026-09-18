@@ -1,64 +1,17 @@
-// Lip-sync from audio the avatar is not speaking itself.
+// Dance along to whatever another app is playing.
 //
-// Two sources, split on whether the audio can be decoded.
-//
-//   local    - a file on disk. Decodable, so it goes through the real engine:
-//              the bundled recognizer classifies it live, exactly as it does a
-//              GPT-Live stream. Speech or song, any language, no precompute.
-//
-//   tap      - whatever another app is playing right now, captured from Core
-//              Audio below the player's decoder. DRM stops a file being read,
-//              not a speaker being fed, so Spotify and Music go through the
-//              same live recognizer as a local file. Nothing is precomputed and
-//              nothing is reproduced: the user already hears the player, so
-//              this path is analysis only.
-//
-//   external - a player whose audio cannot be captured at all. Precomputed
-//              visemes are synced to the player's PLAYHEAD. Reuses the engine's
-//              VisemeTimeline (its 0.16 s staleness rule and 128-frame cap are
-//              part of the contract) but skips the worklet.
-//
-// A learned local detector decides when vocals are present. Stereo centre
-// cleanup helps the phoneme model, but is not perfect singer separation.
-// The original mix independently drives tempo; dance-only keeps the mouth idle.
-import {SpeechOutput, VisemeTimeline, LIP_SYNC_DELAY, silentSpeech} from '/lip-sync.js';
-import {createVocalDetector} from '/vocal-detector.js';
+// The music is captured from Core Audio below the player's decoder (the app's
+// audio tap), so Spotify, Music and a browser tab all arrive the same way. The
+// avatar only listens: nothing is reproduced, the user already hears the
+// player. Tempo is read from the captured mix and drives the dance clips; the
+// mouth stays still. (Lip-syncing to the singer was tried and retired: it never
+// reached the quality of her own voice, so the feature is dance-along only.)
+// The module keeps its historical name and `gla_sing_*` entry points, which the
+// windows and the QA harnesses already share.
+import {silentSpeech} from '/lip-sync.js';
 
-const SYNC='http://127.0.0.1:8787';
-const LEAD=0.04, LOOKAHEAD=2, DRIFT=0.12;
 const SILENCE_STOP=6;        // seconds of nothing before she stops on her own
-const ENERGY={aa:.95,oh:.85,E:.75,ou:.7,ih:.6,RR:.5,CH:.5,nn:.45,DD:.45,kk:.45,SS:.4,TH:.4,FF:.35,PP:.3,sil:0};
 const clock=()=>performance.now()/1000;
-
-/* ------------------------------------------------------------ external mode */
-class ScriptedSpeech {
-  constructor(frames){this.frames=frames;this.timeline=new VisemeTimeline();this.anchor=null;this.i=0;this._muted=false;}
-  get muted(){return this._muted;}
-  set muted(v){this._muted=Boolean(v);if(this._muted)this.timeline.clear();}
-  at(o){return this.anchor.clock+(o-this.anchor.position);}
-  anchorTo(position){
-    const fresh={clock:clock(),position};
-    const slipped=this.anchor&&Math.abs(this.at(position)-fresh.clock)>DRIFT, first=!this.anchor;
-    this.anchor=fresh;
-    if(slipped||first){this.timeline.clear();const i=this.frames.findIndex(f=>f.t>=position);this.i=i<0?this.frames.length:i;}
-  }
-  pump(){
-    if(!this.anchor)return;
-    const horizon=clock()+LOOKAHEAD; let pushed=0;
-    while(this.i<this.frames.length&&pushed<48){
-      const f=this.frames[this.i], time=this.at(f.t)-LEAD;
-      if(time>horizon)break;
-      this.timeline.push({time,viseme:f.v}); this.i++; pushed++;
-    }
-  }
-  sample(){
-    if(this._muted)return{rms:0,relative:0,viseme:'sil',visemeWeights:{},speaking:false,lipSyncSource:'audio-model'};
-    const viseme=this.timeline.sample(clock()), relative=ENERGY[viseme]??.6;
-    return {rms:relative*.05,relative,viseme,visemeWeights:viseme==='sil'?{}:{[viseme]:1},
-            speaking:viseme!=='sil',lipSyncSource:'audio-model'};
-  }
-  close(){this.timeline.clear();this.anchor=null;}
-}
 
 /* --------------------------------------------------------------- beat clock */
 // Tempo from the SHAPE of the onset envelope, not from the gaps between hits.
@@ -185,38 +138,26 @@ class BeatClock {
   close(){clearInterval(this.timer); try{this.analyser.disconnect();}catch{}}
 }
 
-// No audio in the graph on the external path, so there is nothing to detect a
-// beat from. Accept a stated tempo and drive the same pacing logic.
-class FixedBeats {
-  constructor(bpm){this.period=60/bpm;this.next=clock()+this.period;this.flag=false;
-    this.timer=setInterval(()=>{const t=clock();if(t>=this.next){this.flag=true;this.next=t+this.period;}},25);}
-  phase(){return ((clock()-this.next)/this.period+1)%1;}
-  took(){const f=this.flag;this.flag=false;return f;}
-  close(){clearInterval(this.timer);}
-}
-
 /* ------------------------------------------------------- motion + expression */
 // Everything here goes through the app's own API: gla_play for clips,
 // setPlaybackRate to pace them, and a wrapper over motion.expression so the
-// face swells with the voice instead of sitting at one authored value.
+// face lifts on the pulse instead of sitting at one authored value.
 class Performance {
-  constructor(beats, speech, target){
+  constructor(beats, target){
     this.target=target;
-    this.beats=beats; this.speech=speech; this.restore=null; this.applied=null;
+    this.beats=beats; this.restore=null; this.applied=null;
     this.pulse=0;
     const avatar=this.target.avatar, motion=avatar?.motion;
-    if(motion&&!motion.__singWrapped){
+    if(motion&&!motion.__danceWrapped){
       const original=motion.expression.bind(motion);
       motion.expression=(now,reduce)=>{
         const base=original(now,reduce);
         if(reduce)return base;
-        const energy=this.speech?.sample?.().relative||0;
-        const smile=Math.min(1,(base.smile||0)+.18+.35*energy+.15*this.pulse);
-        const surprise=Math.min(1,(base.surprise||0)+.25*this.pulse*energy);
-        return {...base,smile,surprise};
+        const smile=Math.min(1,(base.smile||0)+.18+.25*this.pulse);
+        return {...base,smile};
       };
-      motion.__singWrapped=true;
-      this.restore=()=>{motion.expression=original;delete motion.__singWrapped;};
+      motion.__danceWrapped=true;
+      this.restore=()=>{motion.expression=original;delete motion.__danceWrapped;};
     }
     this.timer=setInterval(()=>this.step(),60);
   }
@@ -237,7 +178,7 @@ class Performance {
     if(this.beats.took())this.pulse=1;
     const motion=this.target.avatar?.motion, active=motion?.active;
     // Most clips are one-shot. A song is not, so re-cue as each one lands.
-    if(!active&&clock()-(this.lastStart||0)>1.2){this.applied=null;void this.start().catch(error=>console.warn('[sing] motion:',error.message));return;}
+    if(!active&&clock()-(this.lastStart||0)>1.2){this.applied=null;void this.start().catch(error=>console.warn('[dance] motion:',error.message));return;}
     const period=this.beats.period;
     if(!active||!period||!motion.setPlaybackRate)return;
     // Match the clip's loop to a whole number of beats, nearest its own length,
@@ -256,64 +197,8 @@ class Performance {
   }
 }
 
-/* ------------------------------------------------------------ vocal isolation */
-// Shared by every path that has a real waveform. Returns the node the
-// recognizer should listen to.
-// The recognizer publishes a decision roughly every 32 ms and the mouth used to
-// wear every one of them. Measured against a real track that came to 18 shape
-// changes a second, half of them held for a single frame: a tremble, not
-// speech, which articulates at four to eight. So a shape now has to prove
-// itself before it is worn, and once worn it is kept for a minimum time. This
-// is deliberately not a smoothing filter - averaging two visemes gives a third,
-// wrong mouth. It is a decision that refuses to be rushed.
-// 70 ms lands the mouth at four to five shape changes a second against a real
-// vocal, which is where human articulation actually sits. 90 ms was measured
-// too: it looked calm but dropped to 2.4, which reads as underreacting.
-function steadyMouth(speech, voiceAllowed=()=>true){
-  const read=speech.sample.bind(speech);
-  speech.sample=()=>{
-    const raw=read();
-    if(!voiceAllowed()||raw.rms<.001)return silentSpeech();
-    return {...raw,speaking:raw.viseme!=='sil'};
-  };
-  return speech;
-}
-
-async function vocalChain(context, source, {gate=1, onVoice=null}={}){
-  await context.audioWorklet.addModule('/vocal-worklet.js');
-  const centre=new AudioWorkletNode(context,'vocal-center',{
-    numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1],
-    channelCount:2,channelCountMode:'explicit',channelInterpretation:'discrete'});
-  centre.parameters.get('gate').value=gate;
-  if(onVoice)centre.port.onmessage=({data})=>{if(data?.type==='voice')onVoice(data);};
-  // Centre extraction keeps bass and kick too, since those are centred as
-  // well. Band-limit to where a voice lives before handing it over.
-  const hp=context.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=160; hp.Q.value=.7;
-  const lp=context.createBiquadFilter(); lp.type='lowpass';  lp.frequency.value=6000;
-  const lift=context.createGain(); lift.gain.value=2.2;    // isolation costs level
-  source.connect(centre); centre.connect(hp); hp.connect(lp); lp.connect(lift);
-  return lift;
-}
-
-/* --------------------------------------------------------------- local mode */
-async function buildLocal(context, buffer, speech, isolate){
-  const source=context.createBufferSource(); source.buffer=buffer;
-
-  // What you HEAR: the whole song. Delayed by LIP_SYNC_DELAY because the
-  // engine assumes everything entering speech.input is heard that much later.
-  const mixDelay=context.createDelay(.5); mixDelay.delayTime.value=LIP_SYNC_DELAY;
-  source.connect(mixDelay); mixDelay.connect(context.destination);
-
-  const recognised=(isolate&&buffer.numberOfChannels>1)?await vocalChain(context,source):source;
-  recognised.connect(speech.input);
-
-  // Only the vocal reaches the analyser, so jaw energy follows the singer.
-  speech.monitor=false; speech.updateVolume();
-  return source;
-}
-
 /* ------------------------------------------------------------------ session */
-let session=null, revision=0, pending=false, pendingTargets=[], transition=Promise.resolve(), failed=null;
+let session=null, revision=0, pending=false, pendingTargets=[], transition=Promise.resolve();
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const cancelled=()=>new DOMException('Music request cancelled.','AbortError');
 function targetsFor(character){
@@ -332,10 +217,9 @@ function teardown(){
   if(!old)return;
   old.abort?.abort();clearInterval(old.watchdog);
   for(const entry of old.targets.values())entry.performance?.close();
-  old.beats?.close();old.vocal?.close?.();
-  try{old.source?.stop();}catch{}
-  old.speech?.close();void old.context?.close();
-  if(old.mode==='tap')void window.gla?.tap?.stop(old.tapToken);
+  old.beats?.close();
+  void old.context?.close();
+  void window.gla?.tap?.stop(old.tapToken);
 }
 function pendingFor(character){
   if(!pending)return false;
@@ -359,30 +243,23 @@ function stop(character){
   if(cancelPending&&!hadSession)void window.gla?.tap?.stop();
   return removed||cancelPending||(!character&&hadSession);
 }
-async function addTargets(next,targets,mode='sing',valid=()=>true){
-  const created=[],changed=[];
+async function addTargets(next,targets,valid=()=>true){
+  const created=[];
   try{
     for(const target of targets){
       if(session!==next||!valid())throw cancelled();
       let previous=next.targets.get(target.id);
       if(previous&&(previous.target.avatar!==target.avatar||previous.target.avatar.disposed)){previous.performance?.close();next.targets.delete(target.id);previous=null;}
-      if(previous){changed.push([previous,previous.mode]);previous.mode=mode;continue;}
-      const entry={target,mode};next.targets.set(target.id,entry);created.push(entry);
-      const speech={sample:()=>modeFor(next,target.id)==='sing'?sampleSession(next):silentSpeech()};
-      entry.performance=new Performance(next.beats,speech,target);
+      if(previous)continue;
+      const entry={target,mode:'dance'};next.targets.set(target.id,entry);created.push(entry);
+      entry.performance=new Performance(next.beats,target);
       await entry.performance.start();
       if(session!==next||!valid()||next.targets.get(target.id)!==entry)throw cancelled();
     }
   }catch(error){
     for(const entry of created){if(next.targets.get(entry.target.id)===entry){entry.performance?.close();next.targets.delete(entry.target.id);}}
-    for(const [entry,oldMode] of changed)if(next.targets.get(entry.target.id)===entry)entry.mode=oldMode;
     throw error;
   }
-}
-const modeFor=(next,id)=>next.targets.get(id)?.mode;
-function sampleSession(next){
-  if(!next||next.mode==='tap'&&!(next.health?.rms>.0003))return silentSpeech();
-  return next.speech?.sample?.()||silentSpeech();
 }
 async function pumpTap(url,node,channels,alive,signal){
   const response=await fetch(url,{cache:'no-store',signal});
@@ -408,30 +285,26 @@ async function startTap(options,token){
   if(!opened?.ok)throw Error(opened?.error||'Start a song in Spotify, Music, or your browser first.');
   let next={mode:'tap',owner:'app',generation:'tap:'+token,targets:new Map(),abort:new AbortController(),
     pid:options.pid,tapToken:opened.token,label:opened.source||'audio',player:opened.player||null,health:{buffered:0,rms:0,peak:0,receivedFrames:0},
-    voice:{},heard:clock(),token};
+    heard:clock(),token};
   session=next;
   try{
     const context=next.context=new AudioContext({sampleRate:opened.sampleRate});
     await context.resume();check();
-    const speech=next.speech=new SpeechOutput(context,{analysisOnly:true,onError:m=>console.warn('[sing]',m)});
-    if(!await speech.ready)throw Error('The lip-sync model could not load.');check();
     await context.audioWorklet.addModule('/tap-source-worklet.js');check();
     const tap=new AudioWorkletNode(context,'tap-source',{numberOfInputs:0,numberOfOutputs:1,
       outputChannelCount:[opened.channels],processorOptions:{channels:opened.channels}});
     tap.port.onmessage=event=>{if(event.data?.type==='health')Object.assign(next.health,event.data);};
+    // Analysis only: the graph ends in a silent sink so the tap keeps flowing.
     const sink=context.createGain();sink.gain.value=0;tap.connect(sink);sink.connect(context.destination);
-    const recognised=await vocalChain(context,tap,{gate:0});check();
-    next.vocal=await createVocalDetector(context,tap,{enhancedSource:recognised,signal:next.abort.signal,onState:data=>Object.assign(next.voice,data)});check();
-    recognised.connect(speech.input);speech.monitor=false;speech.updateVolume();steadyMouth(speech,()=>next.vocal.allowed());
     next.beats=new BeatClock(context,tap);
     void pumpTap(opened.url,tap,opened.channels,()=>session===next,next.abort.signal)
-      .catch(error=>{if(error.name!=='AbortError')console.warn('[sing] stream ended:',error.message);})
+      .catch(error=>{if(error.name!=='AbortError')console.warn('[dance] stream ended:',error.message);})
       .finally(()=>{if(session===next)teardown();});
     // A buffer containing zero PCM is not evidence of audible music.
     const deadline=clock()+5;
     while(clock()<deadline){check();if(session!==next)throw Error('The music audio stream stopped.');if(next.health.peak>.0005)break;await wait(50);}
     if(!(next.health.peak>.0005))throw Error('No sound is reaching the avatar. Start the music and check macOS audio capture permission.');
-    check();await addTargets(next,targets,options.mode||'sing',()=>token===revision);check();
+    check();await addTargets(next,targets,()=>token===revision);check();
     let checking=false;
     next.watchdog=setInterval(async()=>{
       if(session!==next||checking)return;checking=true;
@@ -448,19 +321,19 @@ async function startTap(options,token){
 }
 function status(){
   if(!session)return null;
-  return {mode:session.mode,generation:session.generation,source:session.label||null,voice:session.voice||null,
+  return {mode:'dance',generation:session.generation,source:session.label||null,
     tempo:session.beats?.period?Math.round(60/session.beats.period):null,
     tempoConfidence:session.beats?.confidence?+session.beats.confidence.toFixed(1):null,
     clip:[...session.targets.values()][0]?.target.avatar.motion.active?.id||null,health:session.health||null,
-    targets:[...session.targets.values()].map(x=>({id:x.target.id,mode:x.mode}))};
+    targets:[...session.targets.values()].map(x=>({id:x.target.id,mode:'dance'}))};
 }
 async function start(options={}){
   const targets=options.targets||targetsFor(options.character);
   const token=++revision;pending=true;pendingTargets=targets.map(t=>t.id);
   const job=transition.catch(()=>{}).then(async()=>{
     if(token!==revision)throw cancelled();
-    if(session?.mode==='tap'&&(!options.player||options.player===session.player)&&(options.pid===undefined||options.pid===session.pid)){
-      const next=session;await addTargets(next,options.targets||targetsFor(options.character),options.mode||'sing',()=>token===revision);
+    if(session&&(!options.player||options.player===session.player)&&(options.pid===undefined||options.pid===session.pid)){
+      const next=session;await addTargets(next,options.targets||targetsFor(options.character),()=>token===revision);
       if(token!==revision||session!==next)throw cancelled();return status();
     }
     teardown();return startTap(options,token);
@@ -472,52 +345,22 @@ window.gla_sing=status;
 window.gla_sing_pending=pendingFor;
 window.gla_sing_along=start;
 window.gla_sing_stop=stop;
+// A dancing character reports a still mouth; anyone else reports nothing.
 window.gla_sing_sample=character=>{
   if(!session)return null;
   const entry=session.targets.get(character)||[...session.targets.values()].find(x=>x.target.name?.toLowerCase()===String(character).toLowerCase());
-  return entry?.mode==='sing'?sampleSession(session):entry?silentSpeech():null;
+  return entry?silentSpeech():null;
 };
 window.gla_sing_command=async(action,args={},isCancelled=()=>false)=>{
   const targets=targetsFor(args.character);
   if(isCancelled())throw cancelled();
-  if(action==='stop_singing'){stop(args.character);return {ok:true,character:args.character,stopped:true};}
-  const mode=action==='dance_along'?'dance':'sing';
-  const result=await start({mode,targets,player:args.player});
+  if(action==='stop_dancing'){stop(args.character);return {ok:true,character:args.character,stopped:true};}
+  if(action!=='dance_along')throw Error('Unknown music control.');
+  const result=await start({targets,player:args.player});
   if(isCancelled()){stop(args.character);throw cancelled();}
   const playing=await window.gla.tap.playing(args.player).catch(()=>null);
-  return {ok:true,character:args.character,mode,source:result.source,listeningTo:result.source,track:playing?.playing?playing.title:null,artist:playing?.playing?playing.artist:null,tempo:result.tempo};
+  return {ok:true,character:args.character,mode:'dance',source:result.source,listeningTo:result.source,track:playing?.playing?playing.title:null,artist:playing?.playing?playing.artist:null,tempo:result.tempo};
 };
 window.gla_now_playing=()=>window.gla?.tap?.playing();
 window.gla_players=()=>window.gla?.tap?.list();
 addEventListener('pagehide',()=>stop());
-
-// Retain the developer's optional local sync source. It never owns live voice.
-async function tick(){
-  if(pending||session?.owner==='app'||!window.gla_sing_targets)return;
-  let state;try{state=await(await fetch(SYNC+'/state',{cache:'no-store'})).json();}catch{return;}
-  if(session&&(state.mode==='off'||state.generation!==session.generation))teardown();
-  if(state.mode==='off'||failed===state.generation)return;
-  if(!session){
-    const token=++revision;pending=true;
-    const next={mode:state.mode,owner:'sync',generation:state.generation,targets:new Map()};session=next;
-    try{
-      const targets=targetsFor();
-      if(state.mode==='local'){
-        const context=next.context=new AudioContext();await context.resume();
-        const speech=next.speech=new SpeechOutput(context);await speech.ready;
-        const bytes=await(await fetch(SYNC+state.audio)).arrayBuffer();const buffer=await context.decodeAudioData(bytes);
-        next.source=await buildLocal(context,buffer,speech,state.vocals);next.beats=new BeatClock(context,next.source);
-        next.source.onended=()=>{if(session===next)teardown();};next.source.start();
-      }else if(state.mode==='external'){
-        const frames=(await(await fetch(SYNC+state.track)).json()).frames;
-        next.speech=new ScriptedSpeech(frames);next.beats=new FixedBeats(state.bpm||100);
-      }else throw Error('Unknown sync source.');
-      if(token!==revision)throw cancelled();
-      if(state.motion)await addTargets(next,targets);else for(const target of targets)next.targets.set(target.id,{target,mode:'sing'});
-    }catch(error){failed=state.generation;if(session===next)teardown();console.warn('[sing]',error.message);}
-    finally{if(token===revision)pending=false;}
-  }
-  if(session?.mode==='external'&&Number.isFinite(state.position))session.speech.anchorTo(state.position);
-}
-setInterval(tick,500);
-setInterval(()=>{if(session?.mode==='external')session.speech.pump();},50);

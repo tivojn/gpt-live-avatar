@@ -50,7 +50,7 @@
     </div>
     <p class="state" id="keyState">Checking…</p>
     <div id="managedBackend">
-    <label for="backend">Backend model for delegated reasoning</label>
+    <label for="backend">Model for harder questions</label>
     <div class="row"><select id="backend"></select><button id="refreshModels" type="button">Refresh list</button></div>
     <p class="note">GPT-Live-1 handles the conversation itself and hands harder questions to this Responses model. GPT-5.6 Luna is the default.</p>
     </div>
@@ -100,7 +100,7 @@
 
   <section>
     <h2>Instinct · TypeSafe Jev <span class="note">(optional)</span></h2>
-    <p class="note">Gives your avatar reflexes. Jev is a System One model: it does not talk, it answers small typed questions about the conversation in about a third of a second. With a key, she starts a motion while she is still promising it, picks the gesture that fits what she said, and her face responds while you are still speaking. Without a key, or whenever Jev is slow or unsure, the built-in rules decide as before.</p>
+    <p class="note">Optional reflexes. Jev is a small, fast model that never speaks; it answers yes/no questions about the conversation in about a third of a second. With a key, your avatar starts a motion as she promises it and her face reacts while you are still talking. Without a key, or whenever Jev is slow or unsure, the built-in rules decide as before.</p>
     <label for="instinctKey">TypeSafe API key</label>
     <div class="row"><input id="instinctKey" type="password" autocomplete="off" placeholder="From console.typesafe.ai (stored encrypted)"><button id="saveInstinctKey" type="button">Validate &amp; save</button><button id="clearInstinctKey" type="button">Remove</button><button id="testInstinct" type="button">Test</button></div>
     <p class="state" id="instinctState" aria-live="polite"></p>
@@ -132,13 +132,13 @@
       <label for="runtimeAccess">When the agent requests approval</label><select id="runtimeAccess"><option value="workspace">Ask me</option><option value="full">Allow for this task</option></select>
       <p class="note">Saved separately for this provider. The agent’s own permissions still apply. This is not a sandbox or Codex automatic review. Allows are per request, never saved to the agent’s permanent allowlist. Changing the connection stops current tasks.</p>
     </div>
-    <label>Agent starting folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
+    <label for="agentFolder">Agent starting folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
     <p class="note">This is a starting location, not a file-access boundary. File access, browser use and computer control follow the selected agent’s own setup and permissions. Configure browser/computer connections in that agent.</p>
   </section>
 
   <section>
     <h2>Agents for each character</h2>
-    <p class="note">Choose a separate OpenClaw agent, Hermes profile or EnConvo agent for each avatar. The selected reasoning/action engine above determines which column is used. These connections keep the agent’s own account, skills and tools; the avatar keeps her voice and appearance.</p>
+    <p class="note">Give each avatar her own OpenClaw agent, Hermes profile or EnConvo agent. The engine chosen above decides which column is used. The agent keeps its own account, skills and tools; the avatar keeps her voice and look.</p>
     <button id="refreshAgents">Refresh installed agents</button>
     <p id="agentInventoryState" class="state" role="status"></p>
     <div style="overflow:auto"><table style="width:100%;text-align:left;border-spacing:6px"><thead><tr><th>Character</th><th>OpenClaw agent</th><th>Hermes profile</th><th>EnConvo agent</th></tr></thead><tbody id="agentBindings"></tbody></table></div>
@@ -155,11 +155,11 @@
 
   <section>
     <h2>Avatar</h2>
-    <div class="row"><select id="avatarSelect"></select><button id="refreshAssets" type="button" title="Check the cloud catalogue for new avatars and packages">Check cloud</button></div>
+    <div class="row"><select id="avatarSelect" aria-label="Avatar"></select><button id="refreshAssets" type="button" title="Check the cloud catalogue for new avatars and packages">Check cloud</button></div>
     <p class="state" id="avatarState">Checking…</p>
     <div class="tiers" id="tiers"></div>
     <details><summary style="cursor:pointer;color:var(--dim);font-size:12px">Advanced: use an OpenClam avatar package folder</summary>
-      <div class="row" style="margin-top:6px"><input id="avatarDir" type="text" readonly placeholder="Using the built-in package"><button id="chooseAvatar" type="button">Choose folder…</button><button id="useBundled" type="button">Use built-in</button></div>
+      <div class="row" style="margin-top:6px"><input id="avatarDir" type="text" readonly aria-label="Avatar package folder" placeholder="Using the built-in package"><button id="chooseAvatar" type="button">Choose folder…</button><button id="useBundled" type="button">Use built-in</button></div>
     </details>
     <label>Rendering quality</label>
     <div class="quality" id="quality">

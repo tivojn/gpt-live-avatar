@@ -17,7 +17,7 @@ app.whenReady().then(async()=>{try{
  let mouseDown=false;
  const input=e=>{if(e.type==='mouseDown')mouseDown=true;if(e.type==='mouseUp')mouseDown=false;const b=win.getBounds();win.webContents.sendInputEvent({...e,globalX:b.x+e.x,globalY:b.y+e.y,modifiers:[...(e.modifiers||[]),...(mouseDown?['leftButtonDown']:[])]});};
  const js=code=>win.webContents.executeJavaScript(`(async()=>{${code}})()`);
- const loaded=()=>until(()=>js("return Boolean(window.gla_avatar?.model&&gla_avatar?.motion?.clips.size===62&&!document.querySelector('#status').textContent.startsWith('Loading'))"),'load');
+ const loaded=()=>until(()=>js("return Boolean(window.gla_avatar?.model&&gla_avatar?.motion?.clips.size>=62&&!document.querySelector('#status').textContent.startsWith('Loading'))"),'load');
  const snapshot=async name=>{await wait(200);fs.writeFileSync(path.join(output,name+'.png'),(await win.webContents.capturePage()).toPNG());};
  const choose=async action=>{win.webContents.send('gla:menu-action',action);await wait(850);};
  const hit=()=>js("const c=document.querySelector('#stage'),d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;for(let y=Math.round(c.height*.4);y<c.height-15;y+=4)for(let x=15;x<c.width-15;x+=4)if([[0,0],[-12,0],[12,0],[0,-12],[0,12]].every(([dx,dy])=>d[((y+dy)*c.width+x+dx)*4+3]>200))return {x:Math.round(x/c.width*innerWidth),y:Math.round(y/c.height*innerHeight)};");

@@ -12,7 +12,7 @@ export function installShow({api,voice,actors,catalogue,hooks}){
  let phase='planning',chat=[],script=null,resolved=new Map(),pipeline={available:false,problems:[]},player=null,humanWait=null,countdown=0,lastShow=null,busy=false,liveDraft=null,starting=false,generation=0;
  // Notes from the audience mid-show ("do it in an Irish accent") reach every later line; the show holds while the Director acknowledges one.
 let castNotes={};
- let notes=[],resumeTimer=0,phaseTimer=0,phaseStarted=0,connecting=false,recorder=null,savedRecording='',saving=false;
+ let notes=[],resumeTimer=0,phaseTimer=0,phaseStarted=0,connecting=false,recorder=null,recordingSink=null,savedRecording='',saving=false,savePromise=Promise.resolve();
  const PERFORMING='The show is being performed; the human may read lines aloud or call out notes for the cast. Stay silent unless the app opens the floor.';
  const director=new DirectorVoice(api,{
   connected:()=>{setStatus(phase==='performing'?'The Director is listening quietly. Call out a note for the cast at any time.':phase==='finished'?'The Director is listening. Say what to change, or “play it again”.':'The Director is listening. Say what show you would like.');refresh();},
@@ -40,10 +40,18 @@ let castNotes={};
   if(next==='writing'||next==='preparing'){phaseStarted=performance.now();phaseTimer=setInterval(()=>{$('#showPhase').textContent=(PHASE_LABEL[phase]||phase)+' · '+mmss(performance.now()-phaseStarted);},1000);}
   refresh();};
  function pushChat(role,text){chat.push({role,text,at:Date.now()});chat=chat.slice(-80);renderChat();}
+ // The chat is a live region: only new lines are added to it and the running
+ // transcript is a single node that changes, so a screen reader hears each
+ // line once rather than the whole history on every partial.
+ const rendered=[];let draftNode=null;
  function renderChat(){
-  const box=$('#showChat');box.replaceChildren();
-  for(const line of chat.slice(-30)){const p=document.createElement('p');p.className=line.role;const who=document.createElement('span');who.className='who';who.textContent=(line.role==='director'?'Director':hooks.human().name)+': ';p.append(who,document.createTextNode(line.text));box.append(p);}
-  if(liveDraft?.text){const p=document.createElement('p');p.className='live '+liveDraft.role;p.textContent=(liveDraft.role==='director'?'Director':hooks.human().name)+' … '+liveDraft.text;box.append(p);}
+  const box=$('#showChat'),lines=chat.slice(-30);
+  const lineNode=line=>{const p=document.createElement('p');p.className=line.role;const who=document.createElement('span');who.className='who';who.textContent=(line.role==='director'?'Director':hooks.human().name)+': ';p.append(who,document.createTextNode(line.text));return p;};
+  while(rendered.length&&rendered[0].line!==lines[0]){rendered.shift().node.remove();}
+  if(rendered.some((r,i)=>r.line!==lines[i])){for(const r of rendered)r.node.remove();rendered.length=0;}
+  for(const line of lines.slice(rendered.length)){const node=lineNode(line);rendered.push({line,node});box.insertBefore(node,draftNode);}
+  if(liveDraft?.text){if(!draftNode){draftNode=document.createElement('p');box.append(draftNode);}draftNode.className='live '+liveDraft.role;const text=(liveDraft.role==='director'?'Director':hooks.human().name)+' … '+liveDraft.text;if(draftNode.textContent!==text)draftNode.textContent=text;}
+  else if(draftNode){draftNode.remove();draftNode=null;}
   box.scrollTop=box.scrollHeight;
  }
  const cast=()=>hooks.selected().map(slug=>actors.get(slug)).filter(Boolean);
@@ -58,6 +66,7 @@ let castNotes={};
  function refresh(){
   const ready=cast().length>=1&&!hooks.loading(),live=director.running,hasKey=Boolean(catalogue()?.hasKey);
   // Characters take a while to appear; say so rather than leave a dead button.
+  $('#showPhase').classList.toggle('loading',hooks.loading());$('#showStatus').classList.toggle('loading',hooks.loading());
   if(hooks.loading()){$('#showPhase').textContent='loading characters…';if(!/Loading the characters/.test($('#showStatus').textContent))setStatus('Loading the characters onto the stage… the Director is ready as soon as they appear.');}
   else if(/Loading the characters/.test($('#showStatus').textContent)){$('#showPhase').textContent=PHASE_LABEL[phase]||phase;setStatus('Ready. Tell the Director what show you want, by voice or text.');}
   const mic=$('#showMic');mic.disabled=!hasKey||hooks.loading()||connecting;mic.classList.toggle('live',live);mic.classList.toggle('muted',live&&director.muted);mic.classList.toggle('connecting',connecting);
@@ -71,6 +80,10 @@ let castNotes={};
   // The same controls live in the panel header, reachable when the panel is folded or compact.
   const showing=phase==='performing'&&Boolean(player);$('#headPause').hidden=!showing;$('#headPause').textContent=player?.paused?'Resume':'Pause';$('#headStop').hidden=!showing;
   $('#showRecord').disabled=!recordingType()||phase==='performing';$('#showReveal').hidden=!savedRecording;
+  // The header's record light: grey when off, red when armed for the next show, breathing while it records.
+  const rec=$('#headRecord'),recording=Boolean(recorder?.active),armed=$('#showRecord').checked;rec.disabled=!recordingType()||saving;
+  rec.classList.toggle('on',recording);rec.classList.toggle('armed',!recording&&armed);rec.textContent=recording?'Recording':saving?'Saving…':'Record';
+  rec.title=recording?'Stop recording now and save the video':showing?'Start recording the rest of the show':armed?'Recording is on for the next show · click to turn it off':'Record the next show to MP4';rec.setAttribute('aria-pressed',String(recording||armed));
   for(const a of actors.values())a.el.classList.toggle('standby',Boolean(hooks.human().enabled&&a.slug===understudySlug()&&['ready','performing','finished'].includes(phase)));
   hooks.controls();
  }
@@ -198,7 +211,9 @@ let castNotes={};
    // voice's own transcript trails the audio by a second and only ever confirms it.
    speak:async(cue,slug,context=null)=>{const a=actorOf(slug);if(!a)throw Error('That character left the stage.');a.el.classList.remove('standby');hooks.setBubble(a,cue.text);const heard=await voice.speak(cue.text,hooks.voiceFor(slug),text=>{if(text.length>=cue.text.length)hooks.setBubble(a,text);},cue.delivery||'',noted(context,slug));await pause(350);return heard;},
    prepare:(cue,slug,context=null)=>{if(!actorOf(slug))return;voice.prepare?.(cue?.text,hooks.voiceFor(slug),cue?.delivery||'',noted(context,slug));},
-   paused:held=>{for(const a of actors.values())a.el.classList.toggle('held',held);if(held)recorder?.hold();refresh();},
+   paused:held=>{for(const a of actors.values())a.el.classList.toggle('held',held);refresh();},
+   // The recording stops only once the hold takes effect, after the line under way, so no line is cut short in the file.
+   held:()=>recorder?.hold(),
    clear:slug=>{const a=actorOf(slug);if(!a)return;a.showMood=null;hooks.setBubble(a,'');a.el.classList.remove('speaking');},
    human:(cue,{timeoutMs})=>waitForHuman(cue,timeoutMs),
    understudy:async(cue,slug,reason)=>{const a=actorOf(slug);hidePrompter();setStatus(`${a?.info.name||'The standby'} steps in for ${script.userRole?.role||'you'}${reason==='takeover'?' for the rest of the show':''}.`);hooks.appendLine({info:{name:'Director'}},`${a?.info.name||'The standby'} takes the line for ${script.userRole?.role||hooks.human().name}.`);await pause(500);},
@@ -224,21 +239,26 @@ let castNotes={};
   starting=true;try{hooks.beginShow();}finally{starting=false;}const run=++generation;notes=[];castNotes={};setPhase('performing');director.closeFloor(PERFORMING);
   hooks.compact(true);hooks.minimize(true);setStatus(`“${script.title}” — curtain up.`);hooks.appendLine({info:{name:'Director'}},`“${script.title}” begins.`);
   player=new ShowPlayer(stage());savedRecording='';refresh(); // the Pause button exists only once there is a player
-  if($('#showRecord').checked&&recordingType()){try{recorder=new ShowRecorder();recorder.start();hooks.onFrame(recordFrame,true);hooks.onAudio(recordAudio,true);}catch(e){recorder=null;setStatus('Recording unavailable: '+e.message,true);}}
+  if($('#showRecord').checked&&recordingType())startRecording();
   let result;try{result=await player.run(script,{timeoutMs:script.userRole?25000:0,resolveMotion:id=>resolved.has(id)?resolved.get(id):id});}catch(e){setStatus(e.message,true);}
   if(run!==generation)return;
-  clearTimeout(resumeTimer);resumeTimer=0;for(const a of actors.values())a.el.classList.remove('held');
-  const finished=Boolean(result?.finished);player=null;hidePrompter();hooks.setFloor('','');void finishRecording(finished?'finished':'stopped');for(const a of actors.values()){a.el.classList.remove('speaking');hooks.setBubble(a,'');}
+  clearTimeout(resumeTimer);resumeTimer=0;endSteer();for(const a of actors.values())a.el.classList.remove('held');
+  const finished=Boolean(result?.finished);player=null;hidePrompter();hooks.setFloor('','');savePromise=finishRecording(finished?'finished':'stopped');for(const a of actors.values()){a.el.classList.remove('speaking');hooks.setBubble(a,'');}
   lastShow=Date.now();setPhase('finished');hooks.endShow();hooks.minimize(false);
-  const passes=result?.passes||0;setStatus(finished?`Curtain call. ${passes?`The standby covered ${passes} line${passes>1?'s':''}. `:''}Tell the Director what to change, or play it again.`:'The show was stopped.');
+  const passes=result?.passes||0;setStatus(finished?`Curtain call. ${passes?`The standby covered ${passes} line${passes>1?'s':''}. `:''}Tell the Director what to change, or play it again.`:result?.aborted||'The show was stopped.',Boolean(result?.aborted));
   if(director.running)director.openFloor(finished?'The performance has just ended. Ask the user in one sentence how they liked it and whether they want changes.':'');
   else if(finished)pushChat('director',`That is the end of “${script.title}”. How was it? Tell me what to change, or say “play it again”.`);
  }
  function halt(){
-  if(starting)return;generation++;clearTimeout(countdown);countdown=0;clearTimeout(resumeTimer);resumeTimer=0;endSteer();if(player){const p=player;player=null;p.stop();void finishRecording('stopped');}hidePrompter();$('#showProgress').hidden=true;
+  if(starting)return;generation++;clearTimeout(countdown);countdown=0;clearTimeout(resumeTimer);resumeTimer=0;endSteer();if(player){const p=player;player=null;p.stop();savePromise=finishRecording('stopped');}hidePrompter();$('#showProgress').hidden=true;
   for(const a of actors.values()){a.showMood=null;a.el.classList.remove('speaking','held');}
-  const was=phase;if(busy){busy=false;void api.cancel({scope:'playwright'});setStatus('Preparation cancelled.');}if(was==='performing')hooks.minimize(false);
-  if(was!=='planning'&&was!=='finished'){setPhase(script?'finished':'planning');if(was==='performing')lastShow=Date.now();if(director.running)director.openFloor(was==='performing'?'The show was stopped by the user. Ask in one sentence what they would like to do next.':'');}
+  const was=phase;
+  // Stop cancels whatever is running: the Playwright, the Meshy jobs, or a Director answer.
+  if(busy){busy=false;if(was==='writing'||was==='preparing'){void api.cancel({scope:was==='preparing'?'generate':'playwright'});setStatus('Preparation cancelled.');}else{void api.cancel({scope:'director'});setStatus('Cancelled.');}}
+  if(was==='performing')hooks.minimize(false);
+  // Stop during the countdown keeps the script ready to start by hand.
+  if(was==='ready'){setStatus(`Countdown stopped. “${script?.title||'The show'}” is ready: press “Start the show” whenever you like.`);}
+  else if(was!=='planning'&&was!=='finished'){setPhase(script?'finished':'planning');if(was==='performing')lastShow=Date.now();if(director.running)director.openFloor(was==='performing'?'The show was stopped by the user. Ask in one sentence what they would like to do next.':'');}
   refresh();
  }
  // ------------------------------------------------------------ Live steering
@@ -283,39 +303,65 @@ let castNotes={};
   else setStatus('No note heard. Continuing.');
   setTimeout(()=>resumeShow('note'),acknowledgement?900:100);
  }
- function endSteer(){const s=steerLive;steerLive=null;if(!s)return;clearTimeout(s.timer);s.voice.stop();refreshSteer(s.slug);}
+ // Once the note is taken (or dropped) her bubble closes; it must not linger over the stage.
+ function endSteer(){const s=steerLive;steerLive=null;if(!s)return;clearTimeout(s.timer);s.voice.stop();hooks.noteDone?.(s.slug);refreshSteer(s.slug);}
+ // The director changed their mind (closed the bubble): drop the note and carry on.
+ function cancelSteer(slug){if(!steerLive||slug&&steerLive.slug!==slug)return false;endSteer();setStatus('Note cancelled. Continuing.');resumeShow('note');return true;}
  function refreshSteer(slug){hooks.refreshActor?.(slug);}
  // ------------------------------------------------------------ Recording
- const roleOf=slug=>slug==='_human'||slug==='user'?`${script?.userRole?.role||'You'} (${hooks.human().name})`:(script?.cast.find(c=>c.slug===slug)?.role||actors.get(slug)?.info.name||'');
+ // Captions name the part, not its description: “Tia, Keeper of the Regalia — anxious, dramatic…” becomes “Tia, Keeper of the Regalia”.
+ const shortRole=role=>{const s=String(role||'').split(/\s[—–-]\s|[:;(]/)[0].trim();return s.length>48?s.slice(0,47).trimEnd()+'…':s;};
+ const roleOf=slug=>slug==='_human'||slug==='user'?`${shortRole(script?.userRole?.role)||'You'} (${hooks.human().name})`:(shortRole(script?.cast.find(c=>c.slug===slug)?.role)||actors.get(slug)?.info.name||'');
  function recordFrame(now,{actors:cast,speaker,viewport}){
   if(!recorder)return;
   const who=speaker,text=who==='_human'?(humanWait?$('#prompterText').textContent:''):(cast.get(who)?.message||'');
   recorder.frame(cast,{speaker:who,caption:text?{who:roleOf(who),text}:null,viewport});
  }
  function recordAudio(stream,output){recorder?.addAudio(stream,output);}
+ // The file is opened on disk as the show starts and every encoded chunk is
+ // appended in order as it arrives, so the recording never sits in memory.
+ function startRecording(){
+  const sink={id:'',queue:Promise.resolve(),failed:''};
+  const append=chunk=>{sink.queue=sink.queue.then(async()=>{if(sink.failed)return;const r=await api.recordingChunk({id:sink.id,bytes:await chunk.arrayBuffer()});if(!r.ok)throw Error(r.error);}).catch(e=>{sink.failed=e.message;});};
+  try{recorder=new ShowRecorder({onChunk:append});recorder.start();}catch(e){recorder=null;setStatus('Recording unavailable: '+e.message,true);return;}
+  recordingSink=sink;sink.queue=api.recordingOpen({title:script?.title||'Avatar Show',ext:recorder.type.ext}).then(r=>{if(!r.ok)throw Error(r.error);sink.id=r.id;}).catch(e=>{sink.failed=e.message;});
+  hooks.onFrame(recordFrame,true);hooks.onAudio(recordAudio,true);
+  // A Director already on the line is part of the show too.
+  if(director.running&&director.stream)recorder.addAudio(director.stream,director.output);
+  refresh();
+ }
+ // The header light: mid-show it starts or stops the recording itself; otherwise it arms the next show.
+ function toggleRecording(){
+  if(phase==='performing'&&player){if(recorder){savePromise=finishRecording('stopped');}else if(recordingType())startRecording();refresh();return;}
+  const box=$('#showRecord');box.checked=!box.checked;box.onchange();refresh();
+ }
  // Finished, stopped or interrupted: whatever was performed is saved.
  async function finishRecording(reason){
-  const active=recorder;if(!active||saving)return;saving=true;recorder=null;hooks.onFrame(recordFrame,false);hooks.onAudio(recordAudio,false);
+  const active=recorder,sink=recordingSink;if(!active)return;saving=true;recorder=null;recordingSink=null;hooks.onFrame(recordFrame,false);hooks.onAudio(recordAudio,false);
   try{
-   const result=await active.stop();if(!result||!result.blob.size){setStatus('Nothing was recorded.',true);return;}
+   const result=await active.stop();await sink.queue;
+   if(sink.failed)throw Error(sink.failed);
+   if(!result?.bytes){if(sink.id)await api.recordingClose({id:sink.id,keep:false});setStatus('Nothing was recorded.',true);return;}
    const before=$('#showStatus').textContent;setStatus(`${before} Saving the recording (${result.seconds} s)…`.trim());
-   const saved=await api.saveRecording({title:script?.title||'Avatar Show',ext:result.ext,bytes:await result.blob.arrayBuffer()});
+   const saved=await api.recordingClose({id:sink.id,keep:true});
    if(!saved.ok)throw Error(saved.error);
    savedRecording=saved.path;pushChat('director',`Recording saved: ${saved.path.split('/').pop()}`);
    setStatus(`${$('#showStatus').textContent.replace(/\s*Saving the recording.*$/,'').trim()} Recording saved to Movies › GPT-Live Avatar Shows (${result.seconds} s, ${(saved.bytes/1048576).toFixed(1)} MB).`.trim()); // keep the curtain-call message
-  }catch(e){setStatus('The recording could not be saved: '+e.message,true);}
+  }catch(e){if(sink?.id)void api.recordingClose({id:sink.id,keep:false});setStatus('The recording could not be saved: '+e.message,true);}
   finally{saving=false;refresh();}
  }
  // ------------------------------------------------------------ Prompter
  function waitForHuman(cue,timeoutMs){
   return new Promise(resolve=>{
    const role=script.userRole?.role||'Your line';$('#prompterRole').textContent=`${role} — your line`;$('#prompterText').textContent=cue.text;$('#prompterHeard').textContent='';$('#prompterFill').style.width='100%';
-   $('#prompterHint').textContent=director.running&&!director.muted?'Read the line aloud; the Director’s microphone is listening. Say “I’ll pass” or click it and the standby steps in.':'The Director’s microphone is off: read the line, then click “I said it”, or type it below and send. “I’ll pass” lets the standby speak it.';
+   $('#prompterHint').textContent=director.running&&!director.muted?'Read the line aloud; the Director’s microphone is listening. Say “I’ll pass” or click it and the standby steps in.':'The Director’s microphone is off: read the line, then click “I said it”, or type it in the Director box (unfold the panel) and send. “I’ll pass” lets the standby speak it.';
    $('#prompter').hidden=false;hooks.setIgnoreMouse(false);
-   const started=performance.now(),limit=timeoutMs>0?timeoutMs:0,ceiling=limit?started+Math.max(limit*2.4,60000):0;let deadline=limit?started+limit:0,finals=[],partial='',settleTimer=0,best=0;
-   const tick=setInterval(()=>{const now=performance.now();if(deadline){const left=Math.max(0,deadline-now);$('#prompterFill').style.width=Math.min(100,left/limit*100)+'%';$('#prompterCount').textContent=Math.ceil(left/1000)+' s';if(left<=0)finish({result:'pass',auto:true});}else $('#prompterCount').textContent='';},200);
+   const started=performance.now(),limit=timeoutMs>0?timeoutMs:0;let ceiling=limit?started+Math.max(limit*2.4,60000):0,deadline=limit?started+limit:0,finals=[],partial='',settleTimer=0,best=0;
+   const tick=setInterval(()=>{const now=performance.now();
+    if(player?.paused){if(deadline){deadline+=200;ceiling+=200;}return;} // a paused show does not run your clock down
+    if(deadline){const left=Math.max(0,deadline-now);$('#prompterFill').style.width=Math.min(100,left/limit*100)+'%';$('#prompterCount').textContent=Math.ceil(left/1000)+' s';if(left<=0)finish({result:'pass',auto:true});}else $('#prompterCount').textContent='';},200);
    const extend=ms=>{if(deadline)deadline=Math.min(ceiling,Math.max(deadline,performance.now()+ms));};
-   const finish=value=>{if(humanWait?.finish!==finish)return;clearInterval(tick);clearTimeout(settleTimer);humanWait=null;resolve(value);};
+   const finish=value=>{clearInterval(tick);if(humanWait?.finish!==finish)return;clearTimeout(settleTimer);humanWait=null;resolve(value);};
    humanWait={cue,finish,heard:(spoken,final)=>{
     const cueKind=userCue(spoken,'performing');
     if(cueKind==='pass'||cueKind==='takeover'){finish({result:cueKind});return;}
@@ -326,7 +372,7 @@ let castNotes={};
      if(said<.3&&(words>=4||/[\u3400-\u9fff]{6,}/.test(spoken))&&!finals.length){$('#prompterHeard').textContent='Noted for the cast: '+spoken;notes=[...notes,spoken.slice(0,200)].slice(-4);voice.dropWarm?.();extend(15000);
       if(director.running){clearTimeout(resumeTimer);director.openFloor(`The human, who is waiting to read their own line, called out a note for the cast: ${JSON.stringify(spoken.slice(0,200))}. In one short sentence acknowledge it, then remind them their line is up. Do not read their line.`);resumeTimer=setTimeout(()=>resumeShow('timeout'),12000);}
       return;}
-     finals.push(spoken);}else partial=spoken;
+     finals.push(spoken);}else{partial=spoken;clearTimeout(settleTimer);} // still talking: the line is not over
     const text=[...finals,partial].filter(Boolean).join(' ');$('#prompterHeard').textContent='Heard: '+text;
     const coverage=lineCoverage(text,cue.text);if(coverage>best){best=coverage;extend(12000);} // progress earns time; chatter does not
     if(final){clearTimeout(settleTimer);settleTimer=setTimeout(()=>finish({result:'spoken',text:finals.join(' ')}),coverage>=.6?900:2600);}
@@ -335,7 +381,8 @@ let castNotes={};
  }
  function heard(text,final){humanWait?.heard(text,final);}
  function finishHuman(value){const wait=humanWait;if(!wait)return;wait.finish(value);}
- function hidePrompter(){$('#prompter').hidden=true;$('#prompterCount').textContent='';}
+ // Hiding the prompter ends any pending wait, so a stopped show never keeps a clock running or swallows the next thing typed.
+ function hidePrompter(){humanWait?.finish({result:'stop'});$('#prompter').hidden=true;$('#prompterCount').textContent='';}
  // ------------------------------------------------------------ Wiring
  function fillVoices(){const select=$('#showVoice');if(select.options.length)return;const voices=catalogue()?.voices||[];const used=new Set(Object.values(catalogue()?.groupVoices||{}));const preferred=voices.find(v=>v==='stone'&&!used.has(v))||voices.find(v=>!used.has(v))||voices[0];for(const v of voices){const o=document.createElement('option');o.value=v;o.textContent=v[0].toUpperCase()+v.slice(1);o.selected=v===preferred;select.append(o);}}
  $('#showMic').onclick=()=>void toggleMic();$('#showHangup').onclick=()=>hangUp();$('#showSend').onclick=send;$('#showText').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();send();}};
@@ -343,14 +390,15 @@ let castNotes={};
  $('#showPause').onclick=()=>{if(player?.paused)resumeShow('user');else holdShow();};$('#headPause').onclick=()=>$('#showPause').onclick();$('#headStop').onclick=()=>hooks.rest('The show was stopped.');
  $('#showReveal').onclick=()=>{if(savedRecording)void api.reveal({path:savedRecording});};
  try{$('#showRecord').checked=localStorage.getItem('gla-show-record')==='1';}catch{}
- $('#showRecord').onchange=()=>{try{localStorage.setItem('gla-show-record',$('#showRecord').checked?'1':'0');}catch{}};
+ $('#showRecord').onchange=()=>{try{localStorage.setItem('gla-show-record',$('#showRecord').checked?'1':'0');}catch{}refresh();};
+ $('#headRecord').onclick=toggleRecording;
  $('#prompterDone').onclick=()=>finishHuman({result:'spoken',text:''});$('#prompterPass').onclick=()=>finishHuman({result:'pass'});$('#prompterTakeover').onclick=()=>finishHuman({result:'takeover'});
  $('#showVoice').onchange=()=>{if(director.running)setStatus('The new Director voice applies the next time you start the Director.');};
  void api.pipeline().then(r=>{pipeline=r.ok?r.status:{available:false,problems:[r.error]};});
  return {
   get phase(){return phase;},get script(){return script;},get chat(){return chat;},get active(){return phase==='performing';},director,
   ready(){fillVoices();refresh();},
-  get busy(){return busy;},get notes(){return notes;},get castNotes(){return castNotes;},steer,steerVoice,get steering(){return steerLive?{slug:steerLive.slug,state:steerLive.state,session:steerLive.voice}:null;},get held(){return Boolean(player?.paused);},get connecting(){return connecting;},get recording(){return Boolean(recorder?.active);},get savedRecording(){return savedRecording;},hangUp,holdShow,resumeShow,
+  get busy(){return busy;},get notes(){return notes;},get castNotes(){return castNotes;},steer,steerVoice,cancelSteer,get steering(){return steerLive?{slug:steerLive.slug,state:steerLive.state,session:steerLive.voice}:null;},get held(){return Boolean(player?.paused);},get connecting(){return connecting;},get recording(){return Boolean(recorder?.active);},get saving(){return saving;},get savedRecording(){return savedRecording;},settle:()=>savePromise,hangUp,holdShow,resumeShow,
   refresh,halt,
   expression(actor,now){if(phase!=='performing')return {};const mood=actor.avatar.motion?.expression(now)||{};return actor.showMood?{...mood,...Object.fromEntries(Object.entries(actor.showMood).map(([k,v])=>[k,Math.max(v,mood[k]||0)]))}:mood;},
   leave(){halt();director.stop();hooks.bill?.(null);},

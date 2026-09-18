@@ -62,13 +62,21 @@ Say **stop** or press **Stop** at any time; the Director keeps the script.
 
 ## Recording
 
-Tick **Record to MP4** before the show starts and the performance is saved
+Tick **Record to MP4** (or click the **Record** light in the panel header,
+which is grey when off, red when armed for the next show and breathes while a
+show records; mid-show it starts or stops the recording) and the performance is saved
 to *Movies › GPT-Live Avatar Shows* as `<title> <date>.mp4` when it finishes,
 is stopped, or is interrupted. The recording is made inside the app: the
 characters are composited from their own canvases onto a stage backdrop at
-1280×720, every voice (the cast and the Director) is mixed in, and captions
-show the speaker's role and line. A held or paused show pauses the recording.
-**Show recording in Finder** reveals the file; nothing leaves the Mac.
+1280×720, every voice (the cast and the Director, including a Director already
+on the line when the curtain rises) is mixed in, and captions show the
+speaker's role and line. The file is written to disk as the show plays, so a
+long show never sits in memory; a second recording in the same minute gets a
+number instead of replacing the first. A held or paused show pauses the
+recording once the hold takes effect, after the line under way, so no line is
+cut short in the file. Closing the window mid-show lets the file finish
+writing first. **Show recording in Finder** reveals the file; nothing leaves
+the Mac.
 
 ## The panel is the window
 

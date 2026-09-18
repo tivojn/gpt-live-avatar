@@ -67,6 +67,8 @@ app.whenReady().then(async()=>{try{
  assert.equal(await js("return document.querySelector('#prompterText').textContent"),'Perhaps under the cushion, Majesty.');assert.match(await js("return document.querySelector('#prompterRole').textContent"),/Pip the Jester/);
  assert.equal((await js('return gla_group.state')).speaker,'_human');assert.equal(await js('return window.spoken.length'),1);assert.equal(await js('return window.spoken[0].voice'),await js("return document.querySelector('[data-voice=tia]').value"));
  assert.equal(await js("return gla_group.actors.get('tia').avatar.motion.active?.id||''"),'accuse-point','the theatre motion plays with the line');
+ // A show line keeps its caption while the gesture plays; an ordinary bubble would hide during a motion.
+ assert.equal(await js("const t=gla_group.actors.get('tia');t.message='Caption check';await new Promise(r=>setTimeout(r,120));const hidden=t.bubble.hidden,active=Boolean(t.avatar.motion.active);t.message='';return !active||!hidden"),true,'captions stay up during a gesture in a show');
  fs.writeFileSync(out+'/prompter.png',(await win.webContents.capturePage()).toPNG());
  // A private note to one character through her own composer: the show is not interrupted, only her later lines carry it.
  await js("const t=gla_group.actors.get('tia');t.askInput.value='Be furious about it';t.askInput.form.requestSubmit();");
@@ -86,6 +88,7 @@ app.whenReady().then(async()=>{try{
  await js("const c=gla_group.show.steering.session.client;c._onEvent(JSON.stringify({type:'session.output_transcript.delta',start_ms:2000,end_ms:2400,delta:'Got it, Cantonese it is.'}));");
  await until(()=>js("return !gla_group.show.steering&&!gla_group.show.held"),'note applied and the show resumes',6000);
  assert.deepEqual(await js('return gla_group.show.castNotes.sarah'),['Say your lines in Cantonese from now on']);assert.equal(await js("return gla_group.actors.get('sarah').message"),'Got it, Cantonese it is.','her acknowledgement is shown');
+ assert.equal(await js("return gla_group.actors.get('sarah').composerOpen"),false,'her composer closes once the note is taken, so the bubble does not linger');
  // The mic is an icon button with a label; no live Director, so no hang-up control.
  assert.equal(await js("return document.querySelector('#showMic svg')!==null&&document.querySelector('#showMic span').textContent"),'Talk to the Director');assert.equal(await js("return document.querySelector('#showHangup').hidden"),true);
  // A real OS-level click on the prompter: the window must not be click-through while the mouse is over it.
@@ -94,6 +97,7 @@ app.whenReady().then(async()=>{try{
  await js('window.voiceDelay=1200');win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...pass});win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pass});
  await until(()=>js('return window.spoken.length>=2'),'standby line');
  assert.equal(await js('return gla_group.show.recording'),true,'recording while performing');
+ assert.equal(await js("const b=document.querySelector('#headRecord');return b.textContent+'|'+b.classList.contains('on')"),'Recording|true','the header light breathes while the show records');
  assert.equal(await js("return !document.querySelector('#headPause').hidden&&!document.querySelector('#headStop').hidden"),true,'header shows Pause and Stop during the show');
  await js("document.querySelector('#headPause').click();");await until(()=>js("return gla_group.show.held&&document.querySelector('#headPause').textContent==='Resume'&&document.querySelector('#showPause').textContent==='Resume'"),'paused from the header');
  await js("document.querySelector('#showPause').click();");await until(()=>js("return !gla_group.show.held&&document.querySelector('#showPause').textContent==='Pause'"),'resumed from the button');
@@ -118,6 +122,7 @@ app.whenReady().then(async()=>{try{
  const saved=await js('return gla_group.show.savedRecording');assert(saved.startsWith(out+'/movies/GPT-Live Avatar Shows/The Lost Crown '),saved);assert.match(saved,/\.mp4$/);
  const head=fs.readFileSync(saved).subarray(0,64);assert(head.includes('ftyp'),'an MP4 container');assert(fs.statSync(saved).size>50000,'has video data: '+fs.statSync(saved).size);
  assert.equal(await js("return document.querySelector('#showReveal').hidden"),false);assert.match(await js("return document.querySelector('#showStatus').textContent"),/Recording saved/);
+ assert.equal(await js("const b=document.querySelector('#headRecord');return b.textContent+'|'+b.classList.contains('on')"),'Record|false','the header light rests after the recording is saved');
  await js("document.querySelector('#showRecord').checked=false;");
  const last=await js('return gla_group.show.chat.filter(l=>!/Recording saved/.test(l.text)).at(-1)');assert.match(last.text,/end of “The Lost Crown”/);
  fs.writeFileSync(out+'/curtain-call.png',(await win.webContents.capturePage()).toPNG());
@@ -130,11 +135,16 @@ app.whenReady().then(async()=>{try{
  await until(()=>js("return gla_group.show.phase==='finished'"),'revised curtain call');
  const replay=await js('return window.spoken.slice(4).map(s=>s.text)');assert.deepEqual(replay,['Where is my crown? The coronation starts at noon!','Perhaps the cat took it, Majesty.','Under the cushion, of course. Bring it here at once.','At once, Majesty. Unless the cat has claimed it.','Then we crown the cat and call it a day.']);
  assert.match(await js("return document.querySelector('#showStatus').textContent"),/covered 2 lines/);
+ // Stop during the countdown keeps the script ready to start by hand; it is not a finished show.
+ await js("document.querySelector('#showText').value='One more pass please. Ready!';document.querySelector('#showSend').click();");
+ await until(()=>js("return gla_group.show.phase==='ready'"),'ready again',30000);await js("document.querySelector('#showStop').click();");
+ assert.equal(await js('return gla_group.show.phase'),'ready','stopping the countdown keeps the show ready');assert.match(await js("return document.querySelector('#showStatus').textContent"),/Countdown stopped/);
+ assert.equal(await js("return document.querySelector('#showStart').disabled"),false);assert.equal(await js("return document.querySelector('#showStart').textContent"),'Start the show');await wait(4500);assert.equal(await js('return gla_group.show.phase'),'ready','and the countdown really stopped');
  // Stop mid-performance from the panel; Escape also rests everyone.
  await js("document.querySelector('#showStart').click();");await until(()=>js("return gla_group.show.phase==='performing'&&window.spoken.length>=10"),'replay');await js("document.querySelector('#showStop').click();");
  assert.equal(await js('return gla_group.show.phase'),'finished');assert.equal((await js('return gla_group.state')).running,false);await wait(400);const stoppedAt=await js('return window.spoken.length');await wait(600);assert.equal(await js('return window.spoken.length'),stoppedAt,'no lines after stop');
  // Switching back to an improv format hides the show and keeps Together working.
  await js("document.querySelector('#format').value='chat';document.querySelector('#format').onchange();");assert.equal(await js("return getComputedStyle(document.querySelector('#show')).display"),'none');assert.equal(await js("return document.querySelector('#joinLabel').textContent"),'Join as yourself');
  await js('await gla.group.close();');await wait(300);assert(primary.isVisible());assert.deepEqual(errors,[]);
- fs.writeFileSync(out+'/report.json',JSON.stringify({passed:true,checks:['show mode default','text briefing','cue phrase preparation','playwright long path','installed theatre motions','unavailable custom motion fallback','standby marking','prompter','pass to standby','real click on prompter','I said it','mid-show note holds and resumes','pause and resume button','header pause and stop during the show','private steering note to one character','live voice steering in her own voice','MP4 recording saved','panel as window: lights, resize, remembered position','fold and unfold','curtain call feedback','revision with feedback','takeover','stop','format switch']},null,1));console.log('show app qa passed');
+ fs.writeFileSync(out+'/report.json',JSON.stringify({passed:true,checks:['show mode default','text briefing','cue phrase preparation','playwright long path','installed theatre motions','unavailable custom motion fallback','standby marking','prompter','pass to standby','real click on prompter','I said it','mid-show note holds and resumes','pause and resume button','header pause and stop during the show','private steering note to one character','live voice steering in her own voice','MP4 recording saved','panel as window: lights, resize, remembered position','fold and unfold','curtain call feedback','revision with feedback','takeover','stop','format switch','captions during gestures','composer closes after a voice note','header record light','stop during countdown stays ready']},null,1));console.log('show app qa passed');
  }catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{app.exit(process.exitCode||0);}});

@@ -7,4 +7,7 @@ export class BubblePolicy {
   }
   incoming(now, duration = 9000) { if (this.mode !== 'off') this.until = Math.max(this.until, now + duration); }
   visible(now) { return this.mode === 'always' || (this.mode === 'auto' && (this.activity || this.editor || now < this.until)); }
+  // Something worth reading right now: a fresh message from her, or work in progress.
+  // A bare status (“Ready”, “Listening”) is not, and steps aside while she performs.
+  meaningful(now) { return this.mode !== 'off' && (this.activity || now < this.until); }
 }

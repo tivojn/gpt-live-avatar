@@ -90,6 +90,7 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  assert.equal(cuesMod.userCue("let's start the show",'ready'),'start');assert.equal(cuesMod.userCue('开演','ready'),'start');assert.equal(cuesMod.userCue('again please','finished'),'start');
  assert.equal(cuesMod.userCue('please prepare the show','planning'),'prepare');assert.equal(cuesMod.userCue('写个剧本吧','planning'),'prepare');assert.equal(cuesMod.userCue('开始准备','planning'),'prepare');
  assert.equal(cuesMod.userCue('I want a comedy about cats','planning'),'','ideas are not cues');assert.equal(cuesMod.userCue('start the show','planning'),'prepare','starting from scratch prepares first');
+ assert.equal(cuesMod.userCue("Okay, let's go!",'planning'),'prepare');assert.equal(cuesMod.userCue("let's go with a comedy about a lost hat",'planning'),'','"let\'s go with…" is still the briefing');assert.equal(cuesMod.userCue('how do we start the show?','planning'),'prepare','an explicit "start the show" still counts');
  assert.equal(cuesMod.directorCue('Wonderful. Places, everyone!'),true);assert.equal(cuesMod.directorCue('Let us discuss places'),false);
  assert.equal(cuesMod.stripCue('Wonderful. Places, everyone!'),'Wonderful.');
  assert.equal(cuesMod.lineCoverage('perhaps under the cushion majesty','Perhaps under the cushion, Majesty.'),1);
@@ -144,6 +145,16 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  held.resume();result=await holdRun;assert.equal(result.finished,true);assert.ok(log.includes('speak:sarah:Three.'));assert.deepEqual(holds,[true,false]);assert.equal(held.paused,false);
  log.length=0;const heldStop=new ShowPlayer({...holdStage,speak:async(cue,slug)=>{log.push('speak:'+slug);if(slug==='tia')heldStop.pause();return '';}});const stopRun=heldStop.run(twoUser);
  await new Promise(r=>setTimeout(r,40));assert.equal(heldStop.paused,true);heldStop.stop();result=await stopRun;assert.equal(result.finished,false);assert.equal(heldStop.paused,false);
+ // The hold is announced when it takes effect (after the line under way), not when it is requested: that is when a recording pauses.
+ log.length=0;let effect=null;const effectStage={...holdStage,paused:v=>log.push('paused:'+v),held:()=>log.push('held'),speak:async(cue,slug)=>{log.push('speak:'+slug+':'+cue.text);if(cue.text==='Two.'){effect.pause();log.push('after-request');}return '';}};
+ effect=new ShowPlayer(effectStage);const effectRun=effect.run(twoUser);await new Promise(r=>setTimeout(r,60));
+ const beatsSeen=log.filter(l=>/paused|held|after-request|speak/.test(l));assert.deepEqual(beatsSeen.slice(beatsSeen.indexOf('speak:tia:Two.'),beatsSeen.indexOf('speak:tia:Two.')+4),['speak:tia:Two.','paused:true','after-request','held'],'held fires once the line has finished');
+ effect.resume();result=await effectRun;assert.equal(result.finished,true);
+ // Three failed lines in a row end the show instead of spending every remaining line in silence.
+ log.length=0;let attempts=0;const failing=new ShowPlayer({...stage(async()=>({result:'pass'})),speak:async()=>{attempts++;throw Error('no voice');}});
+ result=await failing.run(parsed);assert.equal(result.finished,false);assert.match(result.aborted,/three lines in a row/);assert.equal(attempts,3);assert.ok(log.includes('stop'));assert.equal(failing.running,false);
+ attempts=0;const flaky=new ShowPlayer({...stage(async()=>({result:'pass'})),speak:async(cue)=>{attempts++;if(attempts%2)throw Error('no voice');return 'ok';}});
+ result=await flaky.run(parsed);assert.equal(result.finished,true,'isolated failures do not end the show');assert.equal(result.aborted,'');
  console.log('show qa ok');
 })().catch(e=>{console.error(e);process.exit(1);});
 

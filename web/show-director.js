@@ -21,7 +21,7 @@ export class DirectorVoice {
    await new Promise((resolve,reject)=>{
     client.addEventListener('state',({detail})=>{if(!current())return;if(detail.state==='connected')resolve();if(detail.state==='idle'&&this.running){reject(Error('The Director disconnected.'));this.fail('The Director disconnected. Start the Director again to reconnect.');}});
     client.addEventListener('error',({detail})=>{if(current()){reject(Error(detail.message));this.fail(detail.message);}});
-    client.addEventListener('remote-track',({detail})=>{if(!current())return;this.output?.close();this.output=new SpeechOutput(this.context,{onError:message=>this.emit('warning',message)});this.output.attach(detail.stream);if(!this.floorOpen)this.output.setActive(false);this.emit('stream',detail.stream,this.output);});
+    client.addEventListener('remote-track',({detail})=>{if(!current())return;this.output?.close();this.output=new SpeechOutput(this.context,{onError:message=>this.emit('warning',message)});this.stream=detail.stream;this.output.attach(detail.stream);if(!this.floorOpen)this.output.setActive(false);this.emit('stream',detail.stream,this.output);});
     client.addEventListener('transcript',({detail})=>{if(current())this.transcript(detail);});
     void client.start({voice,inputStream:stream}).catch(reject);
    });
@@ -56,7 +56,7 @@ export class DirectorVoice {
  fail(message){this.stop();this.emit('error',message);}
  stop(){
   this.generation++;this.running=false;this.delegate?.cancel();this.delegate=null;
-  this.client?.stop('director_end');this.client=null;this.output?.close();this.output=null;
+  this.client?.stop('director_end');this.client=null;this.output?.close();this.output=null;this.stream=null;
   this.microphone?.getTracks().forEach(t=>t.stop());this.microphone=null;void this.context?.close().catch(()=>{});this.context=null;
   this.segments={user:new Map(),assistant:new Map()};this.emit('microphone',{active:false,muted:true});
  }

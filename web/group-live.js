@@ -155,7 +155,7 @@ export class LiveGroup {
   const generation=this.generation,floor=p.openAt,inputId=p.lastHumanId,text=p.lastHumanText;
   const current=()=>this.running&&this.generation===generation&&p.openAt===floor&&p.lastHumanId===inputId&&p.slug===this.active;
   p.delegating=true;p.acceptUser=false;p.agentDue=0;this.awaitingHuman=true;
-  p.client.stopSpeaking();p.client.appendInstructions('The app is handling the confirmed sing-along or dance-along request. Wait silently for its verified music-control result. Do not delegate or substitute an ordinary dance animation.');
+  p.client.stopSpeaking();p.client.appendInstructions('The app is handling the confirmed dance-along request. Wait silently for its verified music-control result. Do not delegate or substitute an ordinary dance animation.');
   let result;try{result=await this.callbacks.musicRequest(text,{id:inputId,character:p.slug,cancelled:()=>!current()});}catch(error){result={ok:false,text:error.message};}
   if(!current())return;p.delegating=false;this.awaitingHuman=false;this.finishLine(p);p.heard=false;p.openAt=p.lastText=p.lastAudio=performance.now();this.advanceAt=0;
   if(result?.cancelled)return;

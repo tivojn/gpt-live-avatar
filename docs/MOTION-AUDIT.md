@@ -31,6 +31,19 @@ For the 0.2.11 motion release, the character model files remained byte-for-byte 
 | 360 Power Spin Jump | 397 |
 | Backflip | 452 |
 
+Added on 2026-09-18 (motion revision `presets-20260918`, retarget v12, all five
+characters; fetched with the existing rig task, nothing new was uploaded):
+
+| Motion | Category | Meshy preset ID |
+| --- | --- | --- |
+| Pop Dance LSA2 | Dances | 80 |
+| Denim Pop Dance | Dances | 71 |
+| Love You Pop Dance | Dances | 76 |
+| Superlove Pop Dance | Dances | 83 |
+| Break Dance (Breakdance_1990) | Dances | 395 |
+| Flying Fist Kick | Kung fu & fitness | 94 |
+| Counter Strike (Counterstrike) | Kung fu & fitness | 90 |
+
 Source: [Meshy animation library](https://docs.meshy.ai/en/api/animation-library). The original preset FBXs were reused where available. The expired neutral donor rig was recreated to obtain the three additional presets. No purchased character source was uploaded to Meshy.
 
 ### 0.2.11 validation

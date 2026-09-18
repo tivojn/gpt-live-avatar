@@ -22,13 +22,12 @@ let catalogue,loadGeneration=0,runGeneration=0,running=false,loading=false,speak
 let waitingHuman=false,humanResolve=null,wantsTurn=false,currentTurn=0,totalTurns=0,human={enabled:false,name:'You'};
 const conversationSounds=new ConversationSounds(()=>catalogue?.conversationSounds!==false);
 const microphone=new GroupMicrophone(voiceAPI,{
- onState:(state,seconds)=>{if(steering){steering.seconds=seconds;refreshBubble(steering.actor);}const busy=state!=='idle';$('#mic').textContent=state==='recording'?'Finish recording':state==='requesting'?'Opening microphone…':state==='transcribing'?'Transcribing…':'Speak my reply';$('#mic').setAttribute('aria-pressed',String(state==='recording'));$('#mic').disabled=!waitingHuman||['requesting','transcribing'].includes(state);$('#humanText').disabled=busy;$('#send').disabled=!waitingHuman||busy||!$('#humanText').value.trim();$('#micStatus').textContent=state==='recording'?`Microphone on · ${seconds} / 60 seconds`:state==='requesting'?'Waiting for microphone access…':state==='transcribing'?'Microphone off · transcribing your recording…':'Microphone off. Review your text, then send.';},
- onText:text=>{if(steering){const {actor}=steering;steering=null;if(actors.get(actor.slug)===actor){show?.steer(actor.slug,text);refreshBubble(actor);}show?.resumeShow?.('note');return;}if(!waitingHuman)return;$('#humanText').value=[$('#humanText').value.trim(),text].filter(Boolean).join(' ').slice(0,1200);$('#humanText').focus();},
- onError:message=>{if(steering){const {actor}=steering;steering=null;status(message,true);refreshBubble(actor);show?.resumeShow?.('note');return;}$('#micStatus').textContent=message;}
+ onState:(state,seconds)=>{const busy=state!=='idle';$('#mic').textContent=state==='recording'?'Finish recording':state==='requesting'?'Opening microphone…':state==='transcribing'?'Transcribing…':'Speak my reply';$('#mic').setAttribute('aria-pressed',String(state==='recording'));$('#mic').disabled=!waitingHuman||['requesting','transcribing'].includes(state);$('#humanText').disabled=busy;$('#send').disabled=!waitingHuman||busy||!$('#humanText').value.trim();$('#micStatus').textContent=state==='recording'?`Microphone on · ${seconds} / 60 seconds`:state==='requesting'?'Waiting for microphone access…':state==='transcribing'?'Microphone off · transcribing your recording…':'Microphone off. Review your text, then send.';},
+ onText:text=>{if(!waitingHuman)return;$('#humanText').value=[$('#humanText').value.trim(),text].filter(Boolean).join(' ').slice(0,1200);$('#humanText').focus();},
+ onError:message=>{$('#micStatus').textContent=message;}
 });
-// During a show a character's own mic and composer are private steering notes, never a conversation.
-let steering=null;
-// A private note by voice goes through gpt-live-1 in her own voice (show.js steerVoice); the show holds meanwhile.
+// During a show a character's own mic and composer are private steering notes, never a conversation:
+// a note by voice goes through gpt-live-1 in her own voice (show.js steerVoice); the show holds meanwhile.
 async function steerActor(actor){openComposer(actor.info.name,false);await show?.steerVoice?.(actor.slug);refreshBubble(actor);}
 const liveGroup=new LiveGroup(voiceAPI,{
  musicRequest:(text,meta)=>musicRouter.run(text,meta),
@@ -74,7 +73,7 @@ window.gla_sing_targets=character=>{
 };
 const agentUI=installAgentUI({api:{...window.gla.agent,run:runAgentRequest},onStatus:(_message,update)=>{if(!update)return;const actor=namedActor(update.character);if(!actor)return;actor.activity=update;refreshBubble(actor);},name:()=>actors.get(helpCharacter)?.info.name||'the characters',settings:()=>catalogue,onOpen:openComposer,questionHost:name=>namedActor(name)?.questions,onQuestionChange:(name,open)=>{const actor=namedActor(name);if(actor){actor.questionOpen=open;refreshBubble(actor);}},execute:async(action,args,cancelled)=>{
  if(action==='state')return {ok:true,characters:[...actors.values()].map(a=>({slug:a.slug,name:a.info.name,motions:[...a.avatar.motion.clips.values()].slice(0,180).map(c=>({id:c.id,label:c.label||c.id}))}))};
- if(['sing_along','dance_along','stop_singing'].includes(action))return window.gla_sing_command(action,args,cancelled);
+ if(['dance_along','stop_dancing'].includes(action))return window.gla_sing_command(action,args,cancelled);
  const actor=[...actors.values()].find(a=>[a.slug,a.info.name].some(n=>n.toLowerCase()===String(args.character).toLowerCase()));if(!actor)throw Error('That character is not visible.');
  if(action==='play_motion'){if(!actor.avatar.motion.clips.has(args.motion))throw Error('That motion is not installed.');const result=await actor.avatar.motion.play(args.motion,{loop:false});return {ok:result!==false,motion:args.motion,character:actor.slug};}
  if(action==='move_avatar'){await walkActor(actor,args.destination,cancelled);return {ok:true,character:actor.slug,destination:args.destination,reached:true};}
@@ -245,11 +244,11 @@ function openComposer(name,focus=true){
 }
 function updateComposer(actor){
  if(!actor.composer)return;
- const steeringThis=steering?.actor===actor&&microphone.state!=='idle',busy=agentUI.isBusy(actor.info.name),listening=Boolean(show?.steering&&show.steering.slug===actor.slug&&show.steering.state==='listening')||steeringThis&&microphone.state==='recording'||liveGroup.running&&Boolean(liveGroup.microphone)&&!liveGroup.muted&&(liveGroup.directed||liveGroup.active)===actor.slug;
+ const busy=agentUI.isBusy(actor.info.name),listening=Boolean(show?.steering&&show.steering.slug===actor.slug&&show.steering.state==='listening')||liveGroup.running&&Boolean(liveGroup.microphone)&&!liveGroup.muted&&(liveGroup.directed||liveGroup.active)===actor.slug;
  actor.composer.hidden=false; // Input belongs to every visible speech/task bubble.
  actor.askClose.hidden=!actor.composerOpen;
  const localMusic=Boolean(musicRouter.parse(actor.askInput.value,{character:actor.slug}));
- const showing=Boolean(show?.active),liveNote=show?.steering,steeringLive=Boolean(liveNote&&liveNote.slug===actor.slug),recordingNote=steeringLive&&liveNote.state==='listening'||steeringThis&&microphone.state==='recording';
+ const showing=Boolean(show?.active),liveNote=show?.steering,steeringLive=Boolean(liveNote&&liveNote.slug===actor.slug),recordingNote=steeringLive&&liveNote.state==='listening';
  actor.askSend.disabled=recordingNote?false:(!localMusic&&busy)||!actor.askInput.value.trim()||(!catalogue?.agentEnabled&&!localMusic);
  // While a note records, Send becomes Done and the mic becomes a stop button: two obvious ways to finish.
  if(!actor.askSendIcon)actor.askSendIcon=actor.askSend.innerHTML;
@@ -258,7 +257,7 @@ function updateComposer(actor){
  actor.askStop.hidden=!busy;actor.askMic.disabled=actorVoiceStarting||loading||!catalogue?.hasKey;
  actor.askMic.classList.toggle('listening',listening);actor.askMic.setAttribute('aria-pressed',String(listening));
  actor.askMic.title=showing?(listening?'Finish the note':'Give '+actor.info.name+' a private note'):listening?'Mute microphone':'Talk to '+actor.info.name;actor.askMic.setAttribute('aria-label',actor.askMic.title);
- actor.askTip.textContent=showing?(steeringLive?(liveNote.state==='connecting'?'Connecting to '+actor.info.name+'…':liveNote.state==='listening'?actor.info.name+' is listening live · speak your note, then press Done or the stop button.':actor.info.name+' is taking your note…'):'Steer '+actor.info.name+': press the mic or type a private note. The show holds while you give it, then carries on with it.'):actorVoiceStarting?'Connecting live talk…':listening?'Listening · speak to '+actor.info.name:!catalogue?.hasKey?'Add a voice API key in Settings to talk.':'Try “Sing along” or “Do a backflip” · mic or double-click my head to talk.';
+ actor.askTip.textContent=showing?(steeringLive?(liveNote.state==='connecting'?'Connecting to '+actor.info.name+'…':liveNote.state==='listening'?actor.info.name+' is listening live · speak your note, then press Done or the stop button.':actor.info.name+' is taking your note…'):'Steer '+actor.info.name+': press the mic or type a private note. The show holds while you give it, then carries on with it.'):actorVoiceStarting?'Connecting live talk…':listening?'Listening · speak to '+actor.info.name:!catalogue?.hasKey?'Add a voice API key in Settings to talk.':'Try “Dance along” or “Do a backflip” · mic or double-click my head to talk.';
  actor.el.classList.toggle('composing',Boolean(actor.composerOpen||actor.questionOpen));
 }
 function createComposer(actor){
@@ -275,7 +274,7 @@ function createComposer(actor){
  form.append(mic,input,send,stopTask,close);composer.append(tip,form);
  const questions=document.createElement('div');questions.className='actor-questions';actor.bubble.append(text,composer,questions);
  Object.assign(actor,{bubbleText:text,composer,askInput:input,askSend:send,askStop:stopTask,askMic:mic,askTip:tip,askClose:close,questions,composerOpen:false,questionOpen:false});
- form.onsubmit=async event=>{event.preventDefault();if(show?.steering?.slug===actor.slug){await show.steerVoice(actor.slug);refreshBubble(actor);return;}if(steering?.actor===actor&&microphone.state==='recording'){microphone.finish();refreshBubble(actor);return;}const request=input.value.trim();if(!request)return;
+ form.onsubmit=async event=>{event.preventDefault();if(show?.steering?.slug===actor.slug){await show.steerVoice(actor.slug);refreshBubble(actor);return;}const request=input.value.trim();if(!request)return;
 if(musicRouter.parse(request,{character:actor.slug})){
  input.value='';
  recordAskLine({id:'typed-music-'+crypto.randomUUID(),speaker:'_human',text:request,viaMusic:true});
@@ -289,11 +288,14 @@ if(musicRouter.parse(request,{character:actor.slug})){
 if(show?.active){input.value='';show.steer(actor.slug,request);input.blur();actor.composerOpen=false;refreshBubble(actor);show.resumeShow('note');return;}
 if(agentUI.isBusy(actor.info.name))return;input.value='';const task=agentUI.run(request,actor.info.name);refreshBubble(actor);await task;if(actors.get(actor.slug)===actor)refreshBubble(actor);};
  input.onfocus=()=>{actor.composerOpen=true;if(show?.active)show.holdShow('note');refreshBubble(actor);};
+ // Leaving the field with nothing typed (a click on the stage) is not a note: the show carries on.
+ input.onblur=()=>{setTimeout(()=>{if(!actor.composerOpen||document.activeElement===input||!show?.active||show.steering||input.value.trim())return;actor.composerOpen=false;refreshBubble(actor);syncMouse();show.resumeShow('note');},300);};
  input.oninput=()=>updateComposer(actor);
  mic.onclick=()=>void startActorVoice(actor,true);
  stopTask.onclick=()=>{agentUI.stop(actor.info.name);refreshBubble(actor);};
- close.onclick=()=>{actor.composerOpen=false;actor.askInput.blur();refreshBubble(actor);syncMouse();if(show?.active&&!steering)show.resumeShow('note');};
- actor.bubble.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();if(!actor.questionOpen){actor.composerOpen=false;actor.askInput.blur();refreshBubble(actor);syncMouse();}}});
+ // Closing the bubble drops a voice note still being given; otherwise the held show simply continues.
+ close.onclick=()=>{actor.composerOpen=false;actor.askInput.blur();refreshBubble(actor);syncMouse();if(show?.steering?.slug===actor.slug)show.cancelSteer(actor.slug);else if(show?.active)show.resumeShow('note');};
+ actor.bubble.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();if(!actor.questionOpen)close.onclick();}});
  actor.bubble.addEventListener('pointerdown',()=>{api.setIgnoreMouse(false);ignore=false;});
  actor.avatar.canvas.title='Double-click my head to talk · right-click to type a request';
 }
@@ -329,18 +331,45 @@ function refreshBubble(actor){
  const beganPerforming=performing&&!actor.wasPerforming;
  actor.wasPerforming=performing; // set before blur or focus can refresh again
  // Guarded with typeof: test harnesses evaluate this function on its own.
- if(beganPerforming&&!actor.questionOpen&&!(typeof show!=='undefined'&&show?.active)&&!(typeof steering!=='undefined'&&steering?.actor===actor)){actor.composerOpen=false;if(actor.bubble.contains(document.activeElement))document.activeElement.blur();}
+ if(beganPerforming&&!actor.questionOpen&&!(typeof show!=='undefined'&&show?.active)){actor.composerOpen=false;if(actor.bubble.contains(document.activeElement))document.activeElement.blur();}
  const activity=actor.activity&&performance.now()<actor.activity.until?actor.activity:null;
  const text=shortenHomePaths(activity?[activity.label,activity.detail].filter(Boolean).join('\n'):actor.message||(actor.bubbleMode==='always'?(actor.slug===speaker?'Speaking…':running?'Listening':'Ready'):''),catalogue?.userHome);
  actor.bubble.classList.toggle('task-update',Boolean(activity));actor.bubble.setAttribute('aria-label',activity?actor.info.name+' task progress':actor.info.name+' speech');
  updateComposer(actor);
  // Explicit input and questions must be visible before focus can enter them.
- actor.bubble.hidden=!(actor.composerOpen||actor.questionOpen||(!performing&&actor.bubbleMode!=='off'&&Boolean(text||actor.slug===speaker)));
+ // A dance hides the ordinary bubble, but a show line is scripted and almost
+ // always carries a gesture: its caption stays up for the whole line.
+ const showing=typeof show!=='undefined'&&Boolean(show?.active);
+ // Outside a show the same holds for anything worth reading: her words or a task update stay up while she moves; a bare status steps aside.
+ const meaningful=!window.gla_sing_sample?.(actor.slug)&&Boolean(activity||actor.message); // a dance-along still clears the stage
+ actor.bubble.hidden=!(actor.composerOpen||actor.questionOpen||((!performing||showing||meaningful)&&actor.bubbleMode!=='off'&&Boolean(text||actor.slug===speaker)));
  if(actor.bubbleText.textContent!==text)actor.bubbleText.textContent=text;actor.bubbleText.hidden=!text;
  actor.bubble.classList.toggle('wave-only',false);
+ placeBubble(actor);
+}
+// The bubble sits above her; when she stands too close to the top of the
+// screen for that, it moves beside her head instead of covering her face.
+function placeBubble(actor){
  const width=actor.bubble.offsetWidth||270,height=actor.bubble.offsetHeight||0;
- actor.bubble.style.left=Math.max(width/2+8-actor.x,Math.min(actor.w/2,innerWidth-width/2-8-actor.x))+'px';
- actor.bubble.style.bottom=Math.min(actor.h,actor.y+actor.h-height-8)+'px';
+ const head=headRect(actor),roomAbove=(head?head.y-head.r:actor.y)-height-8>=0;
+ let left,bottom;
+ if(roomAbove||!head){left=Math.max(width/2+8-actor.x,Math.min(actor.w/2,innerWidth-width/2-8-actor.x));bottom=Math.min(actor.h,actor.y+actor.h-height-8);}
+ else{
+  const gap=head.r*1.25,right=head.x+gap+width+8<=innerWidth,cx=right?head.x+gap+width/2:head.x-gap-width/2;
+  left=Math.max(width/2+8,Math.min(innerWidth-width/2-8,cx))-actor.x;
+  const top=Math.max(8,Math.min(innerHeight-height-8,head.y-height/2));bottom=actor.y+actor.h-top-height;
+ }
+ actor.bubble.classList.toggle('aside',!roomAbove&&Boolean(head));
+ actor.bubble.style.left=left+'px';actor.bubble.style.bottom=bottom+'px';
+}
+// Her head on screen: centre and radius in window pixels, from the rig itself.
+function headRect(actor){
+ const a=actor.avatar,head=a?.bones?.head;
+ if(!head||!a.headReferencePoint||!a.headRadius||!a.camera)return null;
+ const centre=a.headReferencePoint.clone().applyMatrix4(head.matrixWorld),edge=centre.clone().add(new THREE.Vector3(a.headRadius,0,0));
+ const c=centre.project(a.camera),e=edge.project(a.camera);if(c.z<-1||c.z>1)return null;
+ const x=actor.x+(c.x+1)*actor.w/2,y=actor.y+(1-c.y)*actor.h/2,r=Math.max(12,Math.abs(e.x-c.x)*actor.w/2*1.4);
+ return {x,y,r};
 }
 function stop(message='Stopped. Everyone is resting.',preserveTasks=false){conversationSounds.transition('idle');runGeneration++;running=false;speaker='';listener='';show?.halt();waitingHuman=false;wantsTurn=false;const resolve=humanResolve;humanResolve=null;resolve?.(null);microphone.cancel();voice.stopAll();liveGroup.stop();if(!preserveTasks)void api.cancel();for(const a of actors.values()){if(!preserveTasks)a.activity=null;setBubble(a,'');a.el.classList.remove('speaking');}controls();status(message);}
 async function loadCast(){
@@ -422,7 +451,6 @@ function animate(now){requestAnimationFrame(animate);if(document.visibilityState
   if(actor.renderZ!==z){actor.el.style.zIndex=z;actor.renderZ=z;}
   if(now-actor.maskAt>80){actor.hitMask.update(a.canvas);actor.maskAt=now;}
  }
- if(steering&&microphone.state==='recording')steering.actor.askMic.style.setProperty('--mic-level',microphone.level().toFixed(2));
  for(const hook of frameHooks)try{hook(now,{actors,speaker,viewport:{w:innerWidth,h:innerHeight}});}catch{}
  syncMouse();
 }
@@ -495,8 +523,8 @@ async function actorMenuAction({slug,action}){
  const actor=actors.get(slug||selectedActor||catalogue?.selected)||actors.values().next().value;if(!actor)return;selectedActor=actor.slug;const a=actor.avatar,o=a.options;
  if(action==='close-up'){closeupActor(actor);return;}
  if(action==='agent'){helpCharacter=actor.slug;agentUI.open(actor.info.name);return;}
- if(action==='music:sing'||action==='music:dance'){
-  const result=await musicRouter.run(action==='music:sing'?'Sing along to the current song':'Dance along to the current song',{id:'menu-music-'+crypto.randomUUID(),character:actor.slug,cancelled:()=>actors.get(actor.slug)!==actor});
+ if(action==='music:dance'){
+  const result=await musicRouter.run('Dance along to the current song',{id:'menu-music-'+crypto.randomUUID(),character:actor.slug,cancelled:()=>actors.get(actor.slug)!==actor});
   if(actors.get(actor.slug)===actor&&!result.cancelled){setBubble(actor,result.text);status(result.text,!result.ok);}
   return;
  }
@@ -531,14 +559,17 @@ $('#liveMode').onchange=()=>{$('#start').textContent=liveMode()?'Start live talk
 $('#liveMic').onclick=()=>liveGroup.setMuted(!liveGroup.muted);
 $('#liveSend').onclick=()=>{liveGroup.say($('#liveText').value);$('#liveText').value='';};
 $('#liveText').onkeydown=e=>{if(e.key==='Enter')$('#liveSend').click();};
-$('#start').onclick=start;$('#stop').onclick=()=>stop();$('#close').onclick=()=>{stop();void api.close();};$('#reset').onclick=arrange;$('#compact').onclick=()=>compact(!$('.panel').classList.contains('compact'));
+// Closing mid-show lets a recording finish writing first (a few seconds at most) so nothing performed is lost.
+$('#start').onclick=start;$('#stop').onclick=()=>stop();$('#close').onclick=async()=>{stop();try{await Promise.race([show?.settle?.(),new Promise(r=>setTimeout(r,20000))]);}catch{}void api.close();};$('#reset').onclick=arrange;$('#compact').onclick=()=>compact(!$('.panel').classList.contains('compact'));
 $('#join').onchange=()=>{$('#nameLabel').hidden=!$('#join').checked;show?.refresh();};
 $('#format').onchange=()=>{const isShow=showMode();$('.panel').classList.toggle('show-mode',isShow);$('#joinLabel').textContent=isShow?'I’ll act a role':'Join as yourself';if(!isShow)show?.leave();else if(running)stop('Switched to Avatar Show.');show?.refresh();$('#topic').value=({show:'A short comedy about a lost crown, with a twist ending.',chat:'Plan a cheerful day out together, each suggesting something different.',story:'A mysterious invitation arrives from a floating city. We decide what happens next.',debate:'Is the best holiday carefully planned or completely spontaneous?',choices:'Would you rather have a tiny dragon companion or a door to anywhere? Explore our choices.'})[$('#format').value];};
 $('#raise').onclick=()=>{if(liveMode()||!running||!human.enabled||waitingHuman||currentTurn>=totalTurns-1)return;wantsTurn=true;listener='_human';controls();status('You’re next, after this character finishes speaking.');};
 $('#humanText').oninput=controls;$('#humanText').onkeydown=e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();finishHuman();}};$('#send').onclick=()=>finishHuman();$('#pass').onclick=()=>finishHuman(true);$('#mic').onclick=()=>microphone.state==='recording'?microphone.finish():void microphone.start();
-let hiddenTimer;addEventListener('visibilitychange',()=>{clearTimeout(hiddenTimer);if(document.visibilityState!=='visible'){microphone.cancel();liveGroup.setMuted(true);hiddenTimer=setTimeout(()=>stop('Conversation ended because the group was hidden.'),15000);}});
-api.onReset(arrange);api.onStop(()=>stop('Conversation ended because the group was hidden.'));addEventListener('resize',arrange);addEventListener('beforeunload',()=>{stop();for(const a of actors.values())a.avatar.dispose();actors.clear();});addEventListener('keydown',event=>{if(event.key==='Escape')stop();});
-(async()=>{try{catalogue=await api.catalogue();if(!catalogue.ok)throw Error(catalogue.error);helpCharacter=catalogue.selected||catalogue.avatars[0]?.slug||'';const preferred=[catalogue.selected,...catalogue.avatars.map(x=>x.slug)].filter((x,i,arr)=>arr.indexOf(x)===i).slice(0,2);catalogue.avatars.forEach((info,i)=>{const row=document.createElement('label');row.className='choice';const check=document.createElement('input');check.type='checkbox';check.value=info.slug;check.checked=preferred.includes(info.slug);check.onchange=()=>{if(selected().length>5){check.checked=false;return;}void loadCast();};const voices=document.createElement('select');voices.dataset.voice=info.slug;voices.setAttribute('aria-label',info.name+' voice');for(const v of catalogue.voices){const option=document.createElement('option');option.value=v;option.textContent=v;voices.append(option);}voices.value=catalogue.groupVoices?.[info.slug]||({tia:'marin',sarah:'gleam',iselda:'quartz','ming-mei':'willow',seraphim:'bossa'}[info.slug])||'marin';voices.onchange=()=>{void gla.setSettings({groupVoices:{...catalogue.groupVoices,[info.slug]:voices.value}}).then(next=>{catalogue.groupVoices=next.groupVoices;});};row.append(check,document.createTextNode(info.name),voices);$('#cast').append(row);});show=installShow({api:gla.show,voice,actors,catalogue:()=>catalogue,hooks:{selected,voiceFor:slug=>document.querySelector(`[data-voice="${slug}"]`)?.value||'marin',human:()=>({enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'}),topic:()=>$('#topic').value.trim(),loading:()=>loading,controls,compact,minimize:v=>panel.setMinimized(v),setBubble,appendLine,setIgnoreMouse:value=>{api.setIgnoreMouse(value);ignore=value;},setFloor:(s,l)=>{speaker=s;listener=l;},walk:walkActor,bill:billCast,beginShow:()=>{if(running)stop('Starting the show…',true);running=true;conversationSounds.transition('live');human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};$('#transcript').replaceChildren();controls();},endShow:()=>{running=false;speaker='';listener='';conversationSounds.transition('idle');controls();},rest:message=>stop(message),refreshActor:slug=>{const a=actors.get(slug);if(a)refreshBubble(a);},onFrame:(fn,on=true)=>{on?frameHooks.add(fn):frameHooks.delete(fn);},onAudio:(fn,on=true)=>{on?audioTaps.add(fn):audioTaps.delete(fn);}}});
+// A hidden window ends every paid voice session, the Director's included.
+const hiddenStop=()=>{show?.hangUp('Director voice hung up because the window was hidden; tap the microphone to reconnect.');stop('Conversation ended because the group was hidden.');};
+let hiddenTimer;addEventListener('visibilitychange',()=>{clearTimeout(hiddenTimer);if(document.visibilityState!=='visible'){microphone.cancel();liveGroup.setMuted(true);hiddenTimer=setTimeout(hiddenStop,15000);}});
+api.onReset(arrange);api.onStop(hiddenStop);addEventListener('resize',arrange);addEventListener('beforeunload',()=>{stop();for(const a of actors.values())a.avatar.dispose();actors.clear();});addEventListener('keydown',event=>{if(event.key==='Escape')stop();});
+(async()=>{try{catalogue=await api.catalogue();if(!catalogue.ok)throw Error(catalogue.error);helpCharacter=catalogue.selected||catalogue.avatars[0]?.slug||'';const preferred=[catalogue.selected,...catalogue.avatars.map(x=>x.slug)].filter((x,i,arr)=>arr.indexOf(x)===i).slice(0,2);catalogue.avatars.forEach((info,i)=>{const row=document.createElement('label');row.className='choice';const check=document.createElement('input');check.type='checkbox';check.value=info.slug;check.checked=preferred.includes(info.slug);check.onchange=()=>{if(selected().length>5){check.checked=false;return;}void loadCast();};const voices=document.createElement('select');voices.dataset.voice=info.slug;voices.setAttribute('aria-label',info.name+' voice');for(const v of catalogue.voices){const option=document.createElement('option');option.value=v;option.textContent=v;voices.append(option);}voices.value=catalogue.groupVoices?.[info.slug]||({tia:'marin',sarah:'gleam',iselda:'quartz','ming-mei':'willow',seraphim:'bossa'}[info.slug])||'marin';voices.onchange=()=>{void gla.setSettings({groupVoices:{...catalogue.groupVoices,[info.slug]:voices.value}}).then(next=>{catalogue.groupVoices=next.groupVoices;});};row.append(check,document.createTextNode(info.name),voices);$('#cast').append(row);});show=installShow({api:gla.show,voice,actors,catalogue:()=>catalogue,hooks:{selected,voiceFor:slug=>document.querySelector(`[data-voice="${slug}"]`)?.value||'marin',human:()=>({enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'}),topic:()=>$('#topic').value.trim(),loading:()=>loading,controls,compact,minimize:v=>panel.setMinimized(v),setBubble,appendLine,setIgnoreMouse:value=>{api.setIgnoreMouse(value);ignore=value;},setFloor:(s,l)=>{speaker=s;listener=l;},walk:walkActor,bill:billCast,beginShow:()=>{if(running)stop('Starting the show…',true);running=true;conversationSounds.transition('live');human={enabled:$('#join').checked,name:$('#humanName').value.trim().replace(/[\r\n]/g,' ').slice(0,40)||'You'};$('#transcript').replaceChildren();controls();},endShow:()=>{running=false;speaker='';listener='';conversationSounds.transition('idle');controls();},rest:message=>stop(message),refreshActor:slug=>{const a=actors.get(slug);if(a)refreshBubble(a);},noteDone:slug=>{const a=actors.get(slug);if(!a)return;a.composerOpen=false;if(a.bubble.contains(document.activeElement))document.activeElement.blur();refreshBubble(a);syncMouse();},onFrame:(fn,on=true)=>{on?frameHooks.add(fn):frameHooks.delete(fn);},onAudio:(fn,on=true)=>{on?audioTaps.add(fn):audioTaps.delete(fn);}}});
  await loadCast();show.ready();requestAnimationFrame(animate);}catch(e){status(e.message,true);}})();
 // Read-only diagnostics are useful for installation verification.
 window.gla_group={openComposer,walkActor,freeSpot,billCast,startActorVoice,headAt,closeupActor,actors,voice,microphone,liveGroup,actorAt,actorCatalogue,actorMenuAction,actOnSpeech,start,stop,arrange,loadCast,get show(){return show;},get state(){return {running,loading,speaker,listener,history:[...history],generation:runGeneration,waitingHuman,wantsTurn,human:{...human},currentTurn,totalTurns};}};

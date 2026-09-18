@@ -20,7 +20,7 @@ export class ShowPlayer {
   if(this.running)throw Error('A show is already running.');
   const cues=cueSheet(script);if(!cues.length)throw Error('The script has no lines.');
   const generation=++this.generation,current=()=>generation===this.generation;
-  this.running=true;this.takenOver=false;const lines=[];let passes=0,scene=-1,finished=false;
+  this.running=true;this.takenOver=false;const lines=[];let passes=0,scene=-1,finished=false,aborted='',failures=0;
   // A voice acts far better when it knows who it is, where it stands, who it
   // is speaking to and what was just said to it, so every cue carries a short
   // scene note into its session.
@@ -34,7 +34,8 @@ export class ShowPlayer {
   try{
    for(let i=0;i<cues.length;i++){
     if(!current())break;const cue=cues[i];
-    if(this.gate){await this.gate.promise;if(!current())break;}
+    // A hold takes effect here, once the line under way has finished.
+    if(this.gate){this.stage.held?.();await this.gate.promise;if(!current())break;}
     if(cue.scene!==scene){scene=cue.scene;await this.stage.scene?.(script.scenes[scene],scene);if(!current())break;}
     const nextCue=cues[i+1];const next=nextCue?(nextCue.speaker==='user'?(this.takenOver?nextCue.understudy:'user'):nextCue.speaker):'';
     let performer=cue.speaker,forUser=false,heard='';
@@ -63,7 +64,9 @@ export class ShowPlayer {
     // Open the next cue's voice session while this line is still being spoken,
     // so the stage does not stand silent through a connection handshake.
     if(nextCue&&next&&next!=='user')this.stage.prepare?.(nextCue,next,cueContext(i+1,next));
-    try{heard=await speaking;}catch(e){if(!current())break;await this.stage.status?.(e.message||'The voice could not deliver that line.');}
+    try{heard=await speaking;failures=0;}catch(e){if(!current())break;await this.stage.status?.(e.message||'The voice could not deliver that line.');
+     // With the voices down, line after line would spend its timeout in silence: three in a row ends the show.
+     if(++failures>=3){aborted='The voices failed three lines in a row, so the show was stopped. Check the connection and play it again.';this.stop();break;}}
     await staging;
     if(!current())break;
     this.stage.clear?.(performer);
@@ -71,6 +74,6 @@ export class ShowPlayer {
    }
    finished=current();
   }finally{if(current()){this.running=false;this.pendingHuman=null;}}
-  return {finished,lines,passes,takenOver:this.takenOver};
+  return {finished,lines,passes,takenOver:this.takenOver,aborted};
  }
 }

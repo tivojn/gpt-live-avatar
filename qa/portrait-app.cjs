@@ -11,7 +11,7 @@ async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end)
 app.whenReady().then(async()=>{try{
  const w=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'window');
  const js=s=>w.webContents.executeJavaScript('(async()=>{'+s+'})()');
- await until(()=>js("return Boolean(window.gla_avatar?.model&&gla_avatar.motion?.clips.size===62&&gla_avatar.appearance.textureSelections.get('tia-original/hair-024')?.bitmap.width===4096&&gla_avatar.resources.ready);"),'4K portrait loaded');
+ await until(()=>js("return Boolean(window.gla_avatar?.model&&gla_avatar.motion?.clips.size>=62&&gla_avatar.appearance.textureSelections.get('tia-original/hair-024')?.bitmap.width===4096&&gla_avatar.resources.ready);"),'4K portrait loaded');
  const initial=await js(`const a=gla_avatar,p=a.appearance.portrait;return {environment:!!a.appearance.environmentTarget,maps:p.maps.length,shadow:a.renderer.shadowMap.enabled,shadowSize:p.key.shadow.mapSize.x,hair:a.appearance.textureSelections.get('tia-original/hair-024').bitmap.width,skinTextures:[...a.resources.records.values()].filter(r=>r.loaded).map(r=>r.loaded.key),sorting:p.sorting,status:a.appearance.status,tiers:(await gla.getSettings()).tiers};`);
  assert(initial.environment&&initial.maps===2&&initial.shadow&&initial.shadowSize===2048);
  assert(initial.tiers.tiers.best.present);assert(initial.skinTextures.some(k=>k.includes('-4096.png')));assert(!initial.status);
