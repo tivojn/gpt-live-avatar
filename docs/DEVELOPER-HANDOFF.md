@@ -68,12 +68,21 @@ release tag and matching checksums for a reproducible reference.
     Sarah, 0.8 s as Tia and 2.0 s as Seraphim, whose armour textures take
     1.2 s to reach the GPU, and then goes straight in. Three colours per slot
     (`perSlot`) rather than four bought Seraphim 0.6 s.
+  - A look wider than a narrow window (Seraphim's armour at 360 pt) would be
+    cut off at the window's edge, so the window grows into stage mode during
+    the concealed warm-up, when every outfit is rendered anyway, and is left
+    alone while it plays (`qa/flourish-clip-app.cjs`).
   It stands down for a live conversation, a motion, a walk, a look changed
   from the menu, macOS Reduce Motion, and gives up after 8 s of preparing.
   `Avatar3DAppearance.paintTextures()` is the one place chosen colours go on;
   `paintHeld` defers it while the flourish has the materials. Avatar Show
   characters do not flourish. `gla_flourish()` and `gla_flourish_play()` are
   the QA hooks; `qa/flourish.mjs` (logic) and `qa/flourish-app.cjs` (real app).
+- **Resting pose.** Choosing a prop puts her in its pose; Props › None used to
+  leave her in it, and the saved look then brought her up aiming an empty
+  hand (Tia, `Ps052.pistol`). `restingLook()` in `web/avatar.html` heals a
+  saved grip with no prop when she comes up and when the prop is put away,
+  as the Avatar Show window already did (`qa/resting-pose-app.cjs`).
 - **In-app update** (`electron/updater.cjs`, driven by `electron/app-info.cjs`).
   Check, then **Download** (progress in the window and in the menu row), then
   **Install and Relaunch**; each step is the user's click. Before anything is

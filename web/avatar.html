@@ -276,6 +276,14 @@ const downscaleTextures = (instance, maxSize) => {
     }
   });
 };
+// A weapon grip with nothing in her hand is not a way to stand. Choosing a prop puts her in its pose; a look
+// saved after the prop was taken away again used to keep that pose, so she came up aiming an empty hand.
+function restingLook(options, look, slug) {
+  const grip = body => Boolean(body) && options?.props?.some(prop => prop.pose && prop.pose === body);
+  if (look.prop || !grip(look.body)) return look;
+  const usual = settings.appearanceDefaults?.[slug]?.body;
+  return { ...look, body: usual && !grip(usual) ? usual : 'Ps007.stand', hands: '', leftHand: '', rightHand: '' };
+}
 let loadGeneration = 0, loadingAvatar = false, avatarSwitchGeneration = 0, suspended=false;
 let flourish = null; // the wardrobe flourish of the character that just came up, while it plays
 async function loadAvatar() {
@@ -299,7 +307,7 @@ async function loadAvatar() {
     const slug=info.slug || info.dir;
     const legacy=JSON.parse(localStorage.getItem(avatarOptionsKey()) || 'null');
     const look=settings.avatarLooks?.[slug] ?? legacy ?? settings.appearanceDefaults?.[slug] ?? {};
-    instance.options?.select({ ...look, performance: quality().performance });
+    instance.options?.select({ ...restingLook(instance.options, look, slug), performance: quality().performance });
     if(info.slug)void gla.saveAppearance(info.slug,instance.options.selection);
   } catch {}
   // Her wardrobe flourish: she is rendered but not shown (flourish.concealed)
@@ -406,8 +414,10 @@ function paint(now) {
   // coordinates behind, or a walk would start from the wrong place.
   frameGeometry = { view, scale, layout, fit, pad };
   const overflow=left<0||right>cssW||top<0||bottom>cssH;
-  // A flourish look that is wider than the window is gone in a tenth of a second; growing the window for it would blink.
-  if((avatar.options?.selection.prop||(overflow&&!flourish))&&!stage&&!stageBusy)void enterStage();
+  // A flourish look wider than the window (Seraphim's armour) would be cut off at the window's edge. Its
+  // warm-up renders every outfit out of sight, so the window grows then, unseen; once it is playing the
+  // window is left alone, because resizing for a look that lasts a tenth of a second would blink.
+  if((avatar.options?.selection.prop||(overflow&&(!flourish||flourish.concealed)))&&!stage&&!stageBusy)void enterStage();
   consumeReaction(now);
   placeBubble();
   // While a texture-residency swap is in flight the renderer returns without
@@ -619,7 +629,7 @@ function loop(now) {
   if (flourish && (live.state !== 'idle' || settings.wardrobeFlourish === false || stage?.studio)) { flourish.cancel(); flourish = null; lastFrame = 0; }
   const active = flourish || speaking || faceDirector.active || live.state !== 'idle' || avatar?.motion?.active || avatar?.options?.transition || now < manualUntil || dragging || companion?.walking || companion?.come || companion?.destination || stage?.turning;
   const due=frameDue(now,lastFrame,active?q.activeFps:q.idleFps);
-  if (document.visibilityState==='visible'&&due!==null) { lastFrame=due; try { if (flourish && !flourish.update(now)) flourish = null; /* one step per painted frame: its warm-up counts on each being rendered */ paint(now); if (flourish) { if (stage) stage.idleSince = 0; } else maintainStage(now); } catch (error) { console.error(error); } }
+  if (document.visibilityState==='visible'&&due!==null) { lastFrame=due; try { if (flourish && !stageBusy && !flourish.update(now)) flourish = null; /* one step per painted frame: its warm-up counts on each being rendered */ paint(now); if (flourish) { if (stage) stage.idleSince = 0; } else maintainStage(now); } catch (error) { console.error(error); } }
   renderRequest = requestAnimationFrame(loop);
 }
 const wake = () => { if (!renderRequest) renderRequest = requestAnimationFrame(loop); };
@@ -934,7 +944,7 @@ function chooseAvatarOption(key, value) {
     const prop=o.props.find(x=>x.id===value);
     if(prop?.pose) {next.body=prop.pose;next.hands=prop.hands;delete next.leftHand;delete next.rightHand;}
   }
-  o.select(next);
+  o.select(key==='prop' ? restingLook(o, next, settings.avatar?.slug || settings.avatar?.dir) : next); // Props › None also lets go of the grip
   persistAppearance();
   wake();
 }
