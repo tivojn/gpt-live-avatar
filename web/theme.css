@@ -1,0 +1,57 @@
+/* One theme for every surface of the app: Settings, the Avatar Show panel and
+   prompter, the speech bubbles and the updates window. It is monochrome on
+   purpose. Hierarchy comes from weight, contrast and hairlines; status comes
+   from shape (a filled dot, a ring, an outline), never from a hue. Light and
+   dark follow the macOS appearance. */
+:root {
+  color-scheme: light dark;
+  --ui-bg: #f9f9f9;            /* window background */
+  --ui-surface: #ffffff;       /* cards, fields, buttons */
+  --ui-side: #f1f1f1;          /* sidebar */
+  --ui-line: #e4e4e4;          /* hairlines */
+  --ui-line-strong: #cfcfcf;
+  --ui-text: #0d0d0d;
+  --ui-dim: #6b6b6b;
+  --ui-faint: #a3a3a3;
+  --ui-fill: #0d0d0d;          /* primary button, selected marks */
+  --ui-on-fill: #ffffff;
+  --ui-hover: rgba(0, 0, 0, .05);
+  --ui-selected: rgba(0, 0, 0, .08);
+  --ui-input: rgba(0, 0, 0, .04);
+  --ui-glass: rgba(250, 250, 250, .94);   /* floating panels over the desktop */
+  --ui-shadow: 0 8px 28px rgba(0, 0, 0, .12);
+  --ui-radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ui-bg: #0d0d0d;
+    --ui-surface: #171717;
+    --ui-side: #121212;
+    --ui-line: #2a2a2a;
+    --ui-line-strong: #3d3d3d;
+    --ui-text: #ececec;
+    --ui-dim: #9a9a9a;
+    --ui-faint: #666666;
+    --ui-fill: #ececec;
+    --ui-on-fill: #0d0d0d;
+    --ui-hover: rgba(255, 255, 255, .06);
+    --ui-selected: rgba(255, 255, 255, .11);
+    --ui-input: rgba(255, 255, 255, .06);
+    --ui-glass: rgba(23, 23, 23, .9);
+    --ui-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  }
+}
+/* The bubble, panel and prompter were themed through these names first; they
+   now resolve to the shared palette so nothing can drift. */
+:root {
+  --bubble-bg: var(--ui-glass);
+  --bubble-line: var(--ui-line);
+  --bubble-text: var(--ui-text);
+  --bubble-dim: var(--ui-dim);
+  --bubble-user: var(--ui-selected);
+  --bubble-assistant: var(--ui-hover);
+  --bubble-chip: var(--ui-selected);
+  --bubble-chip-hover: var(--ui-line-strong);
+  --bubble-input: var(--ui-input);
+  --bubble-shadow: var(--ui-shadow);
+}

@@ -140,7 +140,7 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, defaultAvatar, userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
+  return { ...config, defaultAvatar, appVersion:app.getVersion(), userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function instinctSettings(){
@@ -363,13 +363,15 @@ function createAvatarWindow() {
   avatarWindow.on('moved', () => { if (expandedWindow) return; const b = avatarWindow.getBounds(); config.windowX = b.x; config.windowY = b.y; scheduleConfigSave(); });
   avatarWindow.on('closed', () => { avatarWindow = null; });
 }
-function openSettingsWindow() {
-  if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
+// `pane` opens Settings on one of its sidebar panes (voice, character, appearance, reasoning, actions, instinct, shortcuts).
+function openSettingsWindow(pane) {
+  const hash = typeof pane === 'string' && /^[a-z]{3,12}$/.test(pane) ? '#' + pane : '';
+  if (settingsWindow && !settingsWindow.isDestroyed()) { if (hash) void settingsWindow.webContents.executeJavaScript(`window.gla_settings_pane?.(${JSON.stringify(hash.slice(1))})`).catch(() => {}); settingsWindow.focus(); return; }
   settingsWindow = new BrowserWindow({
-    width: 620, height: 780, title: 'GPT-Live Avatar Settings', show: false,
+    width: 820, height: 700, minWidth: 680, minHeight: 460, title: 'GPT-Live Avatar Settings', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
-  settingsWindow.loadURL(`${serverOrigin}/settings.html`);
+  settingsWindow.loadURL(`${serverOrigin}/settings.html${hash}`);
   settingsWindow.once('ready-to-show', () => settingsWindow.show());
   settingsWindow.on('blur',()=>avatarShortcuts?.pause(false));
   settingsWindow.on('closed', () => { avatarShortcuts?.pause(false);settingsWindow = null; });
@@ -568,7 +570,8 @@ ipcMain.on('gla:window:remember', (_event,bounds) => {
   config.windowHeight=Math.max(200,Math.min(2000,Math.round(bounds.height)));scheduleConfigSave();
 });
 ipcMain.on('gla:window:ignore-mouse', (_event, ignore) => { if (avatarWindow) avatarWindow.setIgnoreMouseEvents(ignore, { forward: true }); });
-ipcMain.handle('gla:open-settings', () => { openSettingsWindow(); return true; });
+ipcMain.handle('gla:open-settings', (_event, pane) => { openSettingsWindow(pane); return true; });
+ipcMain.handle('gla:open-updates', () => { appInfo?.open(true); return true; });
 // macOS microphone privacy: Chromium reports "granted" even when the system
 // setting is off, and capture then silently delivers silence. Ask at the
 // system level before every call and send the user to the privacy pane if it
@@ -614,8 +617,8 @@ ipcMain.on('gla:voice:preview-state', (event, value) => {
 ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
 
 // ---------------------------------------------------------------- avatar menu and hang-up watchdog
-function avatarPermissionsMenu() { return providerMenu(config,{active:actionEngine(config),update:updateSettings,openSettings:openSettingsWindow}); }
-function avatarReasoningMenu() { return reasoningMenu(config,{active:reasoningEngine(config),update:updateSettings,openSettings:openSettingsWindow}); }
+function avatarPermissionsMenu() { return providerMenu(config,{active:actionEngine(config),update:updateSettings,openSettings:()=>openSettingsWindow('actions')}); }
+function avatarReasoningMenu() { return reasoningMenu(config,{active:reasoningEngine(config),update:updateSettings,openSettings:()=>openSettingsWindow('reasoning')}); }
 function showAvatarMenu(state) {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   const send = id => () => { if (avatarWindow && !avatarWindow.isDestroyed()) avatarWindow.webContents.send('gla:menu-action', id); };

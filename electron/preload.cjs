@@ -119,7 +119,8 @@ contextBridge.exposeInMainWorld('gla', {
     setBounds: bounds => ipcRenderer.invoke('gla:window:set-bounds', bounds),
     setIgnoreMouse: ignore => ipcRenderer.send('gla:window:ignore-mouse', Boolean(ignore)),
   },
-  openSettings: () => ipcRenderer.invoke('gla:open-settings'),
+  openSettings: pane => ipcRenderer.invoke('gla:open-settings', pane),
+  openUpdates: () => ipcRenderer.invoke('gla:open-updates'),
   // Hearing another application, so she can dance along to what is playing.
   tap: {
     available: () => ipcRenderer.invoke('gla:tap:available'),

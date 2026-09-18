@@ -4,5 +4,5 @@
 .agent-choices,.agent-question-actions{display:flex;flex-wrap:wrap;gap:5px}
 .agent-question button{max-width:100%;border:1px solid #8883;border-radius:9px;padding:6px 9px;background:#8881;color:inherit;font:inherit;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
 .agent-question button:hover{background:#8882}
-.agent-question-actions button[type=submit]{background:#536ecf;color:white;border-color:transparent}
-.agent-question :focus-visible{outline:2px solid #5c7ee6;outline-offset:2px}
+.agent-question-actions button[type=submit]{background:var(--ui-fill,#1d1d1f);color:var(--ui-on-fill,#fff);border-color:transparent}
+.agent-question :focus-visible{outline:2px solid var(--ui-text,#1d1d1f);outline-offset:2px}

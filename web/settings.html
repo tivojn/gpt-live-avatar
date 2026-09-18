@@ -3,82 +3,161 @@
 <head>
 <meta charset="utf-8">
 <title>GPT-Live Avatar · Settings</title>
+<link rel="stylesheet" href="/theme.css">
 <style>
-  :root { color-scheme: light dark; --bg: #f6f6f7; --card: #fff; --line: #e3e3e6; --text: #1d1d1f; --dim: #6b6b70; --ok: #147a3a; --ok-bg: #e7f6ec; --bad: #b3261e; --bad-bg: #fbe9e7; --accent: #2f6df6; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #161618; --card: #1f1f22; --line: #333338; --text: #f2f2f4; --dim: #a0a0a8; --ok: #6fd18e; --ok-bg: #12321d; --bad: #ff8a80; --bad-bg: #3a1916; } }
-  body { margin: 0; font: 14px/1.45 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  main { max-width: 580px; margin: 0 auto; padding: 24px 22px 40px; }
-  h1 { font-size: 20px; margin: 0 0 4px; } .sub { color: var(--dim); margin: 0 0 20px; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
-  h2 { font-size: 14px; margin: 0 0 10px; }
-  label { display: block; font-size: 12px; color: var(--dim); margin: 10px 0 4px; }
+  /* Colours live in /theme.css (shared with the Avatar Show panel and the bubbles): monochrome, light and dark by the system. */
+  :root { --bg: var(--ui-bg); --card: var(--ui-surface); --line: var(--ui-line); --text: var(--ui-text); --dim: var(--ui-dim); --side: var(--ui-side); }
+  /* A sidebar of panes, each short enough to read without hunting: what used to be one page five screens long. */
+  html, body { height: 100%; }
+  body { margin: 0; font: 14px/1.45 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); display: grid; grid-template-columns: 188px minmax(0, 1fr); overflow: hidden; }
+  nav { background: var(--side); border-right: 1px solid var(--line); padding: 14px 10px 12px; display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+  nav .app { font-weight: 600; font-size: 13px; padding: 2px 10px 10px; }
+  nav .tab { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  nav .tab:hover { background: var(--ui-hover); }
+  nav .tab[aria-selected=true] { background: var(--ui-selected); font-weight: 600; }
+  nav .dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; background: transparent; } nav .dot.ok { background: var(--ui-dim); } nav .dot.bad { box-shadow: 0 0 0 1.5px var(--text) inset; } nav .dot.off { background: transparent; }
+  nav .foot { margin-top: auto; padding: 10px 10px 0; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; } nav .foot button { margin-top: 6px; padding: 4px 8px; font-size: 12px; }
+  main { overflow: auto; padding: 20px 24px 28px; }
+  .pane[hidden] { display: none; }
+  .pane > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; } .pane h1 { font-size: 18px; margin: 0; }
+  .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); background: var(--card); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+  .chip.ok { color: var(--text); } .chip.bad { color: var(--text); border-color: var(--text); font-weight: 600; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  h2 { font-size: 13px; margin: 0 0 8px; }
+  label { display: block; font-size: 12px; color: var(--dim); margin: 10px 0 4px; } section > label:first-child, h2 + label { margin-top: 0; }
   input[type=text], input[type=password], select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
-  textarea { min-height: 72px; resize: vertical; }
+  textarea { min-height: 64px; resize: vertical; }
+  input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(--text); }
   .row { display: flex; gap: 10px; align-items: end; } .row > * { flex: 1; } .row button { flex: 0 0 auto; }
   button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: inherit; font: inherit; cursor: pointer; }
-  button.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .state { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; color: var(--dim); background: var(--bg); }
-  .state.ok { color: var(--ok); background: var(--ok-bg); } .state.bad { color: var(--bad); background: var(--bad-bg); }
+  button:hover { background: var(--ui-hover); } button:disabled { color: var(--ui-faint); cursor: default; background: var(--card); }
+  button.pri { background: var(--ui-fill); border-color: var(--ui-fill); color: var(--ui-on-fill); } button.pri:hover { opacity: .88; background: var(--ui-fill); } button.pri:disabled { opacity: .35; color: var(--ui-on-fill); background: var(--ui-fill); }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+  .state { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; color: var(--dim); background: var(--bg); } .state:empty { display: none; }
+  /* The pane's chip already says the avatar is fine; this box is for when it is not. */
+  #avatarState.ok { display: none; }
+  .state.ok { color: var(--text); } .state.bad { color: var(--text); background: transparent; border: 1px solid var(--text); font-weight: 600; }
   .quality { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
   .quality label { margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; color: inherit; font-size: 13px; }
   .quality label small { display: block; color: var(--dim); font-size: 11px; margin-top: 4px; }
   .quality input { margin-right: 6px; }
-  .tiers { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 10px; }
+  .tiers { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
   .tier { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12.5px; }
   .tier small { color: var(--dim); font-size: 11px; }
   .tier .bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: rgba(128,128,128,.2); overflow: hidden; }
-  .tier .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .tier .bar i { display: block; height: 100%; width: 0; background: var(--text); transition: width .15s; }
   .tier button { padding: 4px 10px; font-size: 12px; }
-  .tier .ok { color: #4cd964; }
-  .quality label.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .tier .ok { color: var(--dim); }
+  .quality label.on { border-color: var(--text); box-shadow: 0 0 0 1px var(--text) inset; }
   .note { color: var(--dim); font-size: 12px; margin: 8px 0 0; }
   .range { display: flex; align-items: center; gap: 10px; } .range input { flex: 1; } .range output { width: 44px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* Paths, overrides and the like: there when needed, out of the way otherwise. */
+  details.advanced { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; } details.advanced > summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+  /* Only the column of the engine in use is worth showing. */
+  table.bindings { width: 100%; text-align: left; border-spacing: 6px; font-size: 13px; }
+  table.bindings[data-active=openclaw] [data-engine]:not([data-engine=openclaw]), table.bindings[data-active=hermes] [data-engine]:not([data-engine=hermes]), table.bindings[data-active=enconvo] [data-engine]:not([data-engine=enconvo]) { display: none; }
+  ul.tips { margin: 0; padding-left: 18px; color: var(--dim); font-size: 12.5px; } ul.tips li { margin: 3px 0; } ul.tips b { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
+<nav aria-label="Settings">
+  <div class="app">GPT-Live Avatar</div>
+  <div role="tablist" aria-orientation="vertical" id="tabs">
+    <button class="tab" role="tab" id="tab-voice" aria-controls="pane-voice" data-pane="voice">Voice<span class="dot" id="dot-voice"></span></button>
+    <button class="tab" role="tab" id="tab-character" aria-controls="pane-character" data-pane="character">Character<span class="dot" id="dot-character"></span></button>
+    <button class="tab" role="tab" id="tab-appearance" aria-controls="pane-appearance" data-pane="appearance">Appearance<span class="dot" id="dot-appearance"></span></button>
+    <button class="tab" role="tab" id="tab-reasoning" aria-controls="pane-reasoning" data-pane="reasoning">Reasoning<span class="dot" id="dot-reasoning"></span></button>
+    <button class="tab" role="tab" id="tab-actions" aria-controls="pane-actions" data-pane="actions">Actions<span class="dot" id="dot-actions"></span></button>
+    <button class="tab" role="tab" id="tab-agents" aria-controls="pane-agents" data-pane="agents">Agents<span class="dot" id="dot-agents"></span></button>
+    <button class="tab" role="tab" id="tab-instinct" aria-controls="pane-instinct" data-pane="instinct">Instinct<span class="dot" id="dot-instinct"></span></button>
+    <button class="tab" role="tab" id="tab-shortcuts" aria-controls="pane-shortcuts" data-pane="shortcuts">Shortcuts and tips<span class="dot" id="dot-shortcuts"></span></button>
+  </div>
+  <div class="foot"><span id="appVersion">GPT-Live Avatar</span><br><button id="checkUpdates" type="button">Check for updates…</button></div>
+</nav>
 <main>
-  <h1>GPT-Live Avatar</h1>
-  <p class="sub">Your avatar talks with OpenAI GPT-Live-1 directly from this Mac. Your key stays encrypted on this Mac.</p>
+  <div class="pane" id="pane-voice" role="tabpanel" aria-labelledby="tab-voice">
+    <header><h1>Voice</h1><span class="chip" id="chip-voice"></span></header>
+    <section>
+      <h2>OpenAI API key</h2>
+      <div class="row">
+        <input id="key" type="password" aria-label="OpenAI API key" placeholder="sk-… (stored encrypted, never shown again)" autocomplete="off">
+        <button id="saveKey" class="pri" type="button">Validate &amp; save</button>
+        <button id="clearKey" type="button">Remove</button>
+      </div>
+      <p class="state" id="keyState">Checking…</p>
+      <p class="note">Your avatar talks with GPT-Live-1 directly from this Mac. The key stays encrypted here.</p>
+    </section>
+    <section>
+      <label for="voice">Voice</label>
+      <div class="row"><select id="voice"></select><button id="previewVoice" type="button">Preview</button><button id="useVoice" type="button" class="pri">Use voice</button></div>
+      <p class="state" id="voiceState" aria-live="polite"></p>
+      <p class="note">Listen first. Using a new voice briefly reconnects a live conversation and keeps the recent transcript.</p>
+      <label><input id="conversationSounds" type="checkbox"> Conversation sounds</label>
+      <p class="note">Soft cues when connecting, ready and ending, in the solo window and in Avatar Show.</p>
+    </section>
+  </div>
 
-  <section>
-    <h2>Voice connection · OpenAI</h2>
-    <label for="key">API key</label>
-    <div class="row">
-      <input id="key" type="password" placeholder="sk-… (stored encrypted, never shown again)" autocomplete="off">
-      <button id="saveKey" class="pri" type="button">Validate &amp; save</button>
-      <button id="clearKey" type="button">Remove</button>
-    </div>
-    <p class="state" id="keyState">Checking…</p>
-    <div id="managedBackend">
-    <label for="backend">Model for harder questions</label>
-    <div class="row"><select id="backend"></select><button id="refreshModels" type="button">Refresh list</button></div>
-    <p class="note">GPT-Live-1 handles the conversation itself and hands harder questions to this Responses model. GPT-5.6 Luna is the default.</p>
-    </div>
-    <label for="voice">Voice</label>
-    <div class="row"><select id="voice"></select><button id="previewVoice" type="button">Preview</button><button id="useVoice" type="button" class="pri">Use voice</button></div>
-    <p class="note">Listen before choosing. Changing voice briefly reconnects a live conversation and keeps the recent transcript. Previews use GPT-Live without the microphone.</p>
-    <p class="state" id="voiceState" aria-live="polite"></p>
-    <label><input id="conversationSounds" type="checkbox"> Conversation sounds</label>
-    <p class="note">Soft sci-fi cues when connecting, ready, and ending. Applies to solo and Together.</p>
-  </section>
+  <div class="pane" id="pane-character" role="tabpanel" aria-labelledby="tab-character" hidden>
+    <header><h1>Character</h1><span class="chip" id="chip-character"></span></header>
+    <section>
+      <h2>Avatar</h2>
+      <div class="row"><select id="avatarSelect" aria-label="Avatar"></select><button id="refreshAssets" type="button" title="Check the cloud catalogue for new avatars and packages">Check cloud</button></div>
+      <p class="state" id="avatarState">Checking…</p>
+      <details id="tiersBox"><summary id="tiersSummary" style="cursor:pointer;color:var(--dim);font-size:12px;margin-top:8px">Installed packs</summary><div class="tiers" id="tiers"></div></details>
+      <details class="advanced"><summary>Advanced: use an OpenClam avatar package folder</summary>
+        <div class="row" style="margin-top:6px"><input id="avatarDir" type="text" readonly aria-label="Avatar package folder" placeholder="Using the built-in package"><button id="chooseAvatar" type="button">Choose folder…</button><button id="useBundled" type="button">Use built-in</button></div>
+      </details>
+    </section>
+    <section>
+      <h2>Persona</h2>
+      <label for="personaName">Name</label>
+      <input id="personaName" type="text">
+      <label for="persona">Personality notes</label>
+      <textarea id="persona"></textarea>
+      <p class="note">Her motion vocabulary (kung fu punch, dance, sit, wave…) is added automatically from the installed avatar.</p>
+    </section>
+  </div>
 
-  <section>
-    <h2>Reasoning</h2>
-    <label for="reasoningMode">Mode</label>
-    <select id="reasoningMode"><option value="managed">GPT-Live reasoning</option><option value="delegate">Delegate mode</option></select>
-    <p class="note">Delegate mode sends harder questions to your selected provider. Changing modes during a conversation briefly reconnects and keeps recent context.</p>
-    <div id="delegateOptions" hidden>
+  <div class="pane" id="pane-appearance" role="tabpanel" aria-labelledby="tab-appearance" hidden>
+    <header><h1>Appearance</h1><span class="chip" id="chip-appearance"></span></header>
+    <section>
+      <label>Rendering quality</label>
+      <div class="quality" id="quality">
+        <label><input type="radio" name="quality" value="friendly">Resource friendly<small>Lighter lighting and up to 1K textures. Start here on an M2 with 16 GB, especially for groups.</small></label>
+        <label><input type="radio" name="quality" value="balanced">Balanced<small>Studio lighting and up to 2K textures. Detail adapts to the number of characters.</small></label>
+        <label><input type="radio" name="quality" value="best">Best quality<small>Full portrait shading and up to 4K textures when memory allows. Highest GPU use.</small></label>
+      </div>
+      <label for="opacity">Opacity</label>
+      <div class="range"><input id="opacity" type="range" min="15" max="100" step="5"><output id="opacityOut"></output></div>
+      <label for="bubbleMode">Speech bubble</label>
+      <select id="bubbleMode"><option value="auto">Only on incoming messages</option><option value="always">Always on</option><option value="off">Off</option></select>
+      <p class="note">Whatever you choose, the bubble steps aside while she performs a motion and returns when it ends.</p>
+    </section>
+  </div>
+
+  <div class="pane" id="pane-reasoning" role="tabpanel" aria-labelledby="tab-reasoning" hidden>
+    <header><h1>Reasoning</h1><span class="chip" id="chip-reasoning"></span></header>
+    <section>
+      <label for="reasoningMode">Mode</label>
+      <select id="reasoningMode"><option value="managed">GPT-Live reasoning</option><option value="delegate">Delegate mode</option></select>
+      <p class="note">GPT-Live answers most things itself. Delegate mode sends harder questions to the provider you choose. Changing modes briefly reconnects a live conversation.</p>
+      <div id="managedBackend">
+      <label for="backend">Model for harder questions</label>
+      <div class="row"><select id="backend"></select><button id="refreshModels" type="button">Refresh list</button></div>
+      <p class="note">GPT-Live-1 hands harder questions to this model. Default: GPT-5.6 Luna.</p>
+      </div>
+    </section>
+    <section id="delegateOptions" hidden>
       <label for="delegateProvider">Provider</label>
       <select id="delegateProvider"><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="openclaw">OpenClaw · local agent</option><option value="hermes">Hermes · local agent</option><option value="grok">Grok Build · local agent</option><option value="enconvo">EnConvo · local agent</option></select>
       <label for="delegateAuth">Authentication</label>
       <select id="delegateAuth"><option value="api_key">API key</option><option value="oauth2">Account sign-in · OAuth2</option><option value="codex_app_server">Codex App Server</option></select>
       <div id="delegateCodex" hidden>
-        <p class="note">Uses Codex installed on this Mac for delegated reasoning and, when enabled below, actions. Reuses your Codex sign-in; no separate OAuth login is needed here.</p>
+        <p class="note">Uses Codex installed on this Mac and reuses its sign-in. ChatGPT sign-in uses your Codex allowance; a Codex API key is billed separately.</p>
         <button id="delegateCodexCheck" type="button">Check Codex connection</button>
-        <p class="note">ChatGPT sign-in uses your Codex allowance. Codex API-key sign-in is billed separately. GPT-Live voice still uses the OpenAI API key above.</p>
       </div>
-      <div id="delegateRuntime" hidden><p class="note">Uses the selected agent’s existing account, model and tools for reasoning and actions. Codex is not required. Configure its credentials in that agent’s own app or CLI.</p><button id="delegateRuntimeCheck">Check agent connection</button></div>
-      <p class="note" id="openaiDelegateKey">Uses the OpenAI API key saved above.</p>
+      <div id="delegateRuntime" hidden><p class="note">Uses the selected agent’s own account, model and tools. Configure its credentials in that agent’s app or CLI.</p><button id="delegateRuntimeCheck">Check agent connection</button></div>
+      <p class="note" id="openaiDelegateKey">Uses the OpenAI API key saved under Voice.</p>
       <div id="xaiDelegateKey" hidden>
         <label for="xaiKey">xAI API key</label>
         <div class="row"><input id="xaiKey" type="password" autocomplete="off" placeholder="xai-…"><button id="saveXaiKey" type="button">Validate &amp; save</button><button id="clearXaiKey" type="button">Remove</button></div>
@@ -91,104 +170,92 @@
       <p id="delegateAccountState" class="state" aria-live="polite"></p>
       <div id="delegateModelControls"><label for="delegateModel">Model</label>
       <div class="row"><select id="delegateModel"></select><input id="delegateModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom reasoning model ID" hidden><button id="saveDelegateModel" type="button">Use model</button><button id="refreshDelegateModels" type="button">Refresh list</button></div>
-      </div><p class="note" id="delegateModelNote">OpenAI defaults: GPT-5.6 Luna with an API key; GPT-5.6 Sol with account sign-in. Each provider and authentication choice remembers its own model. Availability depends on your account.</p>
-      <button id="testDelegate" type="button">Test connection</button>
+      </div><p class="note" id="delegateModelNote"></p>
+      <div class="row" style="margin-top:10px"><button id="testDelegate" type="button">Test connection</button></div>
       <p class="state" id="delegateTestState" aria-live="polite"></p>
-      <p class="note">GPT-Live voice and voice previews always use the OpenAI API key above, including when Codex App Server is selected.</p>
-    </div>
-  </section>
+      <p class="note">Voice and voice previews always use the OpenAI key under Voice, whichever provider reasons.</p>
+    </section>
+  </div>
 
-  <section>
-    <h2>Instinct · TypeSafe Jev <span class="note">(optional)</span></h2>
-    <p class="note">Optional reflexes. Jev is a small, fast model that never speaks; it answers yes/no questions about the conversation in about a third of a second. With a key, your avatar starts a motion as she promises it and her face reacts while you are still talking. Without a key, or whenever Jev is slow or unsure, the built-in rules decide as before.</p>
-    <label for="instinctKey">TypeSafe API key</label>
-    <div class="row"><input id="instinctKey" type="password" autocomplete="off" placeholder="From console.typesafe.ai (stored encrypted)"><button id="saveInstinctKey" type="button">Validate &amp; save</button><button id="clearInstinctKey" type="button">Remove</button><button id="testInstinct" type="button">Test</button></div>
-    <p class="state" id="instinctState" aria-live="polite"></p>
-    <label><input id="instinctEnabled" type="checkbox"> Use Instinct for motions and reactions</label>
-    <label><input id="instinctListening" type="checkbox"> Facial expressions, while she listens and while she speaks</label>
-    <p class="note">While on, the text of the current exchange is sent to TypeSafe (api.typesafe.ai) for each decision; audio never is. Typical cost is a few cents per hour of conversation.</p>
-  </section>
+  <div class="pane" id="pane-actions" role="tabpanel" aria-labelledby="tab-actions" hidden>
+    <header><h1>Actions</h1><span class="chip" id="chip-actions"></span></header>
+    <section>
+      <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
+      <p class="note">Your selected agent does the work with its own account, tools and permissions; the character shows progress and reports the verified result.</p>
+      <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="follow">Follow reasoning agent (default)</option><option value="codex">Codex · code, shell, files and connected tools</option><option value="openclaw">OpenClaw · configured tools and account</option><option value="hermes">Hermes · configured tools and account</option><option value="enconvo">EnConvo · Mavis and custom agents with their own tools</option><option value="grok">Grok Build · configured tools and account</option></select>
+      <p id="sharedCodexEngine" class="note" hidden></p>
+      <div id="codexOptions" hidden>
+        <label for="agentAccess">Codex permissions</label><select id="agentAccess" aria-describedby="agentAccessDescription"></select>
+        <p class="note" id="agentAccessDescription" aria-live="polite"></p>
+        <p class="note">Applies to any character using Codex. macOS and connected apps still show their own prompts. Changing this stops the current task; finished actions stay.</p>
+        <details class="advanced"><summary>Advanced: Codex connection and model</summary>
+          <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools.</p>
+          <div id="legacyCodexCheck" class="row" style="margin-top:8px"><button id="codexCheck">Check Codex</button><span id="codexStatus" role="status"></span></div>
+          <div id="legacyCodexModel"><label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel" style="margin-top:6px">Save model</button></div>
+        </details>
+      </div>
+      <div id="runtimeOptions" hidden>
+        <label for="runtimeAccess">When the agent requests approval</label><select id="runtimeAccess"><option value="workspace">Ask me</option><option value="full">Allow for this task</option></select>
+        <p class="note">Saved for this provider only. The agent’s own permissions still apply; this is not a sandbox. Nothing is added to the agent’s permanent allowlist.</p>
+        <div class="row" style="margin-top:10px"><button id="runtimeCheck">Check agent connection</button><span id="runtimeState" role="status"></span></div>
+        <details class="advanced"><summary>Advanced: where the agent runs</summary>
+          <p id="runtimeNote" class="note"></p>
+          <label for="runtimePath" id="runtimePathLabel">Agent executable (optional)</label>
+          <div class="row"><input id="runtimePath" type="text" placeholder="Detect automatically"><button id="runtimeSavePath">Save path</button></div>
+          <div id="runtimeModelRow"><label for="runtimeModel">Model override (optional)</label><div class="row"><input id="runtimeModel" type="text" placeholder="Use the agent’s configured model"><button id="runtimeSaveModel">Save model</button></div></div>
+        </details>
+      </div>
+      <label for="agentFolder">Agent starting folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
+      <p class="note">A starting location, not a file-access boundary: access follows the selected agent’s own setup.</p>
+    </section>
+  </div>
 
-  <section>
-    <h2>Agent actions</h2>
-    <label><input id="agentEnabled" type="checkbox"> Let avatars carry out my requests</label>
-    <p class="note">Works in solo and Together. Your selected agent handles tasks using its own account, tools and permissions. The addressed character shows progress and shares verified results with the group.</p>
-    <label for="agentEngine">Action engine</label><select id="agentEngine"><option value="follow">Follow reasoning agent (default)</option><option value="codex">Codex · code, shell, files and connected tools</option><option value="openclaw">OpenClaw · configured tools and account</option><option value="hermes">Hermes · configured tools and account</option><option value="enconvo">EnConvo · Mavis and custom agents with their own tools</option><option value="grok">Grok Build · configured tools and account</option></select>
-    <p id="sharedCodexEngine" class="note" hidden>Uses the Codex App Server connection and model selected under Reasoning above.</p>
-    <div id="codexOptions" hidden>
-      <p class="note">Uses Codex installed and signed in on this Mac. Browser and computer control use your configured Codex tools and their app permissions. Availability depends on your Codex setup. Voice still uses your voice API key.</p>
-      <div id="legacyCodexCheck" class="row"><button id="codexCheck">Check Codex</button><span id="codexStatus" role="status"></span></div>
-      <div id="legacyCodexModel"><label for="agentCodexModel">Codex model</label><select id="agentCodexModel"></select><input id="agentCodexModelCustom" type="text" placeholder="Custom model ID" aria-label="Custom Codex model ID" hidden><button id="codexSaveModel">Save model</button></div>
-      <label for="agentAccess">Codex permissions</label><select id="agentAccess" aria-describedby="agentAccessDescription"></select>
-      <p class="note" id="agentAccessDescription" aria-live="polite"></p>
-      <p class="note">Saved separately for Codex; applies to characters using it in solo and Together. Full access is the default for new installs. macOS and connected apps keep their own permission prompts. Changing this setting stops any current task; completed actions remain.</p>
-    </div>
-    <div id="runtimeOptions" hidden>
-      <p id="runtimeNote" class="note"></p>
-      <label for="runtimePath" id="runtimePathLabel">Agent executable (optional)</label>
-      <div class="row"><input id="runtimePath" type="text" placeholder="Detect automatically"><button id="runtimeSavePath">Save path</button></div>
-      <div id="runtimeModelRow"><label for="runtimeModel">Model override (optional)</label><div class="row"><input id="runtimeModel" type="text" placeholder="Use the agent’s configured model"><button id="runtimeSaveModel">Save model</button></div></div>
-      <div class="row"><button id="runtimeCheck">Check agent connection</button><span id="runtimeState" role="status"></span></div>
-      <label for="runtimeAccess">When the agent requests approval</label><select id="runtimeAccess"><option value="workspace">Ask me</option><option value="full">Allow for this task</option></select>
-      <p class="note">Saved separately for this provider. The agent’s own permissions still apply. This is not a sandbox or Codex automatic review. Allows are per request, never saved to the agent’s permanent allowlist. Changing the connection stops current tasks.</p>
-    </div>
-    <label for="agentFolder">Agent starting folder</label><div class="row"><input id="agentFolder" type="text" readonly><button id="agentChooseFolder">Choose folder…</button></div>
-    <p class="note">This is a starting location, not a file-access boundary. File access, browser use and computer control follow the selected agent’s own setup and permissions. Configure browser/computer connections in that agent.</p>
-  </section>
+  <div class="pane" id="pane-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
+    <header><h1>Agents for each character</h1><span class="chip" id="chip-agents"></span></header>
+    <section>
+      <p class="note" style="margin-top:0">Give each avatar her own agent. The agent keeps its account, skills and tools; the avatar keeps her voice and look.</p>
+      <div style="overflow:auto"><table class="bindings" id="agentBindingsTable"><thead><tr><th>Character</th><th data-engine="openclaw">OpenClaw agent</th><th data-engine="hermes">Hermes profile</th><th data-engine="enconvo">EnConvo agent</th></tr></thead><tbody id="agentBindings"></tbody></table></div>
+      <div class="row" style="margin-top:8px"><button id="refreshAgents">Refresh installed agents</button></div>
+      <p id="agentInventoryState" class="state" role="status"></p>
+    </section>
+  </div>
 
-  <section>
-    <h2>Agents for each character</h2>
-    <p class="note">Give each avatar her own OpenClaw agent, Hermes profile or EnConvo agent. The engine chosen above decides which column is used. The agent keeps its own account, skills and tools; the avatar keeps her voice and look.</p>
-    <button id="refreshAgents">Refresh installed agents</button>
-    <p id="agentInventoryState" class="state" role="status"></p>
-    <div style="overflow:auto"><table style="width:100%;text-align:left;border-spacing:6px"><thead><tr><th>Character</th><th>OpenClaw agent</th><th>Hermes profile</th><th>EnConvo agent</th></tr></thead><tbody id="agentBindings"></tbody></table></div>
-    <p class="note">Unavailable runtimes are disabled. Add or configure agents in OpenClaw, Hermes or EnConvo, then refresh here. Selecting an agent does not change its global default.</p>
-  </section>
-  <section>
-    <h2>Persona</h2>
-    <label for="personaName">Name</label>
-    <input id="personaName" type="text">
-    <label for="persona">Personality notes</label>
-    <textarea id="persona"></textarea>
-    <p class="note">Motion vocabulary (kung fu punch, dance, sit, wave…) is added automatically from the installed avatar.</p>
-  </section>
+  <div class="pane" id="pane-instinct" role="tabpanel" aria-labelledby="tab-instinct" hidden>
+    <header><h1>Instinct <span class="note">· TypeSafe Jev, optional</span></h1><span class="chip" id="chip-instinct"></span></header>
+    <section>
+      <p class="note" style="margin-top:0">Optional reflexes. Jev is a small, fast model that never speaks; it answers yes/no questions about the conversation in about a third of a second, so she starts a motion as she promises it and her face reacts while you are still talking. Without a key, or when Jev is slow or unsure, the built-in rules decide.</p>
+      <label for="instinctKey">TypeSafe API key</label>
+      <div class="row"><input id="instinctKey" type="password" autocomplete="off" placeholder="From console.typesafe.ai (stored encrypted)"><button id="saveInstinctKey" type="button">Validate &amp; save</button><button id="clearInstinctKey" type="button">Remove</button><button id="testInstinct" type="button">Test</button></div>
+      <p class="state" id="instinctState" aria-live="polite"></p>
+      <label><input id="instinctEnabled" type="checkbox"> Use Instinct for motions and reactions</label>
+      <label><input id="instinctListening" type="checkbox"> Facial expressions, while she listens and while she speaks</label>
+      <p class="note">While on, the text of the current exchange goes to TypeSafe (api.typesafe.ai) for each decision; audio never does. Typical cost is a few cents per hour of conversation.</p>
+    </section>
+  </div>
 
-  <section>
-    <h2>Avatar</h2>
-    <div class="row"><select id="avatarSelect" aria-label="Avatar"></select><button id="refreshAssets" type="button" title="Check the cloud catalogue for new avatars and packages">Check cloud</button></div>
-    <p class="state" id="avatarState">Checking…</p>
-    <div class="tiers" id="tiers"></div>
-    <details><summary style="cursor:pointer;color:var(--dim);font-size:12px">Advanced: use an OpenClam avatar package folder</summary>
-      <div class="row" style="margin-top:6px"><input id="avatarDir" type="text" readonly aria-label="Avatar package folder" placeholder="Using the built-in package"><button id="chooseAvatar" type="button">Choose folder…</button><button id="useBundled" type="button">Use built-in</button></div>
-    </details>
-    <label>Rendering quality</label>
-    <div class="quality" id="quality">
-      <label><input type="radio" name="quality" value="friendly">Resource friendly<small>Lighter lighting and up to 1K textures. Start here on an M2 with 16 GB, especially for groups.</small></label>
-      <label><input type="radio" name="quality" value="balanced">Balanced<small>Studio lighting and up to 2K textures. Detail adapts to the number of characters.</small></label>
-      <label><input type="radio" name="quality" value="best">Best quality<small>Full portrait shading and up to 4K textures when memory allows. Highest GPU use.</small></label>
-    </div>
-    <label for="opacity">Opacity</label>
-    <div class="range"><input id="opacity" type="range" min="15" max="100" step="5"><output id="opacityOut"></output></div>
-    <label for="bubbleMode">Speech bubble</label>
-    <select id="bubbleMode"><option value="auto">Only on incoming messages</option><option value="always">Always on</option><option value="off">Off</option></select>
-  </section>
-
-  <section>
-    <h2>Keyboard shortcuts</h2>
-    <p class="note">Click a shortcut, then press your new combination. Escape cancels. These work while you use other apps.</p>
-    <label for="shortcutRecover">Bring Avatar Back · normal size and position</label>
-    <button id="shortcutRecover" type="button" data-shortcut="recover"></button>
-    <label for="shortcutCloseup">Avatar Close-up · frame the face</label>
-    <button id="shortcutCloseup" type="button" data-shortcut="closeup"></button>
-    <p class="note">In Together, close-up uses the character you last clicked. Bring Avatar Back restores the group.</p>
-    <button id="resetShortcuts" type="button">Restore default shortcuts</button>
-    <p id="shortcutState" class="state" role="status"></p>
-  </section>
-
-  <section>
-    <h2>Tips</h2>
-    <p class="note">Drag the avatar to move her. Scroll or pinch to resize. Option-drag or two-finger swipe to rotate. Double-click her to start or end a conversation; the bubble has the same controls. Say "do a kung fu punch", "sit down", "wave" or "dance" and she follows your words.</p>
-  </section>
+  <div class="pane" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts" hidden>
+    <header><h1>Shortcuts and tips</h1></header>
+    <section>
+      <h2>Keyboard shortcuts</h2>
+      <p class="note" style="margin-top:0">Click a shortcut, then press your new combination. Escape cancels. These work while you use other apps.</p>
+      <label for="shortcutRecover">Bring Avatar Back · normal size and position</label>
+      <button id="shortcutRecover" type="button" data-shortcut="recover"></button>
+      <label for="shortcutCloseup">Avatar Close-up · frame the face</label>
+      <button id="shortcutCloseup" type="button" data-shortcut="closeup"></button>
+      <p class="note">In Avatar Show, close-up uses the character you last clicked; Bring Avatar Back restores the group.</p>
+      <div class="row" style="margin-top:10px"><button id="resetShortcuts" type="button">Restore default shortcuts</button></div>
+      <p id="shortcutState" class="state" role="status"></p>
+    </section>
+    <section>
+      <h2>Tips</h2>
+      <ul class="tips">
+        <li><b>Move</b> drag her · <b>Resize</b> scroll or pinch · <b>Rotate</b> Option-drag or two-finger swipe</li>
+        <li><b>Talk</b> double-click her head; the bubble has the same controls</li>
+        <li><b>Ask</b> say “do a kung fu punch”, “sit down”, “wave” or “dance along”</li>
+        <li><b>Everything else</b> right-click her: Perform, Look, Character, Agent, View</li>
+      </ul>
+    </section>
+  </div>
 </main>
 <script type="module">
   import {shortenHomePaths,expandHomePath} from "/path-display.js";
@@ -237,6 +304,23 @@
     $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=displayText(settings.agentFolder);
+    $('#agentBindingsTable').dataset.active=['openclaw','hermes','enconvo'].includes(engine)?engine:'';
+    renderStatus(settings);
+  }
+  // One line per pane that says whether it is working, mirrored as a dot in the sidebar.
+  function renderStatus(s){
+    const set=(pane,text,cls='')=>{const chip=$('#chip-'+pane);if(chip){chip.textContent=displayText(text);chip.className='chip '+cls;}$('#dot-'+pane).className='dot '+(cls||'off');};
+    const a=s.avatar||{},instinct=s.instinct||{},engine=localEngine(),engineName=engine==='codex'?'Codex':runtimeNames[engine]||engine;
+    set('voice',s.hasKey?'Connected · '+voiceName(s.voice||'marin'):'Needs an API key',s.hasKey?'ok':'bad');
+    set('character',a.ok&&!a.fallbackFor?a.name+' · '+a.clips+' motions':a.fallbackFor?a.fallbackFor+' is not downloaded':(a.problem||'No avatar'),a.ok&&!a.fallbackFor?'ok':'bad');
+    set('appearance',({friendly:'Resource friendly',balanced:'Balanced',best:'Best quality'})[s.quality]||'');
+    set('reasoning',s.reasoningMode==='delegate'?'Delegate · '+({openai:'OpenAI',xai:'xAI',...runtimeNames})[s.delegate.provider]+(s.delegate.model?' · '+s.delegate.model:''):'GPT-Live · '+(s.backendModel||'default model'),'ok');
+    set('actions',s.agentEnabled===true?'On · '+engineName:'Off',s.agentEnabled===true?'ok':'');
+    set('instinct',!instinct.hasKey?'Off · built-in rules':instinct.state==='bad-key'?'Key rejected':instinct.enabled===false?'Switched off':'On'+(instinct.lastLatencyMs?' · '+instinct.lastLatencyMs+' ms':''),instinct.state==='bad-key'?'bad':instinct.hasKey&&instinct.enabled!==false?'ok':'');
+    const bound=['openclaw','hermes','enconvo'].includes(engine),assigned=bound?(s.avatars||[]).filter(c=>s.avatarAgentBindings?.[c.slug]?.[engine]).length:0;
+    set('agents',bound?engineName+' · '+(assigned?assigned+' assigned':'runtime default for everyone'):'Not used by '+engineName,bound?'ok':'');
+    $('#dot-shortcuts').className='dot';
+    $('#appVersion').textContent='Version '+(s.appVersion||'');
   }
   function renderPermissions(settings) {
     const choices=settings.agentPermissionChoices||[], picker=$('#agentAccess');
@@ -263,7 +347,7 @@
     for(const character of s.avatars||[]){
       const row=document.createElement('tr'),name=document.createElement('td');name.textContent=character.name;row.append(name);
       for(const engine of ['openclaw','hermes','enconvo']){
-        const cell=document.createElement('td'),picker=document.createElement('select'),inventory=agentInventory?.[engine],saved=s.avatarAgentBindings?.[character.slug]?.[engine]||'';
+        const cell=document.createElement('td');cell.dataset.engine=engine;const picker=document.createElement('select'),inventory=agentInventory?.[engine],saved=s.avatarAgentBindings?.[character.slug]?.[engine]||'';
         picker.dataset.character=character.slug;picker.dataset.engine=engine;picker.setAttribute('aria-label',character.name+' '+runtimeNames[engine]+' agent');
         const usable=inventory?.installed&&!inventory.error&&inventory.agents.length;
         picker.disabled=!usable;picker.append(new Option(!inventory?'Checking installation…':!inventory.installed?'Requires '+runtimeNames[engine]+' installation':!usable?'Agent list unavailable':'Runtime default',''));
@@ -329,7 +413,11 @@
     renderTiers(settings.tiers);
   }
   function renderTiers(status) {
-    const box = $('#tiers'); if (!status || SETTINGS.avatarDir) { box.innerHTML = ''; return; }
+    const box = $('#tiers'), drawer = $('#tiersBox'); drawer.hidden = !status || Boolean(SETTINGS.avatarDir); if (drawer.hidden) { box.innerHTML = ''; return; }
+    const tiers = Object.values(status.tiers || {}), waiting = tiers.filter(t => !t.present && t.available).length, busy = Boolean(progress && progress.phase !== 'done' && progress.phase !== 'error');
+    const need = status.locked ? 'locked' : busy ? 'busy' : waiting ? 'waiting' : 'ready';
+    $('#tiersSummary').textContent = status.locked ? 'Character included · unlock needed' : waiting ? `Installed packs · ${waiting} available to download` : 'Installed packs · all ready';
+    if (drawer.dataset.need !== need) { drawer.dataset.need = need; drawer.open = need !== 'ready'; }
     if(status.locked){
       box.innerHTML='<div class="tier"><div><div>Character included</div><small>Connect to the internet once to unlock this character. Afterwards it works offline.</small></div><button type="button" id="unlockCharacter">Unlock</button></div>';
       $('#unlockCharacter').onclick=async()=>{const b=$('#unlockCharacter');b.disabled=true;b.textContent='Unlocking…';render(await gla.assets.refresh());};return;
@@ -344,7 +432,7 @@
       else if (t.present) right = `<span class="ok">Ready</span>${(tier === 'base' && status.bundled || t.removable===false) ? '' : `<button data-remove="${tier}" type="button" ${busy ? 'disabled' : ''}>Remove</button>`}`;
       else if (t.available) right = `<button data-download="${tier}" type="button" ${busy ? 'disabled' : ''}>Download ${MB(t.bytes)}</button>`;
       else right = '<small>Not published</small>';
-      const note = active && progress.phase === 'error' ? `<small style="color:#ff5b4d">${escapeText(displayText(progress.error))}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
+      const note = active && progress.phase === 'error' ? `<small style="color:var(--text);font-weight:600">${escapeText(displayText(progress.error))}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
       rows.push(`<div class="tier"><div><div>${t.label}</div>${note}</div><div class="row" style="margin:0">${right}</div>${active && progress.phase !== 'error' ? `<div class="bar"><i style="width:${progress.percent}%"></i></div>` : ''}</div>`);
     }
     box.innerHTML = rows.join('');
@@ -450,8 +538,24 @@
   $('#opacity').oninput = () => { $('#opacityOut').value = $('#opacity').value + '%'; };
   $('#opacity').onchange = () => save({ opacity: Number($('#opacity').value) / 100 });
   $('#bubbleMode').onchange = () => save({ bubbleMode: $('#bubbleMode').value, bubble: $('#bubbleMode').value !== 'off' });
+  // Panes: one at a time, remembered, reachable by #name (the menus deep-link to reasoning and actions).
+  const PANES=[...document.querySelectorAll('#tabs .tab')].map(t=>t.dataset.pane);
+  function showPane(name,{focus=false}={}){
+    if(!PANES.includes(name))name=PANES[0];
+    for(const tab of document.querySelectorAll('#tabs .tab')){const on=tab.dataset.pane===name;tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;$('#pane-'+tab.dataset.pane).hidden=!on;if(on&&focus)tab.focus();}
+    $('main').scrollTop=0;try{localStorage.setItem('gla-settings-pane',name);}catch{}
+  }
+  for(const tab of document.querySelectorAll('#tabs .tab')){
+    tab.onclick=()=>showPane(tab.dataset.pane);
+    tab.onkeydown=event=>{const step=event.key==='ArrowDown'?1:event.key==='ArrowUp'?-1:0;if(!step)return;event.preventDefault();showPane(PANES[(PANES.indexOf(tab.dataset.pane)+step+PANES.length)%PANES.length],{focus:true});};
+  }
+  addEventListener('hashchange',()=>showPane(location.hash.slice(1)));
+  window.gla_settings_pane=showPane; // QA and deep links
+  const deepLinked=Boolean(location.hash);let remembered='';try{remembered=localStorage.getItem('gla-settings-pane')||'';}catch{}
+  showPane(location.hash.slice(1)||remembered);
+  $('#checkUpdates').onclick=()=>gla.openUpdates();
   gla.onSettings(render);
-  gla.getSettings().then(s => { render(s); void refreshAgents(); if (s.hasKey) loadModels(); });
+  gla.getSettings().then(s => { render(s); if (!s.hasKey && !deepLinked) showPane('voice'); void refreshAgents(); if (s.hasKey) loadModels(); });
 </script>
 </body>
 </html>

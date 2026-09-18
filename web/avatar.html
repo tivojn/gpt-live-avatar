@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <title>GPT-Live Avatar</title>
 <link rel="stylesheet" href="/agent-composer.css">
+<link rel="stylesheet" href="/theme.css">
 <style>
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-user-select: none; user-select: none; font: 13px/1.4 -apple-system, system-ui, sans-serif; color: #f4f4f6; }
   #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
   #stage.dragging { cursor: grabbing; }
   /* The bubble follows the system appearance: light tokens by default, dark under prefers-color-scheme: dark. */
-  :root { --bubble-bg: rgba(250,250,250,.94); --bubble-line: rgba(0,0,0,.09); --bubble-text: #1d1d1f; --bubble-dim: #6e6e73; --bubble-user: rgba(72,120,255,.18); --bubble-assistant: rgba(0,0,0,.05); --bubble-chip: rgba(0,0,0,.07); --bubble-chip-hover: rgba(0,0,0,.13); --bubble-input: rgba(0,0,0,.05); --bubble-shadow: 0 10px 30px rgba(0,0,0,.18); }
-  @media (prefers-color-scheme: dark) { :root { --bubble-bg: rgba(24,24,28,.88); --bubble-line: rgba(255,255,255,.14); --bubble-text: #f4f4f6; --bubble-dim: #b9b9c2; --bubble-user: rgba(72,120,255,.28); --bubble-assistant: rgba(255,255,255,.08); --bubble-chip: rgba(128,128,128,.22); --bubble-chip-hover: rgba(128,128,128,.36); --bubble-input: rgba(128,128,128,.14); --bubble-shadow: 0 10px 30px rgba(0,0,0,.35); } }
+  /* Colours come from /theme.css, shared with Settings and the Avatar Show panel: monochrome, light and dark by the system. */
   #bubble { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 340px; box-sizing: border-box; color: var(--bubble-text); background: var(--bubble-bg); border: 1px solid var(--bubble-line); border-radius: 14px; padding: 8px 10px 8px; box-shadow: var(--bubble-shadow); backdrop-filter: blur(14px); -webkit-app-region: no-drag; transition: opacity .18s ease, transform .18s ease; }
   #bubble { max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
   #bubble.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(-6px); }
@@ -67,6 +67,15 @@
   @media (prefers-reduced-motion: reduce) { #listen.listening .listen-orb::before, #bubble .dot { animation: none; } }
   #toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--bubble-bg); color: var(--bubble-text); border: 1px solid var(--bubble-line); box-shadow: var(--bubble-shadow); padding: 6px 10px; border-radius: 10px; font-size: 12px; max-width: 92%; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
+  /* Monochrome: state is a shape and a rhythm, not a hue. Idle is faint, connecting and working pulse, live breathes, speaking wears a halo. */
+  #bubble .dot { background: var(--ui-faint); }
+  #bubble .dot.connecting, #bubble .dot.working { background: var(--ui-dim); } #bubble .dot.live { background: var(--ui-text); } #bubble .dot.speaking { background: var(--ui-text); box-shadow: 0 0 0 4px var(--ui-selected); } #bubble .dot.error { background: transparent; box-shadow: 0 0 0 1.5px var(--ui-text) inset; }
+  :is(#bubble, #listen) .meter.user i { background: var(--ui-dim); } :is(#bubble, #listen) .meter.ai i { background: var(--ui-text); }
+  #bubble button.icon.active { background: transparent; box-shadow: 0 0 0 1.5px var(--ui-text) inset; }
+  #bubble button.icon.end { background: transparent; color: var(--ui-text); box-shadow: 0 0 0 1.5px var(--ui-text) inset; } #bubble button.icon.end:hover { background: var(--ui-hover); }
+  #listen .listen-orb { color: var(--ui-text); background: var(--ui-selected); } #listen .listen-orb::before { background: var(--ui-selected); } #listen .meter i { background: var(--ui-text); }
+  @keyframes listening-dot { 0%,100% { box-shadow: 0 0 0 2px var(--ui-hover); } 50% { box-shadow: 0 0 0 5px var(--ui-selected); } }
+  @media (prefers-color-scheme: dark) { #listen .listen-orb { color: var(--ui-text); } }
 </style>
 </head>
 <body>

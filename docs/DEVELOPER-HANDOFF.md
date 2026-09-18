@@ -15,6 +15,31 @@ to confirm Apple Silicon installer availability and checksums
 release tag and matching checksums for a reproducible reference.
 
 
+## After 0.2.23: grouped menu, Settings panes, one monochrome theme
+
+- **Right-click menu.** Both windows build the same groups from
+  `electron/avatar-menu.cjs`: talk and Ask… on top; Perform, Look, Character,
+  Agent and View in the middle; Avatar Show, Settings, updates, the installed
+  version and Quit at the bottom. About is folded into the updates window.
+- **Settings** is a sidebar of panes (Voice, Character, Appearance, Reasoning,
+  Actions, Agents, Instinct, Shortcuts and tips) instead of one page five
+  screens long. Every control kept its `id` and wiring; each pane carries a
+  one-line status chip mirrored as a dot in the sidebar; paths and overrides
+  sit in Advanced drawers; the per-character agent table shows only the active
+  engine's column; the installed-packs drawer opens by itself when something
+  needs downloading. `openSettingsWindow('reasoning'|'actions'|…)` and
+  `gla.openSettings(pane)` deep-link to a pane; `window.gla_settings_pane`
+  switches panes for QA.
+- **One theme.** `web/theme.css` holds the palette for Settings, the Avatar
+  Show panel and prompter, the bubbles, the composer and the updates window.
+  It is monochrome by design and follows the macOS appearance: status is a
+  shape (filled dot, ring, outline) and a weight, never a hue. Do not add
+  colour tokens elsewhere; `qa/theme-app.cjs` opens the real windows in light
+  and dark and fails on any computed colour with saturation, on text and
+  surfaces that do not flip, and on a Settings pane that no longer fits.
+- Seraphim's Enclosed and Heavy armors are retired on read; superseded R2
+  packs are removed with `tools/cloud/prune-r2.cjs` (see Protected assets).
+
 ## 0.2.23 QA pass, new motions, sing-along retired
 
 A full test-engineering pass: 27 fixes (Show cost and recording leaks first),
