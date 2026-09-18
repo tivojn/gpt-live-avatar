@@ -163,12 +163,16 @@ screenshots reviewed), and all five Together characters load all seven with no
 failures. The dances join the dance-along pool automatically; the two fighting
 clips use fists like their siblings; English and Chinese aliases were added.
 
-**Distribution note:** these live in `build/characters` (the development app
-uses them immediately). A packaged install resolves motions from the published
-motion pack, currently `music-pelvis-20260917` (62 clips), so **the new motions
-and the Theatre/Show motions reach packaged users only after a motion update is
-built and published** (`tools/build-motion-update.cjs` plus the cloud upload).
-That is an outward-facing publish, so it was not done here.
+**Distribution (done for 0.2.23):** the motions were published to the protected
+gateway the same day, first as motion revision `presets-20260918` and then, with
+the kung-fu hip corrective for Sarah and Seraphim added by a separate fix, as
+`hip-corrective-20260918`. Each time the five encrypted packs were built, every
+object in the bucket was checksum-verified, the gateway was redeployed and its
+live signed catalogue verified, and fresh-profile checks ran against the live
+gateway (bundled Sarah starter; full Tia download). Earlier revisions and their
+download URLs remain available. **Storage:** the bucket now peaks at 9.15 GB of
+its 10 GB cap, so the next motion update needs superseded motion packs pruned
+first.
 
 ## 6. Test-suite maintenance
 

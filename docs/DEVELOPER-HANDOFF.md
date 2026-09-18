@@ -19,8 +19,10 @@ release tag and matching checksums for a reproducible reference.
 
 A full test-engineering pass: 27 fixes (Show cost and recording leaks first),
 the header Record light, captions during gestures, bubble-off-during-motion
-with restore, seven new motions for every character (motion revision
-`presets-20260918`) and the removal of sing-along. Results, method and open
+with restore, seven new motions for every character, the outer-hip corrective
+for the kung-fu stance on Sarah and Seraphim ([Hip corrective QA](HIP-CORRECTIVE-QA.md);
+both ship in motion revision `hip-corrective-20260918`) and the removal of
+sing-along. Results, method and open
 items: [Test report](TEST-REPORT-0.2.22.md).
 
 ## 0.2.22 Avatar Show update

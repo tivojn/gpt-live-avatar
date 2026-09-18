@@ -7,7 +7,7 @@
     "Avatar Show: Stop really cancels Meshy motion jobs, recordings no longer lose the end of a line on a pause, stream to disk, survive closing the window and never overwrite each other; hiding the window hangs up the Director’s voice session.",
     "A Record light in the panel header: grey when off, red when armed, breathing while a show records; click it mid-show to start or stop. Loading characters shows a spinner.",
     "Show captions appear with the line and stay up while its gesture plays. Everywhere else the bubble steps aside for any motion and returns when it ends, if it was on. Near the top of the screen it sits beside her head instead of over her face; a steering bubble closes once the note is taken.",
-    "Seven new motions for all five characters: Pop Dance LSA2, Denim Pop Dance, Love You Pop Dance, Superlove Pop Dance, Break Dance, Flying Fist Kick and Counter Strike (motion update presets-20260918; use Motion update in Settings for characters you already have).",
+    "Seven new motions for all five characters: Pop Dance LSA2, Denim Pop Dance, Love You Pop Dance, Superlove Pop Dance, Break Dance, Flying Fist Kick and Counter Strike. The kung-fu punch’s final wide stance no longer creases the outer hip on Sarah and Seraphim. Both arrive with motion update hip-corrective-20260918: use Motion update in Settings for characters you already have.",
     "Sing-along is retired; dance-along stays, and “sing along” now dances along. The panel’s resize corner can be grabbed, the Playwright follows what you told the Director over the pre-filled topic, and Settings, README and accessibility labels were corrected."
   ]
 }

@@ -31,8 +31,9 @@ For the 0.2.11 motion release, the character model files remained byte-for-byte 
 | 360 Power Spin Jump | 397 |
 | Backflip | 452 |
 
-Added on 2026-09-18 (motion revision `presets-20260918`, retarget v12, all five
-characters; fetched with the existing rig task, nothing new was uploaded):
+Added on 2026-09-18 (first published as motion revision `presets-20260918`, then
+superseded the same day by `hip-corrective-20260918`, which adds the kung-fu hip
+corrective for Sarah and Seraphim; retarget v12, all five characters; fetched with the existing rig task, nothing new was uploaded):
 
 | Motion | Category | Meshy preset ID |
 | --- | --- | --- |
