@@ -74,6 +74,7 @@ const DEFAULTS = {
   shortcuts: DEFAULT_SHORTCUTS,
   bubble: true,
   conversationSounds: true,
+  wardrobeFlourish: true, // she runs through her wardrobe each time she comes up or is switched to
   instinctEnabled: true, // TypeSafe Jev; has no effect until a TypeSafe key is saved
   instinctListening: true,
   bubbleMode: 'auto', // incoming replies, always visible, or hidden
@@ -405,6 +406,7 @@ function updateSettings(patch) {
   const previousAvatar=config.avatar;
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentFollowReasoning,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings]);
   if(typeof patch.conversationSounds==='boolean')config.conversationSounds=patch.conversationSounds;
+  if(typeof patch.wardrobeFlourish==='boolean')config.wardrobeFlourish=patch.wardrobeFlourish;
   for(const key of ['instinctEnabled','instinctListening'])if(typeof patch[key]==='boolean')config[key]=patch[key];
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(ENGINES[patch.agentEngine])config.agentEngine=patch.agentEngine;
@@ -649,6 +651,7 @@ function showAvatarMenu(state) {
     { label: 'View', submenu: [
       ...bubbleItems(state.bubbleMode, send),
       { type: 'separator' },
+      { label: 'Wardrobe Flourish', type: 'checkbox', checked: config.wardrobeFlourish !== false, click: () => updateSettings({ wardrobeFlourish: config.wardrobeFlourish === false }) },
       { label: 'Avatar Close-up', accelerator: avatarShortcuts?.values.closeup || DEFAULT_SHORTCUTS.closeup, registerAccelerator: false, click: requestAvatarCloseup },
       { label: 'Bring Avatar Back', accelerator: avatarShortcuts?.values.recover || DEFAULT_SHORTCUTS.recover, registerAccelerator: false, click: requestAvatarRecovery },
     ] },

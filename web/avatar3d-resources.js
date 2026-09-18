@@ -74,6 +74,9 @@ export class AvatarResources {
       }
     });
   }
+  // nodes: wardrobe roots, often a group of meshes. textures: authored maps that
+  // something else is standing in for, and that are wanted back without a reload.
+  hold(nodes=[],textures=[]){this.held=new Set();for(const root of nodes)root.traverse(node=>this.held.add(node));this.heldTextures=new Set(textures);}
   level(profile,pixels){
     if(profile==='quality')return Infinity;
     if(profile==='eco')return pixels>800?1024:512;
@@ -81,7 +84,7 @@ export class AvatarResources {
   }
   requirements(profile,pixels){
     const textures=new Set(),meshes=new Set();
-    this.model.traverseVisible(node=>{
+    const need=node=>{
       const mi=node.userData.residentMesh??node.geometry?.userData?.deferredMesh;
       if(mi!==undefined){node.userData.residentMesh=mi;meshes.add(mi);}
       for(const material of Array.isArray(node.material)?node.material:[node.material]){
@@ -90,13 +93,24 @@ export class AvatarResources {
           if(record){record.targets.add(texture);textures.add(record.index);}
         }
       }
-    });
+    };
+    this.model.traverseVisible(need);
+    // Held nodes stay resident while hidden: a wardrobe flourish shows each
+    // outfit for a tenth of a second, far less than streaming one in takes.
+    for(const node of this.held||[])need(node);
+    for(const texture of this.heldTextures||[]){
+      const record=this.records.get(texture?.userData?.residentTexture);
+      if(record){record.targets.add(texture);textures.add(record.index);}
+    }
     const level=Math.min(this.maxTextureSize||4096,this.level(profile,pixels));
     const variants=new Map([...textures].map(index=>{
       const r=this.records.get(index);
       return [index,r.variants.find(v=>v.size>=level)||r.variants.at(-1)];
     }));
-    return {textures,meshes,variants,key:JSON.stringify([[...meshes], [...variants].map(([i,v])=>[i,v.size]),profile])};
+    // Sorted: the same set must give the same key whatever order the scene was walked in,
+    // or a held outfit becoming visible would look like a change and cost a residency pass.
+    const order=(a,b)=>a-b;
+    return {textures,meshes,variants,key:JSON.stringify([[...meshes].sort(order),[...variants].map(([i,v])=>[i,v.size]).sort((a,b)=>a[0]-b[0]),profile])};
   }
   update(profile='balanced',pixels=1200,force=false){
     if(!this.parser||this.disposed||performance.now()<(this.retryAt||0))return Promise.resolve();
@@ -104,7 +118,7 @@ export class AvatarResources {
     if(wanted.key===this.key)return this.pending||Promise.resolve();
     // Avoid reallocating on every pinch/orbit frame. Wardrobe changes and
     // quality switches are immediate; display-size changes settle briefly.
-    const content=JSON.stringify([[...wanted.meshes],[...wanted.textures],profile]);
+    const content=JSON.stringify([[...wanted.meshes].sort((a,b)=>a-b),[...wanted.textures].sort((a,b)=>a-b),profile]);
     if(!force&&content===this.content&&performance.now()-(this.changedAt||0)<1500)return this.pending||Promise.resolve();
     this.content=content;this.changedAt=performance.now();this.key=wanted.key;
     const generation=++this.generation;

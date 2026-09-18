@@ -134,6 +134,8 @@
       <label for="bubbleMode">Speech bubble</label>
       <select id="bubbleMode"><option value="auto">Only on incoming messages</option><option value="always">Always on</option><option value="off">Off</option></select>
       <p class="note">Whatever you choose, the bubble steps aside while she performs a motion and returns when it ends.</p>
+      <label><input id="wardrobeFlourish" type="checkbox"> Wardrobe flourish</label>
+      <p class="note">Each time she comes up or you switch character, she runs through her outfits, hair, skin tones and colours for about two seconds, then settles on her own look. Nothing she flashes through is saved. Skipped during a conversation and when macOS Reduce Motion is on.</p>
     </section>
   </div>
 
@@ -282,6 +284,7 @@
     updateVoiceState();
     renderShortcuts();
     $('#conversationSounds').checked=settings.conversationSounds!==false;
+    $('#wardrobeFlourish').checked=settings.wardrobeFlourish!==false;
     const instinct=settings.instinct||{};
     $('#instinctEnabled').checked=instinct.enabled!==false;$('#instinctListening').checked=instinct.listening!==false;
     $('#instinctListening').disabled=instinct.enabled===false;$('#testInstinct').disabled=!instinct.hasKey;
@@ -509,6 +512,7 @@
   $('#runtimeModel').onchange=()=>save({agentRuntimeModels:{[localEngine()]:$('#runtimeModel').value.trim()}});
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
+  $('#wardrobeFlourish').onchange=()=>save({wardrobeFlourish:$('#wardrobeFlourish').checked});
   $('#instinctEnabled').onchange=()=>save({instinctEnabled:$('#instinctEnabled').checked});
   $('#instinctListening').onchange=()=>save({instinctListening:$('#instinctListening').checked});
   const instinctTask=async(message,work)=>{instinctBusy=true;setState($('#instinctState'),message);const r=await work();instinctBusy=false;if(!r.ok){setState($('#instinctState'),r.error,'bad');return null;}render(await gla.getSettings());return r;};

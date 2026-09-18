@@ -115,6 +115,7 @@ import { frameDue, surfaceSize, renderPixelBudget, textureBudget } from '/avatar
 import { CompanionController, AvatarStudioStage, isSpatialAction } from '/avatar3d-companion.js';
 import { InstinctClient } from '/instinct-client.js';
 import { FaceDirector, EXPRESSIONS, expressionNames } from '/avatar3d-expressions.js';
+import { WardrobeFlourish } from '/avatar3d-flourish.js';
 
 const $ = s => document.querySelector(s);
 const stageEl = $('#stage'); const context = stageEl.getContext('2d', { alpha: true });
@@ -276,6 +277,7 @@ const downscaleTextures = (instance, maxSize) => {
   });
 };
 let loadGeneration = 0, loadingAvatar = false, avatarSwitchGeneration = 0, suspended=false;
+let flourish = null; // the wardrobe flourish of the character that just came up, while it plays
 async function loadAvatar() {
   window.gla_sing_stop?.();
   if(suspended)return;
@@ -292,16 +294,28 @@ async function loadAvatar() {
     await instance.load(info.modelURL, { resources: Boolean(info.residentAvailable), pose: info.pose, yaw: info.yaw, performance: quality().performance, motionLibrary: info.motionsURL, appearanceLibrary: info.appearanceURL, textureLimit:textureBudget(1,settings.hardware?.memoryGB) });
   } catch (error) { instance.dispose(); if (generation === loadGeneration) { loadingAvatar = false; setStatus('Avatar failed to load: ' + error.message, 'error'); } return; }
   if (generation !== loadGeneration) { instance.dispose(); return; }
-  loadingAvatar = false;
   if (!info.residentAvailable) downscaleTextures(instance, quality().maxTexture);
-  avatar = instance; ready = true;
   try {
     const slug=info.slug || info.dir;
     const legacy=JSON.parse(localStorage.getItem(avatarOptionsKey()) || 'null');
     const look=settings.avatarLooks?.[slug] ?? legacy ?? settings.appearanceDefaults?.[slug] ?? {};
-    avatar.options?.select({ ...look, performance: quality().performance });
-    if(info.slug)void gla.saveAppearance(info.slug,avatar.options.selection);
+    instance.options?.select({ ...look, performance: quality().performance });
+    if(info.slug)void gla.saveAppearance(info.slug,instance.options.selection);
   } catch {}
+  // Her wardrobe flourish: she is rendered but not shown (flourish.concealed)
+  // while it gets ready, so she comes up and goes straight into it. If it
+  // fails or takes too long she simply appears without one.
+  flourish?.dispose(); flourish = null;
+  if (settings.wardrobeFlourish !== false && !reduce && live.state === 'idle' && instance.options) {
+    const mine = flourish = new WardrobeFlourish(instance, { conceal: true });
+    const giveUp = setTimeout(() => { if (flourish === mine && mine.concealed) { mine.dispose(); flourish = null; lastFrame = 0; wake(); } }, 8000);
+    void mine.prepare().then(ok => { if (!ok) throw Error('nothing to show'); }).catch(error => {
+      clearTimeout(giveUp); mine.dispose(); if (flourish === mine) { flourish = null; lastFrame = 0; wake(); }
+      if (error.message !== 'nothing to show') console.warn('Wardrobe flourish skipped:', error.message);
+    });
+  }
+  loadingAvatar = false;
+  avatar = instance; ready = true;
   userOrbit = { yaw: Number(settings.orbitYaw) || 0, pitch: Number(settings.orbitPitch) || 0 }; avatar.setOrbit(userOrbit);
   if (avatar.options) { companion = new CompanionController(); companion.reactions = true; avatar.companion = companion; }
   $('#name').textContent = settings.personaName || info.name || settings.defaultAvatar?.name || 'Avatar';
@@ -392,15 +406,17 @@ function paint(now) {
   // coordinates behind, or a walk would start from the wrong place.
   frameGeometry = { view, scale, layout, fit, pad };
   const overflow=left<0||right>cssW||top<0||bottom>cssH;
-  if((avatar.options?.selection.prop||overflow)&&!stage&&!stageBusy)void enterStage();
+  // A flourish look that is wider than the window is gone in a tenth of a second; growing the window for it would blink.
+  if((avatar.options?.selection.prop||(overflow&&!flourish))&&!stage&&!stageBusy)void enterStage();
   consumeReaction(now);
   placeBubble();
   // While a texture-residency swap is in flight the renderer returns without
   // drawing; keep the previous frame instead of flashing an empty window.
   if (avatar.resources && !avatar.resources.ready) return;
+  if (flourish?.concealed) return; // rendered out of sight while her flourish gets ready; see avatar3d-flourish.js
   context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, stageEl.width, stageEl.height);
   context.drawImage(image, 0, 0, image.width, image.height, rect.x*dpr, rect.y*dpr, rect.w*dpr, rect.h*dpr);
-  stageEl.style.visibility='visible';
+  stageEl.style.visibility='visible';flourish?.shown();
   if(now-maskPaintedAt>80||!hitMask){updateHitMask();maskPaintedAt=now;}
 }
 // The window may hang past the screen edge (a close-up makes it larger than
@@ -599,9 +615,11 @@ function loop(now) {
   renderRequest = 0;
   if(suspended)return;
   const q = quality();
-  const active = speaking || faceDirector.active || live.state !== 'idle' || avatar?.motion?.active || avatar?.options?.transition || now < manualUntil || dragging || companion?.walking || companion?.come || companion?.destination || stage?.turning;
+  // A conversation, a show or a walk outranks the flourish: it stops and she is herself at once.
+  if (flourish && (live.state !== 'idle' || settings.wardrobeFlourish === false || stage?.studio)) { flourish.cancel(); flourish = null; lastFrame = 0; }
+  const active = flourish || speaking || faceDirector.active || live.state !== 'idle' || avatar?.motion?.active || avatar?.options?.transition || now < manualUntil || dragging || companion?.walking || companion?.come || companion?.destination || stage?.turning;
   const due=frameDue(now,lastFrame,active?q.activeFps:q.idleFps);
-  if (document.visibilityState==='visible'&&due!==null) { lastFrame=due; try { paint(now); maintainStage(now); } catch (error) { console.error(error); } }
+  if (document.visibilityState==='visible'&&due!==null) { lastFrame=due; try { if (flourish && !flourish.update(now)) flourish = null; /* one step per painted frame: its warm-up counts on each being rendered */ paint(now); if (flourish) { if (stage) stage.idleSince = 0; } else maintainStage(now); } catch (error) { console.error(error); } }
   renderRequest = requestAnimationFrame(loop);
 }
 const wake = () => { if (!renderRequest) renderRequest = requestAnimationFrame(loop); };
@@ -755,6 +773,13 @@ window.gla_sing_targets=character=>{
  return [{id:settings.avatar.slug,name:currentCharacter(),avatar,play:id=>performAction('clip:'+id),cancel:()=>{++actionGeneration;}}];
 };
 Object.defineProperty(window, 'gla_avatar', { get: () => avatar }); // debug handle
+window.gla_flourish = () => flourish && { state: flourish.state, step: flourish.index, concealed: flourish.concealed, steps: flourish.looks.length, looks: flourish.looks.map(l => l.outfit) };
+window.gla_flourish_play = async options => { // debug: run it again on the character already on screen
+  if (!avatar?.options || flourish) return false;
+  const next = new WardrobeFlourish(avatar, options), instance = avatar;
+  if (!(await next.prepare()) || avatar !== instance) { next.dispose(); return false; }
+  flourish = next; lastFrame = 0; wake(); return true;
+};
 live.addEventListener('state', ({ detail }) => eventLog.push([performance.now() | 0, 'state:' + detail.state + (detail.reason ? ':' + detail.reason : '')]));
 live.addEventListener('error', ({ detail }) => eventLog.push([performance.now() | 0, 'error:' + detail.message]));
 let assistantTurn = ''; let usage = null;

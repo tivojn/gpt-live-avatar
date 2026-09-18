@@ -43,6 +43,37 @@ release tag and matching checksums for a reproducible reference.
 - **Avatar Show panel.** The topic is a suggestion (a placeholder, used only
   when you have told the Director nothing); "How it works" is a collapsed
   drawer; in show mode the foot status line appears only for problems.
+- **Wardrobe flourish** (`web/avatar3d-flourish.js`, on by default; Settings ›
+  Appearance and View › Wardrobe Flourish; `wardrobeFlourish` in the config).
+  Each time a character comes up in the solo window (launch, switch, back from
+  Avatar Show) she runs through 14 looks in about two seconds (outfit,
+  accessory, hair style and a colour for every slot that is visible in that
+  look, skin tones included), quick at first and easing out, then lands on her
+  own look. It never calls `options.select()`, so nothing it shows can be
+  saved; props and retired outfits are never shown. What makes it smooth, all
+  found by profiling (do not remove one without measuring):
+  - `AvatarResources.hold(nodes, textures)` keeps every live outfit and the
+    authored maps it paints over resident for its duration. Streaming an
+    outfit in takes about 0.5 s. Residency keys are sorted, so a held outfit
+    becoming visible is not a change.
+  - Colours are decoded beforehand at 512 px and uploaded (`initTexture`), and
+    each outfit is rendered once, while `flourish.concealed` stops the window
+    drawing. Those uploads were a 0.5 s freeze at the first steps otherwise.
+  - It advances once per *painted* frame (`update()` sits next to `paint()`),
+    the loop runs at the active frame rate while it exists, it starts only
+    after `shown()` reports a drawn frame, and the stage window neither grows
+    nor shrinks for a look that lasts a tenth of a second.
+  - Preparation overlaps the first residency pass. Measured on reloads
+    (M-series, Balanced): she is first drawn 0.55 s later than without it as
+    Sarah, 0.8 s as Tia and 2.0 s as Seraphim, whose armour textures take
+    1.2 s to reach the GPU, and then goes straight in. Three colours per slot
+    (`perSlot`) rather than four bought Seraphim 0.6 s.
+  It stands down for a live conversation, a motion, a walk, a look changed
+  from the menu, macOS Reduce Motion, and gives up after 8 s of preparing.
+  `Avatar3DAppearance.paintTextures()` is the one place chosen colours go on;
+  `paintHeld` defers it while the flourish has the materials. Avatar Show
+  characters do not flourish. `gla_flourish()` and `gla_flourish_play()` are
+  the QA hooks; `qa/flourish.mjs` (logic) and `qa/flourish-app.cjs` (real app).
 - **In-app update** (`electron/updater.cjs`, driven by `electron/app-info.cjs`).
   Check, then **Download** (progress in the window and in the menu row), then
   **Install and Relaunch**; each step is the user's click. Before anything is

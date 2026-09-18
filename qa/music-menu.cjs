@@ -62,7 +62,7 @@ soloContext.showAvatarMenu({ character: 'sarah', music: session });
 const rows = template => Array.from(template).filter(x => x.type !== 'separator' && x.visible !== false).map(x => x.label);
 assert.deepEqual(rows(built), ['Start Conversation', 'Ask Sarah…', 'Perform', 'Look', 'Character', 'Agent', 'View', 'Avatar Show · Playwright & Director…', 'Settings…', 'Quit Test']);
 assert.deepEqual(rows(item(built, 'Perform').submenu), ['Dance-along · Spotify', 'Dance Along to Current Song', 'Stay Still', 'Stop'], 'every way to move, and the way to stop, in one place');
-assert.deepEqual(rows(item(built, 'View').submenu), ['Bubble on Incoming Messages', 'Bubble Always On', 'Bubble Off', 'Avatar Close-up', 'Bring Avatar Back']);
+assert.deepEqual(rows(item(built, 'View').submenu), ['Bubble on Incoming Messages', 'Bubble Always On', 'Bubble Off', 'Wardrobe Flourish', 'Avatar Close-up', 'Bring Avatar Back']);
 assert.equal(built.find(x => x.label === 'Mute Microphone').visible, false, 'conversation controls appear only while talking');
 soloContext.showAvatarMenu({ character: 'sarah', live: 'connected' });
 assert.deepEqual(rows(built).slice(0, 4), ['End Conversation', 'Mute Microphone', 'Stop Talking', 'Ask Sarah…']);

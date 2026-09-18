@@ -40,6 +40,11 @@ app.whenReady().then(async()=>{try{
  const tickOn=()=>js(st,"return document.querySelector('#savedTick').classList.contains('on')");
  await js(st,"gla_settings_pane('appearance');const b=document.querySelector('#bubbleMode');b.value='always';b.dispatchEvent(new Event('change'));return 1");
  await until(tickOn,'Saved tick after a select');assert.equal((await js(st,'return (await gla.getSettings()).bubbleMode')),'always');
+ // The wardrobe flourish switch: on unless turned off, saved as it changes, and the avatar's menu row follows it.
+ assert.equal(await js(st,"return document.querySelector('#wardrobeFlourish').checked"),true);assert.equal(await js(st,"return document.querySelector('#wardrobeFlourish').closest('.pane').id"),'pane-appearance');
+ await js(st,"document.querySelector('#wardrobeFlourish').click();return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).wardrobeFlourish'))===false,'flourish off is saved');
+ assert.equal(JSON.parse(fs.readFileSync(profile+'/config.json')).wardrobeFlourish,false);
+ await js(st,"document.querySelector('#wardrobeFlourish').click();return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).wardrobeFlourish'))===true,'and back on');
  await until(async()=>!(await tickOn()),'the tick fades');
  await js(st,"gla_settings_pane('actions');const p=document.querySelector('#runtimePath');p.value='http://localhost:54535/';p.dispatchEvent(new Event('change'));return 1");
  await until(async()=>(await js(st,'return (await gla.getSettings()).agentRuntimePaths?.enconvo'))==='http://localhost:54535','the agent address saves on change, trailing slash removed');

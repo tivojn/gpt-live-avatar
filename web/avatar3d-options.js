@@ -275,32 +275,41 @@ export class Avatar3DAppearance {
         pending.push({id:item.id,key,item,texture,bitmap});
       }
       if(generation!==this.generation||this.avatar.disposed)throw Error('cancelled');
-      if(!this.baseMaps)this.baseMaps=new Map();
-      for(const [material,map] of this.baseMaps){material.map=map;material.needsUpdate=true;}
-      for(const resource of pending) {
-        const item=resource.item;
-        this.avatar.model.traverse(node=>{
-          if(item.nodes?.length&&!item.nodes.includes(node.userData.sourceName||node.name))return;
-          for(const material of (Array.isArray(node.material)?node.material:[node.material])) {
-            if(material?.name!==item.material)continue;
-            if(!this.baseMaps.has(material))this.baseMaps.set(material,material.map);
-            const original=this.baseMaps.get(material);
-            if(original){
-              resource.texture.channel=original.channel;
-              resource.texture.offset.copy(original.offset);resource.texture.repeat.copy(original.repeat);
-              resource.texture.center.copy(original.center);resource.texture.rotation=original.rotation;
-              resource.texture.updateMatrix();
-            }
-            material.map=resource.texture;material.needsUpdate=true;
-          }
-        });
-      }
       const next=new Map(pending.map(r=>[r.id,r]));
       for(const [id,r] of this.textureSelections)if(next.get(id)!==r){r.texture.dispose();r.bitmap.close();}
       this.textureSelections=next;
+      this.paintTextures();
     } catch(error) {
       for(const r of pending)if(this.textureSelections.get(r.id)!==r){r.texture.dispose();r.bitmap.close();}
       if(error.message!=='cancelled'&&generation===this.generation)this.status=error.message;
+    }
+  }
+
+  // Every material back to its authored map, then the chosen textures on top.
+  // A wardrobe flourish borrows the materials for a moment (paintHeld); the
+  // choice that arrives meanwhile is painted when it hands them back.
+  paintTextures(resources=this.textureSelections.values(),{held=false}={}) {
+    if(this.paintHeld&&!held){this.paintWaiting=true;return;}
+    this.paintWaiting=false;
+    if(!this.baseMaps)this.baseMaps=new Map();
+    for(const [material,map] of this.baseMaps){material.map=map;material.needsUpdate=true;}
+    for(const resource of resources) {
+      const item=resource.item;
+      this.avatar.model.traverse(node=>{
+        if(item.nodes?.length&&!item.nodes.includes(node.userData.sourceName||node.name))return;
+        for(const material of (Array.isArray(node.material)?node.material:[node.material])) {
+          if(material?.name!==item.material)continue;
+          if(!this.baseMaps.has(material))this.baseMaps.set(material,material.map);
+          const original=this.baseMaps.get(material);
+          if(original){
+            resource.texture.channel=original.channel;
+            resource.texture.offset.copy(original.offset);resource.texture.repeat.copy(original.repeat);
+            resource.texture.center.copy(original.center);resource.texture.rotation=original.rotation;
+            resource.texture.updateMatrix();
+          }
+          material.map=resource.texture;material.needsUpdate=true;
+        }
+      });
     }
   }
 
