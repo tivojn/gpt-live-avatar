@@ -152,7 +152,12 @@ export class WardrobeFlourish {
       // Uploading a colour to the GPU costs about 10 ms; all of them at the first steps was a half-second freeze.
       if(this.uploads.length){this.warming=true;for(const texture of this.uploads.splice(0,6))avatar.renderer?.initTexture?.(texture);return true;}
       if(this.warm.length){this.warming=true;this.put(this.warm.shift());return true;}
-      if(!this.revealed){this.warming=false;this.revealed=true;this.seen=false;this.restore();return true;}
+      // Her own look goes back on first. If a look was wider than the window (needsRoom, set by the window while
+      // it rendered them), the window now grows around HER, still out of sight, so its geometry is taken from the
+      // look she really wears; roomReady says when that is done.
+      if(!this.restored){this.restored=true;this.restore();return true;}
+      if(this.needsRoom&&!this.roomReady&&now-(this.roomSince??=now)<3000)return true; // a window that cannot grow must not keep her hidden
+      if(!this.revealed){this.warming=false;this.revealed=true;this.seen=false;return true;}
       if(!this.seen)return true;
       this.state='playing';this.delays=flourishDelays(this.looks.length);this.nextAt=now+this.lead;
     }

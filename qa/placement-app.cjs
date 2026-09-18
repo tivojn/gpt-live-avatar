@@ -10,7 +10,7 @@ async function until(fn,label){const end=Date.now()+90000;while(Date.now()<end){
 app.whenReady().then(async()=>{try{
  const w=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'window');
  const js=s=>w.webContents.executeJavaScript('(async()=>{'+s+'})()');
- await until(()=>js('return !!window.gla_avatar?.model&&gla_avatar.motion?.clips.size>=62&&gla_avatar.resources.ready;'),'ready');
+ await until(()=>js('return !!window.gla_avatar?.model&&gla_avatar.motion?.clips.size>=62&&gla_avatar.resources.ready&&!gla_flourish();'),'ready, and her wardrobe flourish over: the fixed waits below assume she acts at once');
  for(const other of BrowserWindow.getAllWindows())if(other!==w)other.close();
  const choose=id=>w.webContents.send('gla:menu-action',id);
  const capture=async name=>fs.writeFileSync(path.join(output,name+'.png'),(await w.webContents.capturePage()).toPNG());
@@ -25,11 +25,13 @@ app.whenReady().then(async()=>{try{
  assert(Math.abs(await js('return gla_geometry().fit.scale;')/initial-1)<.03,'Reverse pinch returns to prior size');
  checks.push('Close-up → center → pinch enlarges and shrinks the displayed avatar');
  await js("await gla_play('closer');");await wait(400);await js("await gla_play('go-center');");await wait(400);
- const hit=await js("const c=document.querySelector('#stage'),d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;for(let y=10;y<c.height-10;y+=4)for(let x=10;x<c.width-10;x+=4)if(d[(y*c.width+x)*4+3]>220)return {x:x/c.width*innerWidth,y:y/c.height*innerHeight};");
- assert(hit,'Avatar painted before drag');
+ // She may already be walking to the centre here (sooner when the window is already in stage mode, as it is after a
+ // wardrobe flourish with a wide look). Aim at the middle of her body, not the first opaque pixel (a sliver of hair that
+ // a walking figure leaves within a frame), and press in the same call that finds it.
  await js("HTMLCanvasElement.prototype.setPointerCapture=()=>{};");
  const pointer=(type,x,y,buttons)=>js(`document.querySelector('#stage').dispatchEvent(new PointerEvent('${type}',{bubbles:true,pointerId:77,button:0,buttons:${buttons},clientX:${x},clientY:${y},screenX:${x},screenY:${y}}));`);
- await pointer('pointerdown',hit.x,hit.y,1);await wait(250);
+ const hit=await js("const c=document.querySelector('#stage'),d=c.getContext('2d').getImageData(0,0,c.width,c.height).data,xs=[],ys=[];for(let y=10;y<c.height-10;y+=4)for(let x=10;x<c.width-10;x+=4)if(d[(y*c.width+x)*4+3]>220){xs.push(x);ys.push(y);}if(!xs.length)return null;xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);const p={x:xs[xs.length>>1]/c.width*innerWidth,y:ys[ys.length>>1]/c.height*innerHeight};c.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:77,button:0,buttons:1,clientX:p.x,clientY:p.y,screenX:p.x,screenY:p.y}));return p;");
+ assert(hit,'Avatar painted before drag');await wait(250);
  const before=await js('return gla_stage().anchor.x;'),xs=[];
  for(let i=1;i<=12;i++){await pointer('pointermove',hit.x+i*3,hit.y,1);await wait(30);xs.push(await js('return gla_stage().anchor.x;'));}
  await pointer('pointerup',hit.x+36,hit.y,0);
@@ -53,8 +55,9 @@ app.whenReady().then(async()=>{try{
  assert(close.face[3]*close.fit.scale>close.height*.45,'Face fills the close-up');
  const center={x:close.fit.x+(close.face[0]+close.face[2]/2)*close.fit.scale,y:close.fit.y+(close.face[1]+close.face[3]/2)*close.fit.scale};
  assert(Math.abs(center.x-close.width/2)<close.width*.1,'Face centered');
- await capture('face-closeup');choose('recover');await wait(400);
- assert(Math.abs(await js('return gla_avatar.layout().bounds[3]*gla_stage().scale;')-defaults.bodyHeight)<1,'Normal size restored after close-up');
+ await capture('face-closeup');choose('recover');
+ // Recovery resizes the native window; wait for the size itself rather than a fixed 400 ms, which a busy GPU overruns.
+ await until(async()=>Math.abs(await js('return gla_stage()?gla_avatar.layout().bounds[3]*gla_stage().scale:0;')-defaults.bodyHeight)<1,'Normal size restored after close-up');
  checks.push('Face-filling close-up and normal-size return use separate default shortcuts');
  await capture('restored-upper-right');checks.push('⌘⇧0 registered; menu restores captured upper-right size and location repeatedly');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({passed:true,checks,restored},null,2));console.log(JSON.stringify({passed:true,checks}));

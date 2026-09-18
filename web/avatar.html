@@ -415,9 +415,11 @@ function paint(now) {
   frameGeometry = { view, scale, layout, fit, pad };
   const overflow=left<0||right>cssW||top<0||bottom>cssH;
   // A flourish look wider than the window (Seraphim's armour) would be cut off at the window's edge. Its
-  // warm-up renders every outfit out of sight, so the window grows then, unseen; once it is playing the
-  // window is left alone, because resizing for a look that lasts a tenth of a second would blink.
-  if((avatar.options?.selection.prop||(overflow&&(!flourish||flourish.concealed)))&&!stage&&!stageBusy)void enterStage();
+  // warm-up renders every outfit out of sight and notes whether one needs room; the window then grows, still
+  // unseen, once her own look is back on (so the stage geometry is hers). While it plays the window is left
+  // alone, because resizing for a look that lasts a tenth of a second would blink.
+  if(flourish?.concealed){if(overflow&&!flourish.restored)flourish.needsRoom=true;flourish.roomReady=Boolean(stage)&&!stageBusy;}
+  if((avatar.options?.selection.prop||(overflow&&!flourish)||(flourish?.needsRoom&&flourish.restored&&flourish.concealed))&&!stage&&!stageBusy)void enterStage();
   consumeReaction(now);
   placeBubble();
   // While a texture-residency swap is in flight the renderer returns without

@@ -110,6 +110,23 @@ function run(flourish, { from = 0, until = () => false, frame = 33 } = {}) {
   assert.equal(flourish.index, -1, 'and until a frame of her has really been drawn');
   flourish.cancel(); assert.equal(flourish.state, 'done');
 }
+// ---- a look wider than the window: the window grows around HER look, out of sight, before anything is shown
+{
+  const c = character(), flourish = new WardrobeFlourish(c.avatar, { conceal: true, random: seeded(4), makeTexture: c.makeTexture });
+  await flourish.prepare(); let now = 0, grewWith = null;
+  for (; now < 4000 && !flourish.restored; now += 33) { flourish.update(now); flourish.needsRoom = true; } // the window saw a look overflow while warming
+  assert(flourish.restored && flourish.concealed, 'her own look is back on, and she is still hidden');
+  assert.deepEqual(c.calls.visibility.at(-1), c.options.selection, 'so the window measures her, not a flourish look');
+  for (let i = 0; i < 20; i++, now += 33) flourish.update(now);
+  assert(flourish.concealed && flourish.index === -1, 'held out of sight while the window grows');
+  flourish.roomReady = true; run(flourish, { from: now });
+  assert.equal(flourish.state, 'done'); assert.equal(flourish.index, 14, 'then it plays in full');
+  // a window that cannot grow must not keep her hidden for ever
+  const d = character(), stuck = new WardrobeFlourish(d.avatar, { conceal: true, random: seeded(4), makeTexture: d.makeTexture });
+  await stuck.prepare(); for (now = 0; now < 1000; now += 33) { stuck.update(now); stuck.needsRoom = true; }
+  assert(stuck.concealed); for (; now < 6000 && stuck.concealed; now += 33) stuck.update(now);
+  assert(!stuck.concealed && now < 5000, 'shown after three seconds regardless');
+}
 // ---- the ways out
 for (const [why, interrupt] of [['she starts a motion', c => { c.avatar.motion.active = { id: 'wave' }; }], ['her outfit is changed from the menu', c => { c.options.selection = { ...c.options.selection, outfit: 'tactical' }; }],
   ['a prop is put in her hand', c => { c.options.selection = { ...c.options.selection, prop: 'sword' }; }]]) {
