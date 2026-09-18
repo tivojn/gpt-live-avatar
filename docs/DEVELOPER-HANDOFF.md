@@ -8,12 +8,25 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 18, 2026 for **v0.2.24**. Use the
+Updated September 18, 2026 for **v0.2.25**. Use the
 [release page](https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/)
 to confirm Apple Silicon installer availability and checksums
 (`releases/latest.json` on that host is the machine-readable record). Use the
 release tag and matching checksums for a reproducible reference.
 
+
+## 0.2.25: the Playwright's own model, a Close button
+
+- **`showPlaywright`** (Settings › Reasoning › Avatar Show script writer;
+  `playwrightModel()` in `electron/show.cjs`): `openai:<model>` (default
+  `openai:gpt-5.6-luna`, through the voice OpenAI key) or `reasoning` to follow
+  the reasoning provider as before. Only the Playwright uses it; the Director
+  still follows reasoning. Why: see "Motions on stage, and how long a script
+  takes" in AVATAR-SHOW.md (101 s per script through EnConvo).
+- **Close** in the Avatar Show header (`#headClose`), hidden while a show is
+  performing, does what the × light does: stop, let a recording settle, close.
+- Stage motion rules, talking hands and the writing progress bar are described
+  in AVATAR-SHOW.md.
 
 ## 0.2.24: wardrobe flourish, grouped menu, Settings panes, one theme, in-app update
 

@@ -1,13 +1,13 @@
 {
-  "version": "0.2.24",
+  "version": "0.2.25",
   "date": "2026-09-18",
-  "title": "Wardrobe flourish, a calmer menu and Settings, in-app update",
-  "description": "She now comes up with a two-second wardrobe flourish, the right-click menu and Settings are reorganised under one monochrome theme that follows macOS light and dark, and the app can download, verify and install its own updates.",
+  "title": "A calmer stage: fitting motions, faster scripts, a progress bar and a Close button",
+  "description": "Avatar Show stops decorating ordinary talk with stunts, the Playwright gets its own fast model, script writing shows progress, and the panel says Close in words.",
   "highlights": [
-    "Wardrobe flourish: each time your avatar comes up or you switch character she flashes through her outfits, hair, skin tones and colours for about two seconds, then settles on the look you chose. Nothing she flashes through is saved and props are never part of it. Turn it off in Settings › Appearance or View › Wardrobe Flourish.",
-    "The right-click menu is grouped: talk and Ask… on top; Perform, Look, Character, Agent and View in the middle; Avatar Show, Settings, updates and the installed version at the bottom. About moved into Check for Updates….",
-    "Settings is a sidebar of panes with a one-line status each, saves as you change it, and shares one monochrome theme with the Avatar Show panel, bubbles and the updates window. Everything follows the macOS light or dark appearance.",
-    "In-app update: Check, Download with progress, then Install and Relaunch. The installer is checked against its published checksum, the developer’s signature and Apple’s notarization before anything is replaced, and the old version goes to the Trash.",
-    "Fixes: a character whose saved look kept a weapon grip after the prop was put away (Tia aiming an empty hand) now comes up standing, and Props › None lets go of the grip. The Enclosed and Heavy Seraphim armors are retired. The Avatar Show panel is tighter: the topic is a suggestion, How it works is a drawer."
+    "Motions only where they fit: the Playwright keeps a motion for what a character is literally doing (a bow, a wave, a dance while dancing) and never uses one as emphasis for talk. The heart gesture and walk clips are off the stage. Lines without a motion get natural talking hands or a shift of stance.",
+    "The Playwright has its own model (Settings › Reasoning › Avatar Show script writer): OpenAI GPT-5.6 Luna by default, so a script no longer waits a minute or two on an agent runtime such as EnConvo. Choose “Same as my reasoning provider” to keep the old behaviour.",
+    "Script writing shows an estimated progress bar with percent and time left, learned from how long your last scripts took. What you tell the Director about length (“very short”) now beats the Length menu.",
+    "A Close button in the Avatar Show header when no show is running: it saves any recording and returns to one character, like the × light.",
+    "From 0.2.24: a flourish look wider than a narrow window is no longer cut off, and a character no longer comes up holding an empty pistol grip."
   ]
 }

@@ -75,6 +75,7 @@ const DEFAULTS = {
   bubble: true,
   conversationSounds: true,
   wardrobeFlourish: true, // she runs through her wardrobe each time she comes up or is switched to
+  showPlaywright: 'openai:gpt-5.6-luna', // who writes Avatar Show scripts: an OpenAI API model, or 'reasoning' to follow the reasoning provider
   instinctEnabled: true, // TypeSafe Jev; has no effect until a TypeSafe key is saved
   instinctListening: true,
   bubbleMode: 'auto', // incoming replies, always visible, or hidden
@@ -141,7 +142,7 @@ function saveConfig() {
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 function publicSettings() {
-  return { ...config, defaultAvatar, appVersion:app.getVersion(), userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
+  return { ...config, defaultAvatar, appVersion:app.getVersion(), showPlaywright:(m=>m?'openai:'+m:'reasoning')(require('./show.cjs').playwrightModel(config)), showPlaywrightChoices:require('./show.cjs').playwrightChoices(), userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(config), effectiveReasoningEngine:reasoningEngine(config), agentAccess:permissions(config)[actionEngine(config)], agentPermissions:permissions(config), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(config), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function instinctSettings(){
@@ -407,6 +408,7 @@ function updateSettings(patch) {
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentFollowReasoning,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings]);
   if(typeof patch.conversationSounds==='boolean')config.conversationSounds=patch.conversationSounds;
   if(typeof patch.wardrobeFlourish==='boolean')config.wardrobeFlourish=patch.wardrobeFlourish;
+  if(require('./show.cjs').playwrightChoices().includes(patch.showPlaywright))config.showPlaywright=patch.showPlaywright;
   for(const key of ['instinctEnabled','instinctListening'])if(typeof patch[key]==='boolean')config[key]=patch[key];
   if(typeof patch.agentEnabled==='boolean')config.agentEnabled=patch.agentEnabled;
   if(ENGINES[patch.agentEngine])config.agentEngine=patch.agentEngine;

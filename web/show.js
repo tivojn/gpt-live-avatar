@@ -87,6 +87,8 @@ let castNotes={};
   $('#showPause').disabled=phase!=='performing'||!player;$('#showPause').textContent=player?.paused?'Resume':'Pause';
   // The same controls live in the panel header, reachable when the panel is folded or compact.
   const showing=phase==='performing'&&Boolean(player);$('#headPause').hidden=!showing;$('#headPause').textContent=player?.paused?'Resume':'Pause';$('#headStop').hidden=!showing;
+  // Leaving is spelled out in words once there is nothing to interrupt; during a performance Stop is the button, and the × light still closes.
+  if($('#headClose'))$('#headClose').hidden=showing;
   $('#showRecord').disabled=!recordingType()||phase==='performing';$('#showReveal').hidden=!savedRecording;
   // The header's record light: grey when off, red when armed for the next show, breathing while it records.
   const rec=$('#headRecord'),recording=Boolean(recorder?.active),armed=$('#showRecord').checked;rec.disabled=!recordingType()||saving;

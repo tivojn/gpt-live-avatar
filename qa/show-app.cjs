@@ -7,7 +7,7 @@ const {app,BrowserWindow,safeStorage}=require('electron'),fs=require('fs'),path=
 // Real native click-through state: the prompter's buttons must receive real clicks.
 const ignoreState=new Map(),ignored=BrowserWindow.prototype.setIgnoreMouseEvents;BrowserWindow.prototype.setIgnoreMouseEvents=function(value,...args){ignoreState.set(this.id,Boolean(value));return ignored.call(this,value,...args);};
 const repo=path.resolve(__dirname,'..'),out=path.join(repo,'build/qa-show');fs.mkdirSync(out,{recursive:true});app.setPath('userData',out+'/profile');app.setPath('videos',out+'/movies');fs.rmSync(out+'/movies',{recursive:true,force:true});fs.mkdirSync(app.getPath('userData'),{recursive:true});delete process.env.GLA_OPENAI_KEY;process.env.GLA_SHOW_MOTION_CONFIG=out+'/no-show-motion.json';
-fs.writeFileSync(app.getPath('userData')+'/config.json',JSON.stringify({avatar:'tia',quality:'balanced'}));fs.mkdirSync(app.getPath('userData')+'/avatars',{recursive:true});for(const slug of ['tia','sarah','iselda','ming-mei','seraphim']){const link=app.getPath('userData')+'/avatars/'+slug;if(!fs.existsSync(link))fs.symlinkSync(repo+'/build/characters/'+slug,link);}
+fs.writeFileSync(app.getPath('userData')+'/config.json',JSON.stringify({avatar:'tia',quality:'balanced',reasoningMode:'delegate',delegateProvider:'enconvo',delegateAuth:'local_runtime'}));fs.mkdirSync(app.getPath('userData')+'/avatars',{recursive:true});for(const slug of ['tia','sarah','iselda','ming-mei','seraphim']){const link=app.getPath('userData')+'/avatars/'+slug;if(!fs.existsSync(link))fs.symlinkSync(repo+'/build/characters/'+slug,link);}
 app.whenReady().then(()=>fs.writeFileSync(app.getPath('userData')+'/openai-key.bin',safeStorage.encryptString('sk-local-qa-placeholder')));
 const replies=[],errors=[];
 const script=(title,userLine)=>({title,synopsis:'The royal crown vanishes minutes before the coronation.',cast:[{slug:'tia',role:'Queen Amara'}],userRole:{role:'Pip the Jester'},
@@ -19,7 +19,7 @@ const script=(title,userLine)=>({title,synopsis:'The royal crown vanishes minute
   {speaker:'user',text:'At once, Majesty. Unless the cat has claimed it.'},
   {speaker:'tia',text:'Then we crown the cat and call it a day.',motion:'bow-courtly',expression:{smile:.9}}]}]});
 require('../electron/delegate.cjs').DelegateBackend.prototype.answer=async(owner,id,config,history,instructions,options={})=>{
- replies.push({id,history,instructions,options,persona:config.personaName});
+ replies.push({id,history,instructions,options,persona:config.personaName,writer:require('../electron/delegate.cjs').selected(config),engine:require('../electron/delegate.cjs').reasoningEngine(config)});
  if(config.personaName==='Playwright'){await new Promise(r=>setTimeout(r,1700));const revised=/Previous script \(JSON\)/.test(history[0].text);return {text:'```json\n'+JSON.stringify(script(revised?'The Lost Crown, Revised':'The Lost Crown',revised?'Perhaps the cat took it, Majesty.':'Perhaps under the cushion, Majesty.'))+'\n```',provider:'qa',model:'qa'};}
  const last=history[history.length-1]?.text||'';
  return {text:/ready|start|go ahead|places/i.test(last)?'A comedy about a lost crown with you as the jester. Places, everyone!':'Lovely idea. Should the show be a comedy, and would you like to play a role?',provider:'qa',model:'qa'};
@@ -63,7 +63,11 @@ app.whenReady().then(async()=>{try{
   assert(bar.filter(x=>x.phase!=='writing').every(x=>x.hidden),'hidden outside the writing phase');
   const kept=await js("return JSON.parse(localStorage.getItem('gla_show_write_ms'))");assert(Object.values(kept)[0][0]>=1600,'how long it took is remembered for the next estimate');}
  const chat=await js('return gla_group.show.chat');assert.equal(chat[3].text,'A comedy about a lost crown with you as the jester.','cue phrase is stripped from the caption');
- const playwright=replies.find(r=>r.persona==='Playwright');assert(playwright.options.long,'the Playwright uses the long reasoning path');assert(playwright.history[0].text.includes('accuse-point — Accuse [Theatre]'));assert(playwright.history[0].text.includes('Director: Lovely idea'));
+ const playwright=replies.find(r=>r.persona==='Playwright');assert(playwright.options.long,'the Playwright uses the long reasoning path');
+ // The Playwright has its own model: reasoning is an agent runtime here, and the script is still written by the OpenAI API model.
+ assert.deepEqual(playwright.writer,{provider:'openai',auth:'api_key',model:'gpt-5.6-luna'});assert.equal(playwright.engine,null,'not routed to the agent runtime');
+ assert.equal(replies.find(r=>r.persona==='Director').engine,'enconvo','the Director still follows the reasoning provider');
+assert(playwright.history[0].text.includes('accuse-point — Accuse [Theatre]'));assert(playwright.history[0].text.includes('Director: Lovely idea'));
  const shown=await js('return gla_group.show.script');assert.equal(shown.title,'The Lost Crown');assert.deepEqual(shown.userRole,{name:'Adam',role:'Pip the Jester',understudy:'sarah',understudyName:'Sarah'});assert.equal(shown.wantedMotions.length,1);
  assert.match(await js("return document.querySelector('#showStatus').textContent"),/Starting in 8 seconds/);
  assert(await js("return document.querySelector('.actor.standby .name')?.textContent")==='Sarah','the standby is marked on stage');
@@ -106,6 +110,7 @@ app.whenReady().then(async()=>{try{
  await until(()=>js('return window.spoken.length>=2'),'standby line');
  assert.equal(await js('return gla_group.show.recording'),true,'recording while performing');
  assert.equal(await js("const b=document.querySelector('#headRecord');return b.textContent+'|'+b.classList.contains('on')"),'Recording|true','the header light breathes while the show records');
+ assert.equal(await js("return document.querySelector('#headClose').hidden"),true,'no Close next to Stop while a show is on: Stop is the button then');
  assert.equal(await js("return !document.querySelector('#headPause').hidden&&!document.querySelector('#headStop').hidden"),true,'header shows Pause and Stop during the show');
  await js("document.querySelector('#headPause').click();");await until(()=>js("return gla_group.show.held&&document.querySelector('#headPause').textContent==='Resume'&&document.querySelector('#showPause').textContent==='Resume'"),'paused from the header');
  await js("document.querySelector('#showPause').click();");await until(()=>js("return !gla_group.show.held&&document.querySelector('#showPause').textContent==='Pause'"),'resumed from the button');
@@ -135,9 +140,11 @@ app.whenReady().then(async()=>{try{
  const last=await js('return gla_group.show.chat.filter(l=>!/Recording saved/.test(l.text)).at(-1)');assert.match(last.text,/end of “The Lost Crown”/);
  fs.writeFileSync(out+'/curtain-call.png',(await win.webContents.capturePage()).toPNG());
  // Feedback revises the script through the Playwright and replays; takeover covers every remaining human line.
+ {const solo=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html'));await solo.webContents.executeJavaScript("gla.setSettings({showPlaywright:'reasoning'})");}
  await js("document.querySelector('#showText').value='Make the jester blame the cat. Ready!';document.querySelector('#showSend').click();");
  await until(()=>js("return gla_group.show.script?.title==='The Lost Crown, Revised'"),'revised script');
- const revision=replies.filter(r=>r.persona==='Playwright')[1];assert(revision.history[0].text.includes('Feedback to apply: Make the jester blame the cat. Ready!'),'feedback reaches the Playwright');
+ // …unless Settings says to follow the reasoning provider.
+ const revision=replies.filter(r=>r.persona==='Playwright')[1];assert.equal(revision.engine,'enconvo','the revision was written by the reasoning provider, as chosen');assert.equal(revision.writer.provider,'enconvo');assert(revision.history[0].text.includes('Feedback to apply: Make the jester blame the cat. Ready!'),'feedback reaches the Playwright');
  await until(()=>js("return !document.querySelector('#prompter').hidden"),'revised prompter',30000);assert.equal(await js("return document.querySelector('#prompterText').textContent"),'Perhaps the cat took it, Majesty.');
  await js("document.querySelector('#prompterTakeover').click();");
  await until(()=>js("return gla_group.show.phase==='finished'"),'revised curtain call');
@@ -153,6 +160,9 @@ app.whenReady().then(async()=>{try{
  assert.equal(await js('return gla_group.show.phase'),'finished');assert.equal((await js('return gla_group.state')).running,false);await wait(400);const stoppedAt=await js('return window.spoken.length');await wait(600);assert.equal(await js('return window.spoken.length'),stoppedAt,'no lines after stop');
  // Switching back to an improv format hides the show and keeps Together working.
  await js("document.querySelector('#format').value='chat';document.querySelector('#format').onchange();");assert.equal(await js("return getComputedStyle(document.querySelector('#show')).display"),'none');assert.equal(await js("return document.querySelector('#joinLabel').textContent"),'Join as yourself');
- await js('await gla.group.close();');await wait(300);assert(primary.isVisible());assert.deepEqual(errors,[]);
+ // After the show the header says how to leave in words: Close does what the × light does, and the window really goes.
+ assert.deepEqual(await js("const b=document.querySelector('#headClose');return [b.hidden,b.textContent,getComputedStyle(b).display!=='none']"),[false,'Close',true]);
+ await js("document.querySelector('#headClose').click();");await until(()=>!BrowserWindow.getAllWindows().some(w=>!w.isDestroyed()&&w.isVisible()&&w.webContents.getURL().endsWith('/group.html')),'Close leaves Avatar Show',30000);
+ await wait(300);assert(primary.isVisible(),'and the solo character is back');assert.deepEqual(errors,[]);
  fs.writeFileSync(out+'/report.json',JSON.stringify({passed:true,checks:['show mode default','text briefing','cue phrase preparation','playwright long path','installed theatre motions','unavailable custom motion fallback','standby marking','prompter','pass to standby','real click on prompter','I said it','mid-show note holds and resumes','pause and resume button','header pause and stop during the show','private steering note to one character','live voice steering in her own voice','MP4 recording saved','panel as window: lights, resize, remembered position','fold and unfold','curtain call feedback','revision with feedback','takeover','stop','format switch','captions during gestures','composer closes after a voice note','header record light','stop during countdown stays ready']},null,1));console.log('show app qa passed');
  }catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{app.exit(process.exitCode||0);}});

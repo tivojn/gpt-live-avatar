@@ -179,6 +179,11 @@
       <p class="state" id="delegateTestState" aria-live="polite"></p>
       <p class="note">Voice and voice previews always use the OpenAI key under Voice, whichever provider reasons.</p>
     </section>
+    <section>
+      <label for="showPlaywright">Avatar Show script writer</label>
+      <select id="showPlaywright"></select>
+      <p class="note" id="showPlaywrightNote"></p>
+    </section>
   </div>
 
   <div class="pane" id="pane-actions" role="tabpanel" aria-labelledby="tab-actions" hidden>
@@ -285,6 +290,13 @@
     renderShortcuts();
     $('#conversationSounds').checked=settings.conversationSounds!==false;
     $('#wardrobeFlourish').checked=settings.wardrobeFlourish!==false;
+    {const select=$('#showPlaywright'),names={'gpt-5.6-luna':'GPT-5.6 Luna · fastest','gpt-5.6-terra':'GPT-5.6 Terra','gpt-5.6-sol':'GPT-5.6 Sol','gpt-6-astra':'GPT-6 Astra · most capable, slower'};
+     select.replaceChildren(...(settings.showPlaywrightChoices||[]).map(value=>{const option=document.createElement('option');option.value=value;
+      option.textContent=value==='reasoning'?'Same as my reasoning provider':'OpenAI API · '+(names[value.slice(7)]||value.slice(7));return option;}));
+     select.value=settings.showPlaywright;
+     $('#showPlaywrightNote').textContent=settings.showPlaywright==='reasoning'
+      ?'The Playwright follows the provider above. An agent runtime (EnConvo, OpenClaw, Hermes, Grok Build, Codex) thinks before it writes: expect a minute or two per script, and the agent’s own cost.'
+      :'The Playwright writes each show’s script with this model through your OpenAI key, whatever provider reasons elsewhere: usually well under a minute. Choose “Same as my reasoning provider” to use that instead.';}
     const instinct=settings.instinct||{};
     $('#instinctEnabled').checked=instinct.enabled!==false;$('#instinctListening').checked=instinct.listening!==false;
     $('#instinctListening').disabled=instinct.enabled===false;$('#testInstinct').disabled=!instinct.hasKey;
@@ -513,6 +525,7 @@
   $('#codexCheck').onclick=checkCodex;$('#delegateCodexCheck').onclick=checkCodex;
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
   $('#wardrobeFlourish').onchange=()=>save({wardrobeFlourish:$('#wardrobeFlourish').checked});
+  $('#showPlaywright').onchange=()=>save({showPlaywright:$('#showPlaywright').value});
   $('#instinctEnabled').onchange=()=>save({instinctEnabled:$('#instinctEnabled').checked});
   $('#instinctListening').onchange=()=>save({instinctListening:$('#instinctListening').checked});
   const instinctTask=async(message,work)=>{instinctBusy=true;setState($('#instinctState'),message);const r=await work();instinctBusy=false;if(!r.ok){setState($('#instinctState'),r.error,'bad');return null;}render(await gla.getSettings());return r;};

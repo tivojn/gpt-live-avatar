@@ -45,6 +45,12 @@ app.whenReady().then(async()=>{try{
  await js(st,"document.querySelector('#wardrobeFlourish').click();return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).wardrobeFlourish'))===false,'flourish off is saved');
  assert.equal(JSON.parse(fs.readFileSync(profile+'/config.json')).wardrobeFlourish,false);
  await js(st,"document.querySelector('#wardrobeFlourish').click();return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).wardrobeFlourish'))===true,'and back on');
+ // The Avatar Show script writer has its own model under Reasoning: OpenAI Luna unless told to follow the reasoning provider.
+ assert.deepEqual(await js(st,"const s=document.querySelector('#showPlaywright');return [s.closest('.pane').id,s.value,[...s.options].map(o=>o.value)]"),['pane-reasoning','openai:gpt-5.6-luna',['openai:gpt-5.6-luna','openai:gpt-5.6-sol','openai:gpt-5.6-terra','openai:gpt-6-astra','reasoning']]);
+ await js(st,"gla_settings_pane('reasoning');const s=document.querySelector('#showPlaywright');s.value='reasoning';s.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).showPlaywright'))==='reasoning','script writer follows reasoning');assert.match(await js(st,"return document.querySelector('#showPlaywrightNote').textContent"),/a minute or two per script/);
+ assert.equal((await js(st,"return (await gla.setSettings({showPlaywright:'openai:not-a-model'})).showPlaywright")),'reasoning','an unknown writer is refused');
+ await js(st,"const s=document.querySelector('#showPlaywright');s.value='openai:gpt-5.6-luna';s.dispatchEvent(new Event('change'));return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).showPlaywright'))==='openai:gpt-5.6-luna','and back');
  await until(async()=>!(await tickOn()),'the tick fades');
  await js(st,"gla_settings_pane('actions');const p=document.querySelector('#runtimePath');p.value='http://localhost:54535/';p.dispatchEvent(new Event('change'));return 1");
  await until(async()=>(await js(st,'return (await gla.getSettings()).agentRuntimePaths?.enconvo'))==='http://localhost:54535','the agent address saves on change, trailing slash removed');

@@ -30,6 +30,11 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  assert.deepEqual(prudish.scenes[0].lines.map(l=>l.motion||''),['','','hip-hop-dance'],'a heart or a walk clip the Playwright asks for anyway is dropped, the line stays');
 
  // ------------------------------------------------------------- playwright
+ {const {playwrightModel,playwrightChoices,PLAYWRIGHT_DEFAULT}=require(path.join(root,'electron/show.cjs'));
+  assert.equal(PLAYWRIGHT_DEFAULT,'openai:gpt-5.6-luna');assert.equal(playwrightModel({}),'gpt-5.6-luna','scripts are written by a direct API model unless told otherwise');
+  assert.equal(playwrightModel({showPlaywright:'reasoning'}),'','"reasoning" follows the reasoning provider');assert.equal(playwrightModel({showPlaywright:'openai:gpt-6-astra'}),'gpt-6-astra');
+  assert.equal(playwrightModel({showPlaywright:'openai:made-up'}),'gpt-5.6-luna');assert.equal(playwrightModel({showPlaywright:42}),'gpt-5.6-luna');
+  assert.equal(playwrightChoices()[0],PLAYWRIGHT_DEFAULT);assert.equal(playwrightChoices().at(-1),'reasoning');}
  assert.throws(()=>script.playwrightRequest({id:'bad id',characters}),/Invalid/);
  assert.throws(()=>script.playwrightRequest({id:'show-1',characters,brief:{}}),/what the show is about/);
  const request=script.playwrightRequest({id:'show-1',characters,user:{enabled:true,name:'Adam'},understudy:'sarah',length:'short',brief:{theme:'A lost crown',transcript:[{role:'user',text:'Make it funny'},{role:'director',text:'Sure!'}]}});

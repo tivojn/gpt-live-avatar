@@ -6,7 +6,7 @@ const {ipcMain,app,shell}=require('electron');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {playwrightRequest,parseScript,scriptSummary,clean}=require('./show-script.cjs');
 const {ShowMotionPipeline}=require('./show-motions.cjs');
-const {normalizeDelegate}=require('./delegate.cjs');
+const {normalizeDelegate,MODEL_CHOICES}=require('./delegate.cjs');
 const CUE='Places, everyone!';
 const PHASES=['planning','writing','preparing','ready','performing','finished'];
 function showContext(context={}){
@@ -39,15 +39,28 @@ How you work:
 - After the performance, ask for feedback. If the user wants changes, restate them in one sentence and end with "${CUE}" so the Playwright revises the script; if they are happy, thank them and offer another show.
 - Only describe abilities the characters really have; do not promise motions or effects that are not installed unless custom motion generation is available.${live?'\nThis is a live voice conversation. Handle it directly in your own voice. Delegate to the reasoning assistant only when the user asks something you cannot answer from this briefing.':''}`;
 }
+const PLAYWRIGHT_DEFAULT='openai:gpt-5.6-luna';
+// '' means "follow the reasoning provider"; otherwise the OpenAI API model that writes scripts.
+function playwrightModel(config){const value=typeof config?.showPlaywright==='string'?config.showPlaywright:PLAYWRIGHT_DEFAULT;if(value==='reasoning')return '';
+ const model=value.startsWith('openai:')?value.slice(7):'';return MODEL_CHOICES.openai.includes(model)?model:PLAYWRIGHT_DEFAULT.slice(7);}
+const playwrightChoices=()=>[PLAYWRIGHT_DEFAULT,...MODEL_CHOICES.openai.map(model=>'openai:'+model).filter(value=>value!==PLAYWRIGHT_DEFAULT),'reasoning'];
 function setupShow(deps){
  const pipeline=new ShowMotionPipeline({root:deps.root,toolsDir:deps.toolsDir||'',workDir:deps.workDir||'',characterDir:slug=>deps.characterDir(slug),...(process.env.GLA_SHOW_MOTION_CONFIG?{configFile:process.env.GLA_SHOW_MOTION_CONFIG}:{})});
  let pendingVoice=null;const jobs=new Map();
  const allowed=e=>e.senderFrame===e.sender.mainFrame&&e.sender.getURL()===deps.origin+'/group.html';
  const handle=(channel,fn)=>ipcMain.handle(channel,async(e,...args)=>{try{if(!allowed(e))throw Error('Open Avatar Show first.');return {ok:true,...await fn(e,...args)};}catch(err){return {ok:false,error:err.status===401||err.status===403?'The voice API key was rejected. Check Settings.':String(err.message||'The show could not continue.').slice(0,600)};}});
- const reasoning=()=>{const config=deps.getConfig();const choice=config.reasoningMode==='delegate'?config:normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:'gpt-5.6-luna'});return {...config,...choice};};
+ // The Playwright has its own model. A script is one long structured document: a direct API model streams it in
+ // seconds, while an agent runtime chosen for everyday reasoning (EnConvo, OpenClaw, Codex…) thinks for a minute or
+ // two first (measured: 101 s against EnConvo for a short play). "reasoning" keeps the old behaviour of following
+ // the reasoning provider.
+ const reasoning=(role)=>{const config=deps.getConfig();
+  const own=role==='playwright'?playwrightModel(config):'';
+  if(own)return {...config,...normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:own})};
+  return followReasoning(config);};
+ const followReasoning=config=>{const choice=config.reasoningMode==='delegate'?config:normalizeDelegate(config,{reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key',delegateModel:'gpt-5.6-luna'});return {...config,...choice};};
  handle('gla:show:playwright',async(e,request={})=>{
   const r=playwrightRequest(request);
-  const result=await deps.backend.answer(e.sender.id,r.id,{...reasoning(),personaName:'Playwright'},r.history,r.instructions,{long:true});
+  const result=await deps.backend.answer(e.sender.id,r.id,{...reasoning('playwright'),personaName:'Playwright'},r.history,r.instructions,{long:true});
   const script=parseScript(result.text,request);
   return {script,summary:scriptSummary(script),provider:result.provider,model:result.model};
  });
@@ -134,4 +147,4 @@ function setupShow(deps){
  });
  return {pipeline,cancelAll(){pendingVoice?.abort();for(const job of jobs.values())job.abort();jobs.clear();for(const id of [...recordings.keys()])closeRecording(id,{keep:true});deps.backend.cancelAll?.();}};
 }
-module.exports={setupShow,directorInstructions,showContext,CUE};
+module.exports={setupShow,directorInstructions,showContext,CUE,playwrightModel,playwrightChoices,PLAYWRIGHT_DEFAULT};
