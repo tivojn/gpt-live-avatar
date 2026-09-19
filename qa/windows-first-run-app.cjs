@@ -46,7 +46,7 @@ app.whenReady().then(async()=>{try{
  // (a transparent window that resizes can flash opaque black on some systems; alpha 255 in a corner is that flash).
  if(!process.argv.includes('--no-motion')){
   const before=solo.getBounds(),seen=[];let opaqueCorners=0,grew=0,back=0;const started=Date.now();
-  await js("void window.gla_play('wave')").catch(e=>report.errors.push('motion: '+e.message));
+  await js("void window.gla_play('backflip')").catch(e=>report.errors.push('motion: '+e.message)); // a full-body clip: a wave fits her own window
   while(Date.now()-started<45000){
    const b=solo.getBounds(),shot=await solo.webContents.capturePage(),size=shot.getSize(),bmp=shot.toBitmap(),a=(x,y)=>bmp[(y*size.width+x)*4+3];
    if(size.width>4&&size.height>4&&[a(1,1),a(size.width-2,1),a(1,size.height-2),a(size.width-2,size.height-2)].some(v=>v>8))opaqueCorners++;

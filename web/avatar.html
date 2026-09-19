@@ -426,7 +426,12 @@ function paint(now) {
   // perspective those corners fall far below her feet and above her head, where there is nothing.
   const slack=pad*scale,seen=visible.tight?[{x:visible.tight.left,y:visible.tight.top},{x:visible.tight.right,y:visible.tight.bottom}]:visible;
   const reach=[points[0],points[1],...seen,...(joints?points.slice(-2):[])],rx=reach.map(p=>p.x*scale+fit.x),ry=reach.map(p=>p.y*scale+fit.y);
-  const edge={left:Math.min(...rx),right:Math.max(...rx),top:Math.min(...ry),bottom:Math.max(...ry)};
+  // Downwards her feet decide, not a box: a foot bone points diagonally, so the box around the sandal it carries has a corner
+  // 5 to 12 cm under the floor (Sarah: 1535 to 1600 of 1536 units against soles at 1479), and that alone sent her on stage
+  // whenever an idle pose shifted her weight. Her layout bounds and her joints follow a real drop or a crouch; a carried
+  // prop goes on stage by itself (below).
+  const ground=[points[1],...(joints?points.slice(-2):[])].map(p=>p.y*scale+fit.y);
+  const edge={left:Math.min(...rx),right:Math.max(...rx),top:Math.min(...ry),bottom:Math.max(...ground)};
   const overflow=edge.left<-slack||edge.right>cssW+slack||edge.top<-slack||edge.bottom>cssH+slack;
   if(overflow&&!stage&&!window.gla_overflow)window.gla_overflow={left:Math.round(edge.left),right:Math.round(edge.right),top:Math.round(edge.top),bottom:Math.round(edge.bottom),tight:visible.tight&&Object.values(visible.tight).map(Math.round),window:[cssW,cssH],motion:avatar.motion?.active?.id||'',points:points.length,bounds:layout.bounds.map(Math.round),joints:joints&&[joints.x,joints.y,joints.width,joints.height].map(Math.round),visible:visible.map(p=>[Math.round(p.x),Math.round(p.y)]),fit:[+scale.toFixed(4),Math.round(fit.x),Math.round(fit.y)],at:Math.round(now)}; // debug: the first time she did not fit her window, and where
   // A flourish look wider than the window (Seraphim's armour) would be cut off at the window's edge. Its

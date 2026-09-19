@@ -25,8 +25,11 @@ or commit it).
 | `node qa\windows-packaged-check.cjs` | starts the BUILT app with a throwaway profile and asks its pages over a local DevTools port: avatar unlocked, drawn, Settings opens |
 
 `verify-release` wants the starter packs the signed catalogue names under
-`build\protected\starter\sarah\{base,motions}.gla`. A hard link to the bundle is enough
-(`New-Item -ItemType HardLink`), but the packs must be the catalogue's revision or it refuses, rightly.
+`build\protected\starter\sarah\{base,motions}.gla`, in the catalogue's revision, or it refuses, rightly.
+`electron.exe toolsetch-starter.cjs` fetches them with the app's own downloader (every part and the whole pack
+checked against the signed catalogue; about 650 MB and a dozen requests of the service's daily limit; packs that
+already match are not fetched again), and hard-links them into `buildssetsundle\sarah` for development
+runs. A pack it replaces is renamed `*.superseded-<time>`, never deleted.
 The installer is unsigned until there is a certificate, so SmartScreen warns.
 
 ## What differs from macOS
@@ -59,9 +62,10 @@ The installer is unsigned until there is a certificate, so SmartScreen warns.
 ## Found on Windows, fixed for every platform
 
 - She went into the full-display stage window while standing still (first at once, then about 12 s in, then
-  whenever an idle pose spread her arms). The overflow test now measures her without the render rectangle's
-  breathing room, bone by bone rather than by the corners of one box around her, and from the vertices a bone
-  mostly moves (`points.tight` from `meshPoints()` in `web/avatar3d-options.js`; the decision is in the paint
+  whenever an idle pose spread her arms or shifted her weight). The overflow test now measures her without the
+  render rectangle's breathing room, bone by bone rather than by the corners of one box around her, from the
+  vertices a bone mostly moves, and downwards by her feet (layout bounds and joints) rather than by the box around
+  a sandal, whose corner lies under the floor (`points.tight` from `meshPoints()` in `web/avatar3d-options.js`; the decision is in the paint
   loop of `web/avatar.html`). The loose corners still size the render rectangle, so nothing is clipped.
   `window.gla_overflow` records the first time she did not fit, and why.
 
