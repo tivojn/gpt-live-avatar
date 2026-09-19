@@ -137,17 +137,36 @@ server.listen(0,'127.0.0.1',()=>{
   // ---- the right-click Agent menu says what Settings says, with the same thing ticked
   {const open=async()=>{template=null;await js(solo,"document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");return until(()=>template,'agent menu');};
    await js(solo,"await gla.setSettings({reasoningMode:'managed',agentEnabled:true,agentEngine:'grok',agentFollowReasoning:true})");await wait(200);
-   let items=await open(),reasoning=items.find(x=>x.label==='Reasoning').submenu,actions=items.find(x=>x.label==='Actions & Permissions').submenu;
+   const {flat}=require('./menu-flat.cjs'),defaults=items=>flat(items.find(x=>x.label==='Agent · defaults for everyone').submenu),hers=(items,name)=>items.find(x=>x.label==='Character').submenu.find(x=>x.label?.replace('✓ ','')===name).submenu.find(x=>x.label==='Agent').submenu;
+   let items=defaults(await open()),reasoning=items.find(x=>x.label==='Reasoning').submenu,actions=items.find(x=>x.label==='Actions & Permissions').submenu;
    assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label),['Gemini reasoning'],'the built-in reasoning of the system in use is an item, and the ticked one');assert(!reasoning.some(x=>/GPT-Live/.test(x.label)));
    assert.equal(actions[0].label,'Let avatars carry out my requests');assert.equal(actions[0].checked,true);assert(!actions.some(x=>/^Carried out by/.test(x.label||'')),'who does the work is said once, not twice');
    const follow=actions.find(x=>x.label?.startsWith('Follow reasoning agent'));assert.deepEqual([follow.label,follow.enabled,follow.checked],['Follow reasoning agent · not possible with Gemini reasoning',false,false],'not ticked when nothing is being followed');
    assert.deepEqual(actions.filter(x=>x.label?.startsWith('✓ ')).map(x=>x.label.replace(' · not installed','')),['✓ Grok Build']);
    // choosing in the menu is choosing in Settings
    reasoning.find(x=>x.label?.startsWith('Codex App Server')).click();await until(async()=>(await js(solo,'return (await gla.getSettings()).effectiveReasoningEngine'))==='codex','menu choice saved');
-   items=await open();reasoning=items.find(x=>x.label==='Reasoning').submenu;actions=items.find(x=>x.label==='Actions & Permissions').submenu;
+   items=defaults(await open());reasoning=items.find(x=>x.label==='Reasoning').submenu;actions=items.find(x=>x.label==='Actions & Permissions').submenu;
    assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label.replace(' · not installed','')),['Codex App Server']);assert.equal(actions.find(x=>x.label==='Follow reasoning agent · now Codex App Server').checked,true,'the menu names who is being followed');assert.deepEqual(actions.filter(x=>x.label?.startsWith('✓ ')).map(x=>x.label.replace(' · not installed','')),['✓ Codex App Server']);
    actions[0].click();await until(async()=>(await js(solo,'return (await gla.getSettings()).agentEnabled'))===false,'actions off from the menu');
-   actions=(await open()).find(x=>x.label==='Actions & Permissions').submenu;assert.deepEqual([actions[0].checked,actions[1].label],[false,'Off: she will say she cannot do it']);
+   actions=defaults(await open()).find(x=>x.label==='Actions & Permissions').submenu;assert.deepEqual([actions[0].checked,actions[1].label],[false,'Off: she will say she cannot do it']);
+   // ---- every character has the same two submenus under her name: the defaults until something is changed for her
+   let mine=hers(await open(),'Sarah');assert.deepEqual(mine.filter(x=>x.label).map(x=>x.label),['Use the defaults','Sarah’s own settings','Codex App Server · actions off','Reasoning','Actions & Permissions']);assert.deepEqual(mine.filter(x=>x.checked).map(x=>x.label),['Use the defaults']);
+   assert(!flat(await open()).some(x=>/has her own/.test(x.label||'')),'nothing to warn about while she is on the defaults');
+   // a choice under her name is hers alone: the defaults stay, and the window (which acts for her) gets hers
+   mine.find(x=>x.label==='Reasoning').submenu.find(x=>x.label==='Gemini reasoning').click();
+   await until(async()=>(await js(solo,'return (await gla.getSettings()).reasoningMode'))==='managed','her own reasoning reaches her window');
+   let saved=JSON.parse(fs.readFileSync(out+'/profile/config.json','utf8'));assert.equal(saved.reasoningMode,'delegate','the defaults were not touched');assert.equal(saved.characterAgents.sarah.reasoningMode,'managed');assert.equal(saved.characterAgents.sarah.agentEnabled,false,'her copy starts from what applied to her');
+   items=await open();mine=hers(items,'Sarah');assert.deepEqual(mine.filter(x=>x.checked&&x.type==='radio').map(x=>x.label),['Sarah’s own settings']);assert.equal(mine[2].label,'Gemini reasoning · actions off');
+   assert.deepEqual(mine.find(x=>x.label==='Reasoning').submenu.filter(x=>x.checked).map(x=>x.label),['Gemini reasoning']);assert.deepEqual(flat(defaults(items)).find(x=>x.label==='Reasoning').submenu.filter(x=>x.checked).map(x=>x.label.replace(' · not installed','')),['Codex App Server'],'the defaults still say Codex');
+   assert.equal(items.find(x=>x.label==='Agent · defaults for everyone').submenu[0].label,'Sarah has her own · Character › Sarah › Agent','the defaults menu says they do not apply to the one on screen');
+   const other=hers(items,(await js(solo,'return (await gla.getSettings()).avatars.find(a=>a.slug!=="sarah").name')));assert.deepEqual(other.filter(x=>x.checked&&x.type==='radio').map(x=>x.label),['Use the defaults'],'nobody else changed');
+   // her actions on, by her own engine, with her own permission for it
+   mine.find(x=>x.label==='Actions & Permissions').submenu[0].click();await until(async()=>(await js(solo,'return (await gla.getSettings()).agentEnabled'))===true,'her actions on');
+   saved=JSON.parse(fs.readFileSync(out+'/profile/config.json','utf8'));assert.equal(saved.agentEnabled,false,'actions are still off by default');assert.equal(saved.characterAgents.sarah.agentEnabled,true);
+   assert.equal((await js(solo,'return (await gla.getSettings()).agentSummaries.sarah.text')),'Gemini reasoning · actions by Grok Build');
+   // and back
+   hers(await open(),'Sarah')[0].click();await until(async()=>(await js(solo,'return (await gla.getSettings()).reasoningMode'))==='delegate','back on the defaults');
+   saved=JSON.parse(fs.readFileSync(out+'/profile/config.json','utf8'));assert.equal('sarah' in (saved.characterAgents||{}),false);assert.equal(await js(solo,'return (await gla.getSettings()).agentEnabled'),false);
    await js(solo,"await gla.setSettings({agentEnabled:false})");}
   // ---- "Gemini reasoning": Gemini alone. No function is declared, so nothing can be handed to any other model.
   await js(solo,"await gla.setSettings({reasoningMode:'managed'})");await wait(300);const sockets=seen.sockets.length;

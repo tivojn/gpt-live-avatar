@@ -38,10 +38,34 @@ app.whenReady().then(async()=>{try{
  // Status at a glance: a chip per pane and the same verdict as a dot beside its name.
  const chips=await js(st,"return Object.fromEntries([...document.querySelectorAll('.chip')].map(c=>[c.id.slice(5),c.textContent]))");
  assert.equal(chips.voice,'Needs an OpenAI API key');assert.match(chips.character,/^Sarah · Gleam · \d+ motions$/,'the character chip names her voice');
- assert.deepEqual(await js(st,"const o=[...document.querySelector('#voice').options].map(x=>x.textContent);return [o.length,o[0],o.find(x=>x.startsWith('Stone')),o.find(x=>x.startsWith('Beacon'))]"),[13,'Marin · female · default','Stone · male','Beacon'],'gender where it is known, nothing where it is not');assert.equal(chips.actions,'On · EnConvo');assert.match(chips.agents,/^EnConvo · /);assert.match(chips.instinct,/built-in rules/);
+ assert.deepEqual(await js(st,"const o=[...document.querySelector('#voice').options].map(x=>x.textContent);return [o.length,o[0],o.find(x=>x.startsWith('Stone')),o.find(x=>x.startsWith('Beacon'))]"),[13,'Marin · female · default','Stone · male','Beacon'],'gender where it is known, nothing where it is not');assert.equal(chips.actions,'On · EnConvo');assert.equal(chips.agents,'Everyone on the defaults');assert.match(chips.instinct,/built-in rules/);
  assert.equal(await js(st,"return document.querySelector('#dot-voice').className"),'dot bad');assert.equal(await js(st,"return document.querySelector('#dot-actions').className"),'dot ok');
  assert.match(await js(st,"return document.querySelector('#appVersion').textContent"),/^Version \d/);
- assert.deepEqual(await js(st,"gla_settings_pane('agents');return [...document.querySelectorAll('#agentBindingsTable th')].filter(t=>getComputedStyle(t).display!=='none').map(t=>t.textContent)"),['Character','EnConvo agent'],'only the engine in use has a column');
+ // Agents: one row per character. On the defaults her row shows what the defaults are, greyed; "Her own" unlocks it, and a change is hers alone.
+ assert.deepEqual(await js(st,"gla_settings_pane('agents');return [...document.querySelectorAll('#agentBindingsTable th')].map(t=>t.textContent)"),['Character','Her own','Reasoning','Actions','Permission','Her agent']);
+ const row=()=>js(st,"const r=document.querySelector('#agentBindings tr[data-character=sarah]');return [...r.querySelectorAll('input,select')].map(x=>[x.type==='checkbox'?x.checked:x.value,x.disabled])");
+ const defaultRow=await row();assert.deepEqual(defaultRow.slice(0,3).map(x=>x[1]),[false,true,true],'only the switch is live on the defaults');assert.deepEqual(defaultRow.slice(0,3).map(x=>x[0]),[false,'managed','enconvo'],'greyed, her row shows what the defaults are');
+ assert.deepEqual(await js(st,"const o=document.querySelector('select[aria-label=\"Sarah actions\"] option[value=follow]');return [o.textContent,o.disabled]"),['Follow her reasoning · not possible',true],'built-in reasoning cannot be followed');
+ await js(st,"const x=document.querySelector('#agentBindings tr[data-character=sarah] input');x.checked=true;x.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await row())[1][1]===false,'her row unlocked');assert.equal((await js(st,'return (await gla.getSettings()).agentSummaries.sarah.text')),'GPT-Live reasoning · actions by EnConvo','her copy is what applied to her');
+ await js(st,"const x=document.querySelector('select[aria-label=\"Sarah reasoning\"]');x.value='hermes';x.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).agentSummaries.sarah.reasoningEngine'))==='hermes','her reasoning saved');
+ {const mine=await js(st,'const s=await gla.getSettings();return [s.reasoningMode||"managed",s.agentSummaries.sarah.text,s.agentSummaries.sarah.canFollow,Object.values(s.agentSummaries).filter(x=>x.custom).length]');
+  assert.deepEqual(mine,['managed','Hermes · actions by EnConvo',true,1],'the defaults and everyone else are untouched');}
+ await until(()=>js(st,"return document.querySelector('select[aria-label=\"Sarah actions\"] option[value=follow]').textContent==='Follow · Hermes'"),'who would be followed is named');
+ await js(st,"const x=document.querySelector('select[aria-label=\"Sarah actions\"]');x.value='follow';x.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).agentSummaries.sarah.text'))==='Hermes · actions follow','her actions follow her reasoning');
+ assert.equal(await js(st,"return document.querySelector('#agentBindings tr[data-character=sarah] td:last-child select').dataset.engine"),'hermes','the agent picker is for the engine that acts for her');
+ await js(st,"const x=document.querySelector('select[aria-label=\"Sarah permission\"]');x.value='workspace';x.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).agentSummaries.sarah.permission'))==='workspace','her permission for Hermes saved');assert.equal(await js(st,'return (await gla.getSettings()).agentPermissions.hermes'),'full','the default permission stays');
+ assert.equal(await js(st,"return document.querySelector('#chip-agents').textContent"),'Sarah · own settings');
+ await wait(300);fs.writeFileSync(out+'/agents.png',(await st.webContents.capturePage()).toPNG());
+ {const fit=await js(st,"const m=document.querySelector('main')||document.body,t=document.querySelector('#agentBindingsTable');return [t.scrollWidth<=t.parentElement.clientWidth+1,document.documentElement.scrollWidth<=innerWidth+1]");assert.deepEqual(fit,[true,true],'the table fits the pane without scrolling sideways');}
+ await js(st,"const x=document.querySelector('select[aria-label=\"Sarah actions\"]');x.value='off';x.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).agentSummaries.sarah.actions'))==='off','her actions off');assert.equal(await js(st,'return (await gla.getSettings()).agentEnabled'),true,'still on by default');
+ assert.equal(await js(st,"return document.querySelector('#agentBindings tr[data-character=sarah] td:last-child').textContent"),'—','no agent to choose when she does not act');
+ await js(st,"const x=document.querySelector('#agentBindings tr[data-character=sarah] input');x.checked=false;x.dispatchEvent(new Event('change'));return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).agentSummaries.sarah.custom'))===false,'back on the defaults');assert.equal((await row())[1][1],true);
  // Save model: a change applies itself and says so; there are no Save buttons left to forget.
  assert.deepEqual(await js(st,"return ['saveDelegateModel','codexSaveModel','runtimeSavePath','runtimeSaveModel'].filter(id=>document.getElementById(id))"),[]);
  const tickOn=()=>js(st,"return document.querySelector('#savedTick').classList.contains('on')");

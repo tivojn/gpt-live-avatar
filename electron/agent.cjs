@@ -31,7 +31,9 @@ function setupAgent(deps){
   const timer=setTimeout(()=>finish(Error('The avatar did not confirm the action.')),30000);pending.set(id,{sender,timer,finish});signal.addEventListener('abort',abort,{once:true});sender.send('gla:agent:action',{id,action,args});
  });}
  async function answer(sender,{id,history,turnId,character,onReceipt}={}){
-  const config=deps.getConfig();if(!config.agentEnabled)throw Error('Enable agent actions in Settings first.');
+  // Each character acts with her own agent settings (electron/character-agents.cjs); the defaults apply until she has her own.
+  const base=deps.getConfig(),who=typeof character==='string'?character.slice(0,60):base.personaName||defaultAvatar.name;
+  const config=deps.getConfig(require('./runtime-agents.cjs').characterSlug(who,base)||base.avatar);if(!config.agentEnabled)throw Error('Enable agent actions for '+who+' in Settings first.');
   if(typeof id!=='string'||!/^[\w-]{1,160}$/.test(id))throw Error('Invalid agent request.');
   if(!Array.isArray(history))throw Error('A user request is required.');const latest=latestUserRequest(history);if(!latest||latest.length>6000)throw Error('Use a request of up to 6,000 characters.');
   const speaker=typeof character==='string'?character.slice(0,60):config.personaName||defaultAvatar.name;

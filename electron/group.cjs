@@ -75,11 +75,11 @@ function setupGroup(deps){
   // Same groups as the solo avatar's menu (electron/avatar-menu.cjs). The solo window is hidden while this one is open, so Settings and updates are reachable here too.
   await new Promise(resolve=>Menu.buildFromTemplate([
    {label:actor.name,enabled:false},
-   {label:'Ask '+actor.name+'…',enabled:deps.getConfig().agentEnabled,click:send('agent')},
+   {label:'Ask '+actor.name+'…',enabled:(deps.agentConfig?deps.agentConfig(actor.slug):deps.getConfig()).agentEnabled,click:send('agent')},
    {type:'separator'},
    performMenu(request,send,actor.slug),
    lookMenu(request,send),
-   agentMenu(deps.avatarReasoningMenu(),deps.avatarPermissionsMenu()),
+   deps.characterAgentMenu?deps.characterAgentMenu(actor.slug,actor.name):agentMenu(deps.avatarReasoningMenu(),deps.avatarPermissionsMenu()), // each performer has her own agent settings
    {label:'View',submenu:[
     {label:'Follow cursor',type:'checkbox',checked:request.catalogue?.current?.followCursor==='true',click:send('follow-cursor')},
     {label:'Face the audience',click:send('face-audience')},

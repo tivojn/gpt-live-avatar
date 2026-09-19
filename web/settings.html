@@ -55,7 +55,7 @@
   details.advanced { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; } details.advanced > summary { cursor: pointer; color: var(--dim); font-size: 12px; }
   /* Only the column of the engine in use is worth showing. */
   table.bindings { width: 100%; text-align: left; border-spacing: 6px; font-size: 13px; }
-  table.bindings[data-active=openclaw] [data-engine]:not([data-engine=openclaw]), table.bindings[data-active=hermes] [data-engine]:not([data-engine=hermes]), table.bindings[data-active=enconvo] [data-engine]:not([data-engine=enconvo]) { display: none; }
+  table.bindings select { font-size: 12px; padding: 5px 22px 5px 8px; min-width: 0; width: 100%; } table.bindings td.dimcell { color: var(--ui-dim); font-size: 12px; white-space: nowrap; } table.bindings th { font-size: 12px; font-weight: 600; color: var(--ui-dim); } table.bindings { table-layout: fixed; } table.bindings th:nth-child(1) { width: 14%; } table.bindings th { white-space: nowrap; } table.bindings th:nth-child(2) { width: 11%; } table.bindings th:nth-child(3) { width: 21%; } table.bindings th:nth-child(4) { width: 21%; } table.bindings th:nth-child(5) { width: 16%; } table.bindings td.owncell { text-align: center; } table.bindings td.owncell input { width: 16px; height: 16px; margin: 0; }
   /* Everything but a secret applies as you change it; this says so, briefly. */
   #savedTick { position: fixed; right: 18px; bottom: 14px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 12px; opacity: 0; transform: translateY(4px); transition: opacity .18s, transform .18s; pointer-events: none; } #savedTick.on { opacity: 1; transform: none; }
   ul.tips { margin: 0; padding-left: 18px; color: var(--dim); font-size: 12.5px; } ul.tips li { margin: 3px 0; } ul.tips b { color: var(--text); font-weight: 600; }
@@ -241,8 +241,8 @@
   <div class="pane" id="pane-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
     <header><h1>Agents for each character</h1><span class="chip" id="chip-agents"></span></header>
     <section>
-      <p class="note" style="margin-top:0">Give each avatar her own agent. The agent keeps its account, skills and tools; the avatar keeps her voice and look.</p>
-      <div style="overflow:auto"><table class="bindings" id="agentBindingsTable"><thead><tr><th>Character</th><th data-engine="openclaw">OpenClaw agent</th><th data-engine="hermes">Hermes profile</th><th data-engine="enconvo">EnConvo agent</th></tr></thead><tbody id="agentBindings"></tbody></table></div>
+      <p class="note" style="margin-top:0">Reasoning and Actions are the defaults for everyone. Here each character can have her own: how she reasons, who carries out her tasks, and which agent she is inside that engine. Tick “Her own” to change a row; untick it and she is back on the defaults. The same choices are under right-click › Character › her name › Agent.</p>
+      <div style="overflow:auto"><table class="bindings" id="agentBindingsTable"><thead><tr><th>Character</th><th title="Tick to give her settings of her own. Unticked, she uses the defaults from Reasoning and Actions.">Her own</th><th>Reasoning</th><th>Actions</th><th>Permission</th><th>Her agent</th></tr></thead><tbody id="agentBindings"></tbody></table></div>
       <div class="row" style="margin-top:8px"><button id="refreshAgents">Refresh installed agents</button></div>
       <p id="agentInventoryState" class="state" role="status"></p>
     </section>
@@ -362,7 +362,6 @@
     $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=displayText(settings.agentFolder);
-    $('#agentBindingsTable').dataset.active=['openclaw','hermes','enconvo'].includes(engine)?engine:'';
     renderStatus(settings);
   }
   // One line per pane that says whether it is working, mirrored as a dot in the sidebar.
@@ -376,8 +375,8 @@
     set('reasoning',s.reasoningMode==='delegate'?'Delegate · '+({openai:'OpenAI',xai:'xAI',...runtimeNames})[s.delegate.provider]+(s.delegate.model?' · '+s.delegate.model:''):(s.liveProvider==='gemini'?'Gemini · '+((s.gemini?.models||[]).find(m=>m.id===s.gemini?.model)?.thinking?'Extended Thinking · '+(s.gemini.thinkingLevel||'low'):'built-in'):'GPT-Live · '+(s.backendModel||'default model')),'ok');
     set('actions',s.agentEnabled===true?'On · '+engineName:'Off',s.agentEnabled===true?'ok':'');
     set('instinct',!instinct.hasKey?'Off · built-in rules':instinct.state==='bad-key'?'Key rejected':instinct.enabled===false?'Switched off':'On'+(instinct.lastLatencyMs?' · '+instinct.lastLatencyMs+' ms':''),instinct.state==='bad-key'?'bad':instinct.hasKey&&instinct.enabled!==false?'ok':'');
-    const bound=['openclaw','hermes','enconvo'].includes(engine),assigned=bound?(s.avatars||[]).filter(c=>s.avatarAgentBindings?.[c.slug]?.[engine]).length:0;
-    set('agents',bound?engineName+' · '+(assigned?assigned+' assigned':'runtime default for everyone'):'Not used by '+engineName,bound?'ok':'');
+    const custom=(s.avatars||[]).filter(c=>s.agentSummaries?.[c.slug]?.custom).map(c=>c.name);
+    set('agents',custom.length?custom.slice(0,3).join(', ')+(custom.length>3?' +'+(custom.length-3):'')+' · own settings':'Everyone on the defaults',custom.length?'ok':'');
     $('#dot-shortcuts').className='dot';
     $('#appVersion').textContent='Version '+(s.appVersion||'');
   }
@@ -410,17 +409,34 @@
   }
   function renderAgentBindings(s){
     const body=$('#agentBindings');body.replaceChildren();
+    const engines=[['codex','Codex App Server'],...Object.entries(runtimeNames)],builtIn=s.liveProvider==='gemini'?'Gemini reasoning':'GPT-Live reasoning';
+    const pick=(label,options,value,disabled,onchange)=>{const el=document.createElement('select');el.setAttribute('aria-label',label);for(const [v,text,off] of options){const o=new Option(text,v);o.disabled=Boolean(off);el.append(o);}el.value=value;el.disabled=disabled;el.title=el.selectedOptions[0]?.textContent||'';el.onchange=()=>onchange(el.value);const td=document.createElement('td');td.append(el);return td;};
     for(const character of s.avatars||[]){
-      const row=document.createElement('tr'),name=document.createElement('td');name.textContent=character.name;row.append(name);
-      for(const engine of ['openclaw','hermes','enconvo']){
-        const cell=document.createElement('td');cell.dataset.engine=engine;const picker=document.createElement('select'),inventory=agentInventory?.[engine],saved=s.avatarAgentBindings?.[character.slug]?.[engine]||'';
+      const row=document.createElement('tr'),name=document.createElement('td'),mine=s.agentSummaries?.[character.slug]||{},own=Boolean(mine.custom);name.textContent=character.name;row.append(name);row.dataset.character=character.slug;
+      const set=patch=>save({characterAgent:{slug:character.slug,set:patch}});
+      // the defaults until something is hers: the other columns then show what the defaults are, greyed
+      {const td=document.createElement('td'),box=document.createElement('input');box.type='checkbox';box.checked=own;box.setAttribute('aria-label',character.name+' has her own agent settings');td.className='owncell';
+       box.onchange=()=>save({characterAgent:box.checked?{slug:character.slug,set:{}}:{slug:character.slug,reset:true}});td.append(box);row.append(td);}
+      const reasoningValue=mine.reasoningMode!=='delegate'?'managed':mine.reasoningEngine||mine.provider+':'+mine.auth;
+      row.append(pick(character.name+' reasoning',[['managed',builtIn],...engines.map(([id,label])=>[id,label,s.installedEngines?.[id]===false]),['openai:api_key','OpenAI · API key'],['openai:oauth2','OpenAI · ChatGPT sign-in'],['xai:api_key','xAI · API key'],['xai:oauth2','xAI · Grok sign-in']],reasoningValue,!own,
+        v=>set(v==='managed'?{reasoningMode:'managed'}:v.includes(':')?{reasoningMode:'delegate',delegateProvider:v.split(':')[0],delegateAuth:v.split(':')[1]}:{reasoningMode:'delegate',delegateProvider:v==='codex'?'openai':v,delegateAuth:v==='codex'?'codex_app_server':'local_runtime'})));
+      row.append(pick(character.name+' actions',[['off','Off'],['follow',mine.canFollow?'Follow · '+mine.reasoning:'Follow her reasoning · not possible',!mine.canFollow],...engines.map(([id,label])=>[id,label,s.installedEngines?.[id]===false])],mine.actions||'off',!own,
+        v=>set(v==='off'?{agentEnabled:false}:v==='follow'?{agentEnabled:true,agentFollowReasoning:true}:{agentEnabled:true,agentEngine:v,agentFollowReasoning:false})));
+      // her permission for the engine that acts for her: Codex has three levels, the others two
+      if(mine.actionEngine)row.append(pick(character.name+' permission',mine.actionEngine==='codex'?(s.agentPermissionChoices||[]).map(c=>[c.value,c.label]):[['workspace','Ask me'],['full','Allow']],mine.permission,!own,v=>set({agentPermissions:{[mine.actionEngine]:v}})));
+      else{const td=document.createElement('td');td.textContent='—';td.className='dimcell';row.append(td);}
+      // which agent she is inside her engine (OpenClaw agent, Hermes profile, EnConvo agent); Codex and Grok Build have one
+      const engine=mine.actionEngine,cell=document.createElement('td');
+      if(['openclaw','hermes','enconvo'].includes(engine)){
+        const picker=document.createElement('select'),inventory=agentInventory?.[engine],saved=s.avatarAgentBindings?.[character.slug]?.[engine]||'';
         picker.dataset.character=character.slug;picker.dataset.engine=engine;picker.setAttribute('aria-label',character.name+' '+runtimeNames[engine]+' agent');
         const usable=inventory?.installed&&!inventory.error&&inventory.agents.length;
         picker.disabled=!usable;picker.append(new Option(!inventory?'Checking installation…':!inventory.installed?'Requires '+runtimeNames[engine]+' installation':!usable?'Agent list unavailable':'Runtime default',''));
         if(usable)for(const agent of inventory.agents)picker.append(new Option(displayText(agent.name)+(agent.isDefault?' · default':''),agent.id));
         if(saved&&!inventory?.agents.some(a=>a.id===saved))picker.append(new Option(displayText(saved)+' · unavailable',saved));picker.value=saved;
-        picker.onchange=()=>save({avatarAgentBindings:{[character.slug]:{[engine]:picker.value}}});cell.append(picker);row.append(cell);
-      }body.append(row);
+        picker.onchange=()=>save({avatarAgentBindings:{[character.slug]:{[engine]:picker.value}}});cell.append(picker);
+      }else{cell.textContent=engine?'— one agent':'—';cell.className='dimcell';}
+      row.append(cell);body.append(row);
     }
     if(agentInventory){const failures=Object.entries(agentInventory).filter(([,r])=>!r.installed||r.error).map(([engine,r])=>runtimeNames[engine]+': '+(r.error||'Not installed.'));setState($('#agentInventoryState'),failures.join(' ')||'Installed agents refreshed.');}
   }

@@ -53,14 +53,14 @@ const soloEvents = [];
 const avatarWindow = { isDestroyed: () => false, webContents: { send: (...args) => soloEvents.push(args) } };
 const avatarMenu = require(path.join(root, 'electron/avatar-menu.cjs'));
 const soloContext = { ...avatarMenu, avatarWindow, Menu: { buildFromTemplate: template => ({ popup: () => { built = template; } }) },
-  config: { agentEnabled: false }, avatarInfo: () => ({ name: 'Sarah' }), avatarReasoningMenu: () => ({ label: 'Reasoning' }), avatarPermissionsMenu: () => ({ label: 'Permissions' }),
+  config: { agentEnabled: false, avatar: 'sarah' }, her: () => ({ agentEnabled: false }), characterAgents: require(path.join(root, 'electron/character-agents.cjs')), characterAgentMenu: (slug, name) => ({ label: 'Agent', submenu: [{ label: 'Use the defaults' }, { label: name + '’s own settings' }] }), avatarInfo: () => ({ name: 'Sarah' }), avatarReasoningMenu: () => ({ label: 'Reasoning' }), avatarPermissionsMenu: () => ({ label: 'Permissions' }),
   assets: null, VOICES: [], characterVoices: () => ({ system: 'openai', systemName: 'GPT-Live-1', current: 'marin', ready: true, list: [{ id: 'marin', label: 'Marin · default' }] }), voicePreview: { state: 'idle' }, avatarShortcuts: null, DEFAULT_SHORTCUTS: {}, appInfo: { menu: () => [] }, app: { name: 'Test' },
   openSettingsWindow() {}, requestAvatarRecovery() {}, requestAvatarCloseup() {}, groupManager: { open() {} } };
 vm.runInNewContext(mainSource.slice(mainSource.indexOf('function showAvatarMenu(state) {'), mainSource.indexOf('// A live session may only run while she is on screen.')), soloContext);
 soloContext.showAvatarMenu({ character: 'sarah', music: session });
 // The menu reads top to bottom as: what you do now, what you choose, the app itself.
 const rows = template => Array.from(template).filter(x => x.type !== 'separator' && x.visible !== false).map(x => x.label);
-assert.deepEqual(rows(built), ['Start Conversation', 'Ask Sarah…', 'Perform', 'Look', 'Character', 'Agent', 'View', 'Avatar Show · Playwright & Director…', 'Settings…', 'Quit Test']);
+assert.deepEqual(rows(built), ['Start Conversation', 'Ask Sarah…', 'Perform', 'Look', 'Character', 'Agent · defaults for everyone', 'View', 'Avatar Show · Playwright & Director…', 'Settings…', 'Quit Test']);
 assert.deepEqual(rows(item(built, 'Perform').submenu), ['Dance-along · Spotify', 'Dance Along to Current Song', 'Stay Still', 'Stop'], 'every way to move, and the way to stop, in one place');
 assert.deepEqual(rows(item(built, 'View').submenu), ['Bubble on Incoming Messages', 'Bubble Always On', 'Bubble Off', 'Wardrobe Flourish', 'Avatar Close-up', 'Bring Avatar Back']);
 assert.equal(built.find(x => x.label === 'Mute Microphone').visible, false, 'conversation controls appear only while talking');

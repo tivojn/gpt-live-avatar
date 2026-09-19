@@ -15,6 +15,42 @@ to confirm Apple Silicon installer availability and checksums
 release tag and matching checksums for a reproducible reference.
 
 
+## After 0.2.25: agent settings per character
+
+Settings › Reasoning and Settings › Actions are the **defaults for everyone**.
+Each character may carry her own copy (`config.characterAgents[slug]`):
+reasoning mode and provider, whether she may act, her action engine or that it
+follows her reasoning, and her permission for each engine. She is on the
+defaults until something is changed for her; the first change copies what
+applied to her at that moment, so nothing else shifts, and later changes of the
+defaults no longer move her. "Use the defaults" deletes her copy.
+
+- `electron/character-agents.cjs`: `effective(config, slug)` is the one place
+  that merges; `customise`, `useDefaults`, `clean` (on load), `summary` (one
+  line such as "Hermes · actions follow").
+- `electron/main.cjs`: `her(slug)` is the effective config. The live session
+  prompt and hand-off policy, `gla:delegate:answer` and the agent manager
+  (`getConfig(slug)`) all read it. The avatar window receives the effective
+  settings of the character on screen (`publicSettings({forCharacter:true})`),
+  so its existing "reasoning changed, reconnect" logic covers a change of hers
+  and a switch of character. Settings and the voice picker receive the defaults
+  plus `agentSummaries`. Saved with `setSettings({characterAgent:{slug,set}})`
+  or `{slug,reset:true}`.
+- `electron/agent.cjs` resolves the character who was asked (`characterSlug`)
+  and runs the task with her settings: in Avatar Show and the group, each
+  performer uses her own engine and permission.
+- Where the user sets it: right-click › Character › her name › Agent (the same
+  Reasoning and Actions & Permissions submenus as the defaults, acting on her),
+  and Settings › Agents, one row per character: Her own, Reasoning, Actions,
+  Permission, Her agent (the OpenClaw / Hermes / EnConvo agent she is).
+  The top-level menu is "Agent · defaults for everyone" and says so when the
+  character on screen has her own.
+- Global on purpose: keys and sign-ins, where an engine is installed, engine
+  models, the starting folder, the live voice system, the Playwright's model.
+- Tests: `qa/character-agents.cjs` (in `npm test`; includes the agent manager
+  with stubbed engines), `qa/settings-app.cjs` (the table), `qa/gemini-app.cjs`
+  (the menu, the window receiving hers, the defaults untouched).
+
 ## After 0.2.25: Gemini 3.8 Live as a second voice model (phase 1)
 
 The solo conversation can run on Gemini 3.8 Live or Extended Thinking

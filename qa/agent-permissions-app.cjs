@@ -10,12 +10,15 @@ const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('consol
 require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms)),run=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
 async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end){const result=await fn();if(result)return result;await wait(100);}throw Error('Timed out: '+label);}
 const access=async w=>run(w,'return (await gla.getSettings()).agentAccess');
-const permissionItems=()=>menu.find(i=>i.label==='Actions & Permissions').submenu.find(i=>i.submenu&&i.label.includes('Codex App Server')).submenu.filter(i=>['Ask for approval','Approve for me','Full access'].includes(i.label));
+// Every character has an Agent group of her own now, so "Actions & Permissions" is looked up inside a scope:
+// the defaults (solo menu, "Agent · defaults for everyone") or one character's own (her "Agent" group).
+const {flat}=require('./menu-flat.cjs'),scope=label=>flat(menu.find(i=>i.label===label).submenu),DEFAULTS='Agent · defaults for everyone';
+const permissionItems=(within=DEFAULTS)=>scope(within).find(i=>i.label==='Actions & Permissions').submenu.find(i=>i.submenu&&i.label.includes('Codex App Server')).submenu.filter(i=>['Ask for approval','Approve for me','Full access'].includes(i.label));
 const picker=async w=>run(w,"return document.querySelector('#agentAccess').value");
 app.whenReady().then(async()=>{try{
  const solo=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'solo');await until(()=>run(solo,'return window.gla_avatar?.resources.ready'),'avatar');
  const settings=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/settings.html')),'settings');await until(()=>picker(settings),'permission choices');
- if(restart){assert.equal(await access(solo),'auto_review');assert.equal(await picker(settings),'auto_review');console.log('Saved permission survives restart.');return;}
+ if(restart){assert.equal(await access(solo),'auto_review');assert.equal(await picker(settings),'auto_review');assert.deepEqual(await run(solo,'const a=(await gla.getSettings()).agentSummaries.sarah;return [a.custom,a.permission]'),[true,'auto_review'],'and so does a character’s own');console.log('Saved permission survives restart.');return;}
  assert.equal(await access(solo),'full','New profile defaults to Full access');
  assert.deepEqual(await run(settings,"return [...document.querySelector('#agentAccess').options].map(o=>o.text)"),['Ask for approval','Approve for me','Full access']);
  const openSolo=async()=>{menu=null;await run(solo,'await gla.showMenu({})');return permissionItems();};
@@ -25,11 +28,16 @@ app.whenReady().then(async()=>{try{
  }
  (await openSolo()).find(c=>c.label==='Ask for approval').click();await until(async()=>await picker(settings)==='workspace','menu updates settings');
  await run(solo,'await gla.group.open()');const group=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/group.html')),'Together');await until(()=>run(group,'return window.gla_group&&!gla_group.state.loading'),'cast');
- await run(group,"await gla.group.showMenu({slug:'sarah'})");let choices=permissionItems();assert.equal(choices.find(c=>c.checked).label,'Ask for approval');choices.find(c=>c.label==='Approve for me').click();
- await until(async()=>await picker(settings)==='auto_review','Together selection updates settings');assert.equal(await access(solo),'auto_review');assert.equal(await access(group),'auto_review');
+ // In Together a performer's Agent group is her own: the choice is Sarah's, and neither the defaults nor Tia (on screen in the solo window) move.
+ await run(group,"await gla.group.showMenu({slug:'sarah'})");let choices=permissionItems('Agent');assert.equal(choices.find(c=>c.checked).label,'Ask for approval','she starts on the defaults');choices.find(c=>c.label==='Approve for me').click();
+ await until(async()=>(await run(solo,'return (await gla.getSettings()).agentSummaries.sarah.permission'))==='auto_review','Sarah’s own permission saved');
+ assert.equal(await picker(settings),'workspace','the default is untouched');assert.equal(await access(solo),'workspace','and so is Tia');
+ await run(group,"await gla.group.showMenu({slug:'sarah'})");assert.equal(permissionItems('Agent').find(c=>c.checked).label,'Approve for me');assert.deepEqual(scope('Agent').filter(i=>i.type==='radio'&&i.checked&&/defaults|own settings/.test(i.label)).map(i=>i.label),['Sarah’s own settings']);
+ // the default, from the solo menu
+ (await openSolo()).find(c=>c.label==='Approve for me').click();await until(async()=>await picker(settings)==='auto_review','menu updates the default');assert.equal(await access(solo),'auto_review');
  await run(group,"await gla.setSettings({agentAccess:'bogus'})");assert.equal(await access(solo),'auto_review','Invalid patch cannot increase access');
  // Selecting another provider's permissions must not switch providers or alter Codex.
- const providers=menu.find(i=>i.label==='Actions & Permissions').submenu;
+ await openSolo();const providers=scope(DEFAULTS).find(i=>i.label==='Actions & Permissions').submenu;
  providers.find(i=>i.submenu&&i.label.includes('Hermes')).submenu.find(i=>i.label==='Ask when the agent requests approval').click();
  await until(async()=>await run(solo,"return (await gla.getSettings()).agentPermissions.hermes==='workspace'"),'separate Hermes setting');
  assert.equal(await access(solo),'auto_review');
