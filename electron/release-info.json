@@ -1,13 +1,14 @@
 {
-  "version": "0.2.25",
-  "date": "2026-09-18",
-  "title": "A calmer stage: fitting motions, faster scripts, a progress bar and a Close button",
-  "description": "Avatar Show stops decorating ordinary talk with stunts, the Playwright gets its own fast model, script writing shows progress, and the panel says Close in words.",
+  "version": "0.2.26",
+  "date": "2026-09-19",
+  "title": "A second live voice: Gemini 3.8 Live. Agent settings per character. Reset to defaults.",
+  "description": "Talk to your avatar on Gemini 3.8 Live or Extended Thinking as well as GPT-Live-1, give each character her own reasoning and action engine, and put any Settings page back to its defaults with two clicks.",
   "highlights": [
-    "Motions only where they fit: the Playwright keeps a motion for what a character is literally doing (a bow, a wave, a dance while dancing) and never uses one as emphasis for talk. The heart gesture and walk clips are off the stage. Lines without a motion get natural talking hands or a shift of stance.",
-    "The Playwright has its own model (Settings › Reasoning › Avatar Show script writer): OpenAI GPT-5.6 Luna by default, so a script no longer waits a minute or two on an agent runtime such as EnConvo. Choose “Same as my reasoning provider” to keep the old behaviour.",
-    "Script writing shows an estimated progress bar with percent and time left, learned from how long your last scripts took. What you tell the Director about length (“very short”) now beats the Length menu.",
-    "A Close button in the Avatar Show header when no show is running: it saves any recording and returns to one character, like the × light.",
-    "From 0.2.24: a flourish look wider than a narrow window is no longer cut off, and a character no longer comes up holding an empty pistol grip."
+    "Gemini 3.8 Live and Gemini 3.8 Live · Extended Thinking as a second live voice system (Settings › Live Voice System). Your reasoning and action engines (OpenAI, xAI, Codex App Server, OpenClaw, Hermes, Grok Build, EnConvo) work with it exactly as with GPT-Live-1. Avatar Show and the group conversation still use GPT-Live-1.",
+    "The voice belongs to the character: Settings › Character and right-click › Character › her name › Voice list the voices of the system in use, with gender beside each one. “Try voices…” opens a small window that stays open: play a voice as often as you like, then Use.",
+    "Agent settings per character. Settings › Reasoning and Actions are the defaults for everyone; any character can have her own reasoning, actions on or off, action engine, permission and engine agent under right-click › Character › her name › Agent, or in Settings › Agents. In Avatar Show and Together each performer uses her own.",
+    "“Reset to defaults” in the header of every Settings page: two clicks, that page only, and it never touches your API keys or sign-ins. New installs start on Delegate · OpenAI · GPT-5.6 Luna for harder questions, with the same key GPT-Live-1 uses.",
+    "Fixes found by asking every voice system and every engine to really create and delete a file: a request transcribed in two pieces no longer cancels its own task; she no longer claims to have done something with Actions off; engine checks work from any Settings page (“Unavailable outside the app”); the Actions page and the right-click menu say which engine really does the work.",
+    "A roomier Settings window."
   ]
 }

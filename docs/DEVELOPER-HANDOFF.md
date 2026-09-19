@@ -8,14 +8,14 @@ If you are integrating the avatar layer into **EnConvo**, start with
 [ENCONVO-HANDOFF.md](ENCONVO-HANDOFF.md). It separates reusable rendering/audio
 components from the account, voice and agent systems EnConvo already owns.
 
-Updated September 18, 2026 for **v0.2.25**. Use the
+Updated September 19, 2026 for **v0.2.26**. Use the
 [release page](https://gpt-live-avatar-downloads.gpt-live-avatar-downloads.workers.dev/releases/)
 to confirm Apple Silicon installer availability and checksums
 (`releases/latest.json` on that host is the machine-readable record). Use the
 release tag and matching checksums for a reproducible reference.
 
 
-## After 0.2.25: shipped defaults, "Reset to defaults" per page, a roomier Settings window
+## 0.2.26: shipped defaults, "Reset to defaults" per page, a roomier Settings window
 
 - **Shipped defaults** (`DEFAULTS` in `electron/main.cjs`) for Live Voice
   System, Reasoning, Actions and Agents now match the developer's working
@@ -41,7 +41,7 @@ release tag and matching checksums for a reproducible reference.
 - **Settings window**: opens at 1080 x 820 (was 820 x 700), never larger than
   the screen it opens on.
 
-## After 0.2.25: agent settings per character
+## 0.2.26: agent settings per character
 
 Settings › Reasoning and Settings › Actions are the **defaults for everyone**.
 Each character may carry her own copy (`config.characterAgents[slug]`):
@@ -77,7 +77,7 @@ defaults no longer move her. "Use the defaults" deletes her copy.
   with stubbed engines), `qa/settings-app.cjs` (the table), `qa/gemini-app.cjs`
   (the menu, the window receiving hers, the defaults untouched).
 
-## After 0.2.25: Gemini 3.8 Live as a second voice model (phase 1)
+## 0.2.26: Gemini 3.8 Live as a second voice model (phase 1)
 
 The solo conversation can run on Gemini 3.8 Live or Extended Thinking
 (Settings › Voice › Voice model). The window talks to one `LiveSession`
