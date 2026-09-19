@@ -21,7 +21,11 @@
     "prepack:local": "npm run build:native && node tools/verify-release.cjs",
     "pack:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir -c.mac.identity=null -c.mac.notarize=false",
     "predmg:local": "npm run build:native && node tools/verify-release.cjs",
-    "dmg:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg -c.mac.identity=null -c.mac.notarize=false -c.dmg.sign=false"
+    "dmg:local": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg -c.mac.identity=null -c.mac.notarize=false -c.dmg.sign=false",
+    "prepack:win": "node tools/verify-release.cjs",
+    "pack:win": "electron-builder --win dir --x64",
+    "predist:win": "node tools/verify-release.cjs",
+    "dist:win": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "openai": "^7.15.0"
@@ -56,13 +60,34 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "hardenedRuntime": true,
-      "notarize": true
+      "notarize": true,
+      "extraResources": [
+        {
+          "from": "build/native/gla-audio-tap",
+          "to": "gla-audio-tap"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.ico",
+      "artifactName": "gpt-live-avatar-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "GPT-Live Avatar"
     },
     "extraResources": [
-      {
-        "from": "build/native/gla-audio-tap",
-        "to": "gla-audio-tap"
-      },
       {
         "from": "build/protected/index.json",
         "to": "assets-index.json"

@@ -610,6 +610,12 @@ export class Avatar3DOptions {
     const corners=b=>{const out=[];if(!b.isEmpty())for(const x of [b.min.x,b.max.x])for(const y of [b.min.y,b.max.y])for(const z of [b.min.z,b.max.z])out.push(new THREE.Vector3(x,y,z));return out;};
     this.avatar.root.updateMatrixWorld(true);
     this.avatar.hipCorrective?.update();
+    // The eight corners of ONE box around everything include corners where nothing is: in perspective the front
+    // bottom corners fall well below her feet (150 of 1536 units for Sarah standing still). Callers that must not
+    // clip use those corners; `tight` is the same pass measured bone box by bone box on the layout plane, for
+    // callers that ask whether she really reaches past an edge.
+    this.avatar.project(point.set(0,0,0));const camera=this.avatar.layoutCamera,flat=new THREE.Vector3();
+    const screen=new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse),tight={left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity};
     for(const mesh of meshes){
       const geometry=mesh.geometry,position=geometry?.attributes.position;
       if(!position?.count)continue;
@@ -648,10 +654,16 @@ export class Avatar3DOptions {
         const transform=mesh.matrixWorld.clone();
         if(group.bone>=0)transform.multiply(mesh.bindMatrixInverse).multiply(mesh.skeleton.bones[group.bone].matrixWorld);
         const extent=group.box.clone();if(radius)extent.expandByScalar(radius*group.scale);
-        for(const p of corners(extent))box.expandByPoint(point.copy(p).applyMatrix4(transform));
+        for(const p of corners(extent)){
+          box.expandByPoint(point.copy(p).applyMatrix4(transform));flat.copy(point).applyMatrix4(screen);
+          const x=(flat.x+1)*.5*this.avatar.width,y=(1-flat.y)*.5*this.avatar.height;
+          if(x<tight.left)tight.left=x;if(x>tight.right)tight.right=x;if(y<tight.top)tight.top=y;if(y>tight.bottom)tight.bottom=y;
+        }
       }
     }
-    return corners(box).map(p=>this.avatar.project(p));
+    const points=corners(box).map(p=>this.avatar.project(p));
+    if(points.length&&Number.isFinite(tight.left+tight.top+tight.right+tight.bottom))points.tight=tight;
+    return points;
   }
 
   applyVisibility(selection) {

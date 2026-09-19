@@ -422,9 +422,13 @@ function paint(now) {
   // character "overflowed" while standing still and went on stage the moment she appeared.
   // A look's visible box is loose (corners of a bounding box), so a sliver past the edge, up to the window's own
   // padding, is not worth a full-display window. Seraphim's armour and a held prop exceed it many times over.
-  const slack=pad*scale;
-  const overflow=left+air<-slack||right-air>cssW+slack||top+air<-slack||bottom-air>cssH+slack;
-  if(overflow&&!stage&&!window.gla_overflow)window.gla_overflow={left:left+air,right:right-air,top:top+air,bottom:bottom-air,window:[cssW,cssH],motion:avatar.motion?.active?.id||'',points:points.length,bounds:layout.bounds.map(Math.round),joints:joints&&[joints.x,joints.y,joints.width,joints.height].map(Math.round),visible:visible.map(p=>[Math.round(p.x),Math.round(p.y)]),fit:[+scale.toFixed(4),Math.round(fit.x),Math.round(fit.y)],at:Math.round(now)}; // debug: the first time she did not fit her window, and where
+  // And measured bone box by bone box (visible.tight), not by the corners of one box around all of her: in
+  // perspective those corners fall far below her feet and above her head, where there is nothing.
+  const slack=pad*scale,seen=visible.tight?[{x:visible.tight.left,y:visible.tight.top},{x:visible.tight.right,y:visible.tight.bottom}]:visible;
+  const reach=[points[0],points[1],...seen,...(joints?points.slice(-2):[])],rx=reach.map(p=>p.x*scale+fit.x),ry=reach.map(p=>p.y*scale+fit.y);
+  const edge={left:Math.min(...rx),right:Math.max(...rx),top:Math.min(...ry),bottom:Math.max(...ry)};
+  const overflow=edge.left<-slack||edge.right>cssW+slack||edge.top<-slack||edge.bottom>cssH+slack;
+  if(overflow&&!stage&&!window.gla_overflow)window.gla_overflow={left:Math.round(edge.left),right:Math.round(edge.right),top:Math.round(edge.top),bottom:Math.round(edge.bottom),tight:visible.tight&&Object.values(visible.tight).map(Math.round),window:[cssW,cssH],motion:avatar.motion?.active?.id||'',points:points.length,bounds:layout.bounds.map(Math.round),joints:joints&&[joints.x,joints.y,joints.width,joints.height].map(Math.round),visible:visible.map(p=>[Math.round(p.x),Math.round(p.y)]),fit:[+scale.toFixed(4),Math.round(fit.x),Math.round(fit.y)],at:Math.round(now)}; // debug: the first time she did not fit her window, and where
   // A flourish look wider than the window (Seraphim's armour) would be cut off at the window's edge. Its
   // warm-up renders every outfit out of sight and notes whether one needs room; the window then grows, still
   // unseen, once her own look is back on (so the stage geometry is hers). While it plays the window is left

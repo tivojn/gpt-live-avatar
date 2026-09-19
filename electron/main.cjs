@@ -2,7 +2,7 @@
 // GPT-Live Avatar: a desk companion on OpenAI GPT-Live-1.
 // The main process owns the API key and session creation; the renderer owns
 // WebRTC, the 3D avatar and the overhead bubble.
-const { app, BrowserWindow, ipcMain, safeStorage, net, dialog, shell, screen, session: electronSession, Menu, systemPreferences, globalShortcut, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, net, dialog, shell, screen, session: electronSession, Menu, Tray, systemPreferences, globalShortcut, nativeTheme } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -414,7 +414,7 @@ function openSettingsWindow(pane) {
   // Roomy by default (the Agents table and the Reasoning page were cramped at 820 x 700), but never larger than the screen it opens on.
   const area = require('electron').screen.getDisplayNearestPoint(require('electron').screen.getCursorScreenPoint()).workArea;
   settingsWindow = new BrowserWindow({
-    width: Math.min(1080, area.width - 40), height: Math.min(820, area.height - 40), minWidth: 680, minHeight: 460, title: 'GPT-Live Avatar Settings', show: false,
+    width: Math.min(1080, area.width - 40), height: Math.min(820, area.height - 40), minWidth: 680, minHeight: 460, title: 'GPT-Live Avatar Settings', show: false, autoHideMenuBar: true, ...(process.platform === 'win32' ? { icon: path.join(__dirname, 'icon.ico') } : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   settingsWindow.loadURL(`${serverOrigin}/settings.html${hash}`);
@@ -423,9 +423,36 @@ function openSettingsWindow(pane) {
   settingsWindow.on('closed', () => { avatarShortcuts?.pause(false);settingsWindow = null; });
 }
 
+// Windows and Linux have no Dock and her window stays out of the taskbar, so without this the app can
+// only be reached by right-clicking her, and not at all when she is off-screen or hidden.
+let tray = null;
+function showAvatarWindow() {
+  if (!avatarWindow || avatarWindow.isDestroyed()) { createAvatarWindow(); return; }
+  if (avatarWindow.isMinimized()) avatarWindow.restore();
+  if (!expandedWindow) avatarWindow.setBounds(clampToDisplay(avatarWindow.getBounds()));
+  avatarWindow.showInactive(); avatarWindow.setAlwaysOnTop(true, 'floating'); avatarWindow.moveTop();
+}
+function installTray() {
+  if (process.platform === 'darwin' || tray) return;
+  try { tray = new Tray(path.join(__dirname, 'tray.ico')); } catch { tray = null; return; } // no notification area (a bare Linux session): the right-click menu still works
+  const menu = () => Menu.buildFromTemplate([
+    { label: 'Show Avatar', click: showAvatarWindow },
+    { label: 'Bring Avatar Back', click: requestAvatarRecovery },
+    { type: 'separator' },
+    { label: 'Avatar Show · Playwright & Director…', click: () => groupManager?.open() },
+    { label: 'Settings…', click: () => openSettingsWindow() },
+    { type: 'separator' }, ...(appInfo ? appInfo.menu() : []), { type: 'separator' },
+    { label: 'Quit GPT-Live Avatar', click: () => app.quit() },
+  ]);
+  tray.setToolTip('GPT-Live Avatar');
+  tray.on('click', showAvatarWindow);
+  // Built when it opens: the update row changes (Check for Updates, Update to …, Downloading …).
+  if (process.platform === 'win32') tray.on('right-click', () => tray.popUpContextMenu(menu())); else tray.setContextMenu(menu());
+}
+
 function installApplicationMenu(){
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: app.name, submenu: [...appInfo.menu(), { type: 'separator' }, { label: 'Settings…', accelerator: 'Cmd+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
+    { label: app.name, submenu: [...appInfo.menu(), { type: 'separator' }, { label: 'Settings…', accelerator: 'CommandOrControl+,', click: openSettingsWindow }, { type: 'separator' }, { role: 'quit' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ label: 'Avatar Show · Playwright & Director…', click:()=>groupManager.open() }, { label: 'Bring Avatar Back', accelerator:avatarShortcuts?.values.recover||DEFAULT_SHORTCUTS.recover, registerAccelerator:false, click:requestAvatarRecovery }, {label:'Avatar Close-up',accelerator:avatarShortcuts?.values.closeup||DEFAULT_SHORTCUTS.closeup,registerAccelerator:false,click:requestAvatarCloseup}, { role: 'reload' }, ...(!app.isPackaged?[{role:'toggleDevTools'}]:[])] },
   ]));
@@ -857,10 +884,11 @@ app.whenReady().then(async () => {
   avatarShortcuts.start(config.shortcuts);
   installApplicationMenu();
   createAvatarWindow();
+  installTray();
   if (!hasApiKey() || !avatarInfo().ok) openSettingsWindow();
   app.on('activate', () => { if (!avatarWindow) createAvatarWindow(); });
 });
-app.on('before-quit', () => { audioTap.stop();globalShortcut.unregisterAll();appInfo?.dispose();agentManager?.dispose();showManager?.cancelAll();groupManager?.dispose();delegateBackend?.cancelAll();delegateAuth?.close();if(configSaveTimer)saveConfig(); });
+app.on('before-quit', () => { tray?.destroy();tray=null;audioTap.stop();globalShortcut.unregisterAll();appInfo?.dispose();agentManager?.dispose();showManager?.cancelAll();groupManager?.dispose();delegateBackend?.cancelAll();delegateAuth?.close();if(configSaveTimer)saveConfig(); });
 app.on('window-all-closed', () => app.quit());
 app.on('web-contents-created', (_event, contents) => {
   const owner=contents.id;

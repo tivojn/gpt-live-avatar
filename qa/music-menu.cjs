@@ -43,6 +43,12 @@ assert.equal(stop(musicMenu({ performing: true }, send, 'sarah')).enabled, true,
 assert.doesNotThrow(() => musicMenu({ music: { targets: 'invalid', source: {} } }, send, 'sarah'));
 console.log('Music menu: solo/group dispatch, per-avatar mode/status, stop/cancel, readiness and agent-independent access passed.');
 
+// Hearing another app's music is macOS-only for now. Elsewhere the row says so and cannot be clicked; Stop still stops a motion.
+const unsupported = musicMenu({ musicSupported: false, musicPlatform: 'Windows', performing: true, music: session }, send, 'sarah');
+assert.deepEqual(unsupported.map(x => [x.label, x.enabled]), [['Dance Along to Current Song · not available on Windows yet', false], ['Stop', true]]);
+// The builders below decide that by the platform they run on; the rest of this file describes the macOS menu.
+Object.defineProperty(process, 'platform', { value: 'darwin' });
+
 // Exercise the actual Electron menu builders with stub windows, so a menu
 // regression cannot silently send a group action to the solo avatar.
 const fs = require('node:fs');

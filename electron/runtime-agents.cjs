@@ -18,7 +18,7 @@ async function discoverAgents(engine,config={},exec=promisify(execFile),fetchImp
   if(engine==='grok')return {installed:true,agents:[{id:'default',name:'Grok Build',isDefault:true}],kind:'runtime'};
   if(engine==='hermes')return {installed:true,agents:hermesProfiles(),kind:'profile'};
   const env=require('./child-env.cjs').childEnv(path.dirname(command.file));
-  const {stdout}=await exec(command.file,['agents','list','--json'],{env,timeout:20000,maxBuffer:1024*1024});
+  const {stdout}=await exec(command.file,[...command.prefix,'agents','list','--json'],{env,timeout:20000,maxBuffer:4*1024*1024,windowsHide:true});
   // Some releases prepend diagnostics; accept only the final JSON array.
   const start=stdout.indexOf('[');const data=JSON.parse(stdout.slice(start));if(!Array.isArray(data))throw Error('Invalid inventory');
   return {installed:true,kind:'agent',agents:data.filter(a=>validAgent(a.id)).map(a=>({id:a.id,name:String(a.identityName||a.name||a.id).slice(0,80),isDefault:a.isDefault===true,model:typeof a.model==='string'?a.model.slice(0,200):''}))};
