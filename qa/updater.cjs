@@ -52,6 +52,9 @@ const serve=bytes=>async()=>({ok:true,status:200,body:body(bytes)});
   // an unsigned development run has no identity to compare against
   await assert.rejects(make({run:async()=>({stdout:'',stderr:'Identifier=x\nTeamIdentifier=not set\n'}),execPath:'/tmp/Dev.app/Contents/MacOS/Dev'}).ownIdentity(),/not signed/);
   // ---- stage and install: only the installed app, only where it can write, and the old bundle goes to the Trash
+  // The swap is a macOS app bundle, POSIX permissions and /bin/sh. Elsewhere the app never offers it
+  // (electron/releases.cjs gives no installer off macOS), so there is nothing further to prove here.
+  if(process.platform==='win32'){console.log('Updater: untrusted releases refused before download, exact-bytes and checksum downloads, signature/team/notarization/version verification. (Stage and install are macOS-only; skipped on Windows.)');return;}
   await assert.rejects(make({run:good.run,identity:own,isPackaged:false}).stage({...verified,detach:async()=>{}}),/development run/);
   await assert.rejects(make({run:good.run,identity:own,isPackaged:true,execPath:'/opt/thing/bin/app'}).stage({...verified,detach:async()=>{}}),/cannot replace itself/);
   const apps=path.join(temp,'Applications');fs.mkdirSync(path.join(apps,'GPT-Live Avatar.app/Contents/MacOS'),{recursive:true});

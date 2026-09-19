@@ -105,7 +105,7 @@ const checks=[];
   await assert.rejects(instinct.setKey('short'),/valid TypeSafe/);
   respond=()=>json({error:'nope'},401);await assert.rejects(instinct.setKey('ts_live_0123456789abcdef'),/did not accept/);assert(!instinct.hasKey());
   respond=()=>json({model:MODEL,answers:{greeting:{type:'noul',noul:.99}},usage:{input_tokens:9}});await instinct.setKey('  ts_live_0123456789abcdef ');
-  assert(instinct.hasKey());assert(!fs.readFileSync(instinct.file()).toString().includes('ts_live'));assert.equal(fs.statSync(instinct.file()).mode&0o777,0o600);assert.equal(changes,1);
+  assert(instinct.hasKey());assert(!fs.readFileSync(instinct.file()).toString().includes('ts_live'));if(process.platform!=='win32')assert.equal(fs.statSync(instinct.file()).mode&0o777,0o600);assert.equal(changes,1);
   assert.equal(calls.at(-1).url,ENDPOINT);assert.equal(calls.at(-1).init.headers.Authorization,'Bearer ts_live_0123456789abcdef');assert.equal(calls.at(-1).init.redirect,'error');
   checks.push('Key validated against TypeSafe, stored encrypted with 0600, never sent anywhere else');
 

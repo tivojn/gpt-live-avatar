@@ -84,7 +84,7 @@ class Client{
   await assert.rejects(a.answer(1,'off',{...cfg,agentEnabled:false},[],'hello','Tia'),/Enable actions/);
   const work=a.answer(1,'x',cfg,[{role:'assistant',text:'Tia created original.txt'},{role:'user',text:'Sarah read that file'}],'Sarah read that file','Sarah',null,r=>receipts.push(r),p=>progress.push(p));await tick();await tick();
   const opened=calls.find(c=>c.url.endsWith('/api/agent/session/new'));assert.equal(opened.body.agentId,'agent|hMTWU_egVCH3lePD_pPx','the character\'s bound agent');
-  const sent=calls.find(c=>c.url.endsWith('/api/agent/messages'));assert.equal(sent.body.sessionId,'sess-1');assert(sent.body.message.includes('Sarah')&&sent.body.message.includes('original.txt')&&sent.body.message.includes(os.tmpdir()));
+  const sent=calls.find(c=>c.url.endsWith('/api/agent/messages'));assert.equal(sent.body.sessionId,'sess-1');assert(sent.body.message.includes('Sarah')&&sent.body.message.includes('original.txt')&&sent.body.message.includes(JSON.stringify(os.tmpdir()).slice(1,-1)));
   assert.deepEqual(progress.at(-1),{state:'working',tool:'runtime'});
   pending.shift().resolve('Sarah: verified.');const result=await work;
   assert.equal(result.text,'Sarah: verified.');assert.equal(result.engine,'enconvo');assert.equal(result.model,'claude-fable-5-1');assert.equal(receipts.length,1);assert.equal(receipts[0].tool,'flow_step');assert.equal(a.jobs.size,0);

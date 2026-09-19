@@ -225,6 +225,7 @@ function backendCandidates(ids) {
 // ---------------------------------------------------------------- avatar package
 function avatarInfo(selection = config) {
   const roots = avatarRoots(selection);
+  // Names inside an avatar package always use '/', on every platform: never build one with path.join (it gives '\\' on Windows, which resolve() refuses).
   const file = rel => assets?.resolve(roots, rel);
   const result = { dir: roots[0] || '', roots, slug: selection.avatarDir ? '' : (avatarFallback ? defaultAvatar.slug : selection.avatar), fallbackFor: avatarFallback, ok: false, name: '', clips: 0, modelBytes: 0, problem: '' };
   if (!roots.length) { result.problem = assets?.locked(selection.avatar) ? 'This character is included. Connect to the internet and click Unlock in Settings once; then it will work offline.' : selection.avatarDir ? 'No avatar folder selected.' : 'This avatar is not installed yet. Download it in Settings.'; return result; }
@@ -242,19 +243,19 @@ function avatarInfo(selection = config) {
     // Prefer the split "resident" model: it streams textures at the size the
     // quality setting asks for, which is what makes the friendly mode cheap
     // and lets downloaded 2K/4K tiers plug in. Fall back to a plain GLB.
-    const resident = file(path.join('runtime', 'resident', 'model.gltf'));
+    const resident = file('runtime/resident/model.gltf');
     result.residentAvailable = Boolean(resident);
     const glb = manifest.model ? file(manifest.model) : null;
     if (!resident && !glb) { result.problem = 'The avatar package has no model.'; return result; }
     result.modelBytes = resident ? 0 : assets.size(glb);
     result.modelURL = baseURL + (resident ? 'runtime/resident/model.gltf' : manifest.model);
-    result.motionsURL = baseURL + (file(path.join('runtime', 'motions', 'library.json')) ? 'runtime/motions/library.json' : 'motions/library.json');
+    result.motionsURL = baseURL + (file('runtime/motions/library.json') ? 'runtime/motions/library.json' : 'motions/library.json');
     const appearance = manifest.appearance || 'appearance/index.json';
     result.appearanceURL = file(appearance) ? baseURL + appearance : undefined;
     result.pose = manifest.pose || 'relaxed'; result.yaw = Number(manifest.yaw) || 0;
     result.visemes = Array.isArray(manifest.visemes) ? manifest.visemes : ['sil', 'PP', 'FF', 'TH', 'DD', 'kk', 'CH', 'SS', 'nn', 'RR', 'aa', 'E', 'ih', 'oh', 'ou'];
     try {
-      const libraryPath = file(path.join('runtime', 'motions', 'library.json')) || file(path.join('motions', 'library.json'));
+      const libraryPath = file('runtime/motions/library.json') || file('motions/library.json');
       const library = JSON.parse(assets.read(libraryPath));
       result.clips = (library.clips || []).length;
       result.clipLabels = (library.clips || []).map(c => String(c.label || c.id || '').replace(/[^\w -]/g, '').slice(0, 60)).filter(Boolean);

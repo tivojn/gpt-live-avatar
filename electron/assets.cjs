@@ -166,10 +166,10 @@ class AvatarAssets {
 
   // ---- model.gltf with only the texture variants that exist locally
   residentDocument(roots) {
-    const file = this.resolve(roots, path.join('runtime', 'resident', 'model.gltf'));
+    const file = this.resolve(roots, 'runtime/resident/model.gltf');
     if (!file) return null;
     const doc = JSON.parse(this.read(file));
-    const exists = name => Boolean(this.resolve(roots, path.join('runtime', 'resident', name)));
+    const exists = name => Boolean(this.resolve(roots, 'runtime/resident/' + name));
     for (const image of doc.images || []) {
       const variants = image.extras && Array.isArray(image.extras.openclamVariants) ? image.extras.openclamVariants : null;
       if (!variants) continue;

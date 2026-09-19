@@ -367,8 +367,12 @@ function paint(now) {
       avatar.prepareMotionFrame(now, reduce);
       fit = { scale, x: stage.anchor.x - stage.workArea.x - (bx + bw / 2) * scale, y: stage.anchor.y - stage.workArea.y - (by + bh) * scale };
     }
-    if (avatar.keepMotionInViewport&&!stage.closeup&&!stage.manualZoom) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
-    if(stage.manual)fit=keepManualVisible(fit,surface,layout);
+    // Between asking for the full-display window and getting it, this still paints into the small one. Her stage
+    // position is in display coordinates: clamping it to the small window here would drag her to the display's
+    // top-left corner for good (it did, from 0.2.24). Leave her where she is until the window has grown.
+    stageGrown = Math.abs(cssW - stage.workArea.width) <= 2 && Math.abs(cssH - stage.workArea.height) <= 2;
+    if (stageGrown && avatar.keepMotionInViewport&&!stage.closeup&&!stage.manualZoom) fit = avatar.keepMotionInViewport(fit, surface, {manual:Boolean(stage.manual)}) || fit;
+    if(stageGrown && stage.manual)fit=keepManualVisible(fit,surface,layout);
   } else {
     if (userOrbitDirty) { avatar.setOrbit(userOrbit); userOrbitDirty = false; }
     avatar.prepareMotionFrame(now, reduce);
@@ -378,7 +382,7 @@ function paint(now) {
     fit = { scale: scale0, x: surface.x + surface.width / 2 - (bx + bw / 2) * scale0, y: surface.y + surface.height - (by + bh + pad) * scale0 };
     if (avatar.keepMotionInViewport) fit = avatar.keepMotionInViewport(fit, surface) || fit;
   }
-  if(stage && !stage.studio)stage.anchor={x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale,y:stage.workArea.y+fit.y+(by+bh)*fit.scale};
+  if(stage && !stage.studio && stageGrown)stage.anchor={x:stage.workArea.x+fit.x+(bx+bw/2)*fit.scale,y:stage.workArea.y+fit.y+(by+bh)*fit.scale};
   const scale = fit.scale;
   // A wide transparent window must not spend the render budget on empty
   // desktop pixels. Render the body and prop rectangle at the same density
@@ -413,7 +417,14 @@ function paint(now) {
   // swap right after the window grows must not leave stale small-window
   // coordinates behind, or a walk would start from the wrong place.
   frameGeometry = { view, scale, layout, fit, pad };
-  const overflow=left<0||right>cssW||top<0||bottom>cssH;
+  // Does any of HER reach past the window? Measured without the breathing room added above for the render
+  // rectangle: that air (6% of her height) is more than the compact window's own padding (4%), so with it every
+  // character "overflowed" while standing still and went on stage the moment she appeared.
+  // A look's visible box is loose (corners of a bounding box), so a sliver past the edge, up to the window's own
+  // padding, is not worth a full-display window. Seraphim's armour and a held prop exceed it many times over.
+  const slack=pad*scale;
+  const overflow=left+air<-slack||right-air>cssW+slack||top+air<-slack||bottom-air>cssH+slack;
+  if(overflow&&!stage&&!window.gla_overflow)window.gla_overflow={left:left+air,right:right-air,top:top+air,bottom:bottom-air,window:[cssW,cssH],motion:avatar.motion?.active?.id||'',points:points.length,bounds:layout.bounds.map(Math.round),joints:joints&&[joints.x,joints.y,joints.width,joints.height].map(Math.round),visible:visible.map(p=>[Math.round(p.x),Math.round(p.y)]),fit:[+scale.toFixed(4),Math.round(fit.x),Math.round(fit.y)],at:Math.round(now)}; // debug: the first time she did not fit her window, and where
   // A flourish look wider than the window (Seraphim's armour) would be cut off at the window's edge. Its
   // warm-up renders every outfit out of sight and notes whether one needs room; the window then grows, still
   // unseen, once her own look is back on (so the stage geometry is hers). While it plays the window is left
@@ -498,7 +509,7 @@ function placeBubble() {
 // ---------------------------------------------------------------- stage mode (screen-wide motion)
 let stage = null; // { workArea, anchor:{x,y} screen coords of her feet, scale, studio, travelClip, turning, idleSince }
 let userOrbit = { yaw: 0, pitch: 0 }, userOrbitDirty = false;
-let stageBusy = null;
+let stageBusy = null, stageGrown = false; // stageGrown: the window really covers the display (see paint)
 const enteringStage = () => stageBusy;
 async function enterStage() {
   if (stage || !avatar || !frameGeometry) return stage;
