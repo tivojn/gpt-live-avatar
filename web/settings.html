@@ -346,9 +346,18 @@
     const engine=localEngine(), shared=engine===settings.effectiveReasoningEngine;
     const sharedCodex=shared&&engine==='codex';
     for(const option of $('#agentEngine').options)option.disabled=option.value!=='follow'&&settings.installedEngines?.[option.value]===false;
-    $('#agentEngine').value=settings.agentFollowReasoning!==false?'follow':engine;
+    // "Follow reasoning" only means something when reasoning is itself an agent (Codex App Server, OpenClaw, Hermes, Grok Build,
+    // EnConvo). GPT-Live reasoning, Gemini reasoning and plain API providers answer questions but cannot act on this Mac, so
+    // the pane shows the engine that really does the work instead of pretending to follow.
+    const canFollow=Boolean(settings.effectiveReasoningEngine),following=settings.agentFollowReasoning!==false&&canFollow;
+    const reasoningName=settings.reasoningMode==='delegate'?({openai:'OpenAI',xai:'xAI',...runtimeNames})[settings.delegate.provider]+' reasoning':settings.liveProvider==='gemini'?'Gemini reasoning':'GPT-Live reasoning';
+    const follow=[...$('#agentEngine').options].find(o=>o.value==='follow');follow.disabled=!canFollow;follow.textContent=canFollow?'Follow reasoning agent (default)':'Follow reasoning agent · not possible with '+reasoningName;
+    $('#agentEngine').value=following?'follow':engine;
     $('#sharedCodexEngine').hidden=false;
-    $('#sharedCodexEngine').textContent='Actions: '+(engine==='codex'?'Codex App Server':runtimeNames[engine])+'. '+(settings.agentFollowReasoning!==false?(shared?'Follows your reasoning agent; permissions below belong to this action engine.':'Your reasoning choice has no action engine; uses your saved action provider. Choose a provider below to change it.'):'Independent of your reasoning provider. Changing reasoning will keep this action engine.');
+    const engineLabel=engine==='codex'?'Codex App Server':runtimeNames[engine];
+    $('#sharedCodexEngine').textContent=following?'Actions: '+engineLabel+', the same agent that reasons. Permissions below belong to it.'
+      :!canFollow?reasoningName+' answers questions but cannot act on this Mac, so real tasks (files, apps, the browser) are carried out by '+engineLabel+'. Choose another engine above, or switch actions off.'
+      :'Actions: '+engineLabel+', independent of your reasoning provider. Changing reasoning will keep this action engine.';
     $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=displayText(settings.agentFolder);
