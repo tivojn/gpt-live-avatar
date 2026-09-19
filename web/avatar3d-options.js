@@ -627,14 +627,16 @@ export class Avatar3DOptions {
           if(!groups.has(bone)){
             const bind=skin?new THREE.Matrix4().multiplyMatrices(mesh.skeleton.boneInverses[bone],mesh.bindMatrix):new THREE.Matrix4();
             const e=bind.elements,scale=Math.sqrt([0,1,2,4,5,6,8,9,10].reduce((s,i)=>s+e[i]*e[i],0));
-            groups.set(bone,{bone,bind,scale,box:new THREE.Box3()});
+            groups.set(bone,{bone,bind,scale,box:new THREE.Box3(),core:new THREE.Box3()});
           }
           return groups.get(bone);
         };
         for(let i=0;i<position.count;i++){
           local.fromBufferAttribute(position,i);
-          if(skin){for(let k=0;k<4;k++)if(weights.getComponent(i,k)>0){const group=groupFor(indices.getComponent(i,k));group.box.expandByPoint(point.copy(local).applyMatrix4(group.bind));}}
-          else groupFor(-1).box.expandByPoint(local);
+          // `box`: every vertex a bone touches at all. `core`: only those it mostly moves (every vertex has a bone at .25 or more),
+          // because a trace of weight puts far-away vertices in a bone's box, and a posed bone then swings empty corners around.
+          if(skin){for(let k=0;k<4;k++){const w=weights.getComponent(i,k);if(w>0){const group=groupFor(indices.getComponent(i,k));group.box.expandByPoint(point.copy(local).applyMatrix4(group.bind));if(w>=.25)group.core.expandByPoint(point);}}}
+          else{const group=groupFor(-1);group.box.expandByPoint(local);group.core.expandByPoint(local);}
         }
         // A sum of weighted displacement radii contains simultaneous facial
         // shapes too, without re-skinning the dense face on every frame.
@@ -654,8 +656,10 @@ export class Avatar3DOptions {
         const transform=mesh.matrixWorld.clone();
         if(group.bone>=0)transform.multiply(mesh.bindMatrixInverse).multiply(mesh.skeleton.bones[group.bone].matrixWorld);
         const extent=group.box.clone();if(radius)extent.expandByScalar(radius*group.scale);
-        for(const p of corners(extent)){
-          box.expandByPoint(point.copy(p).applyMatrix4(transform));flat.copy(point).applyMatrix4(screen);
+        for(const p of corners(extent))box.expandByPoint(point.copy(p).applyMatrix4(transform));
+        const core=group.core.clone();if(radius&&!core.isEmpty())core.expandByScalar(radius*group.scale);
+        for(const p of corners(core)){
+          flat.copy(p).applyMatrix4(transform).applyMatrix4(screen);
           const x=(flat.x+1)*.5*this.avatar.width,y=(1-flat.y)*.5*this.avatar.height;
           if(x<tight.left)tight.left=x;if(x>tight.right)tight.right=x;if(y<tight.top)tight.top=y;if(y>tight.bottom)tight.bottom=y;
         }

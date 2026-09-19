@@ -42,6 +42,21 @@ app.whenReady().then(async()=>{try{
   report.timeline=line.filter((row,i,a)=>i===0||JSON.stringify(row.slice(1))!==JSON.stringify(a[i-1].slice(1)));}
  step('overflow after the timeline',await js('return window.gla_overflow||null'));
  step('her reach: one box around her, and bone box by bone box',await js("const v=gla_avatar.options?.visiblePoints()||[],xs=v.map(p=>p.x),ys=v.map(p=>p.y);return {loose:v.length?[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)].map(Math.round):null,tight:v.tight?[v.tight.left,v.tight.top,v.tight.right,v.tight.bottom].map(Math.round):null,window:[innerWidth,innerHeight]}").catch(e=>'failed: '+e.message));
+ // A motion: the window grows to the display and comes back. Every capture on the way must keep see-through corners
+ // (a transparent window that resizes can flash opaque black on some systems; alpha 255 in a corner is that flash).
+ if(!process.argv.includes('--no-motion')){
+  const before=solo.getBounds(),seen=[];let opaqueCorners=0,grew=0,back=0;const started=Date.now();
+  await js("void window.gla_play('wave')").catch(e=>report.errors.push('motion: '+e.message));
+  while(Date.now()-started<45000){
+   const b=solo.getBounds(),shot=await solo.webContents.capturePage(),size=shot.getSize(),bmp=shot.toBitmap(),a=(x,y)=>bmp[(y*size.width+x)*4+3];
+   if(size.width>4&&size.height>4&&[a(1,1),a(size.width-2,1),a(1,size.height-2),a(size.width-2,size.height-2)].some(v=>v>8))opaqueCorners++;
+   const key=b.width+'x'+b.height;if(seen.at(-1)?.[1]!==key)seen.push([Date.now()-started,key]);
+   if(!grew&&b.width>before.width*2)grew=Date.now()-started;
+   if(grew&&!back&&b.width<before.width*2){back=Date.now()-started;await wait(1500);seen.push([Date.now()-started,solo.getBounds().width+'x'+solo.getBounds().height]);break;}
+   await wait(120);
+  }
+  step('motion round trip',{before:[before.width,before.height],grewAfterMs:grew,backAfterMs:back,sizes:seen,capturesWithOpaqueCorners:opaqueCorners,after:[solo.getBounds().width,solo.getBounds().height],played:await js('return (window.gla_played||[]).slice(-3)').catch(()=>null)});
+ }
  step('debug',await js('const d=window.gla_debug?gla_debug():{};return {state:d.state,fps:d.fps,quality:d.quality,renderer:d.renderer,clips:d.clips,avatar:d.avatar}').catch(e=>'gla_debug failed: '+e.message));
  step('webgl',await js(`const c=document.createElement('canvas'),g=c.getContext('webgl2');if(!g)return 'no webgl2';const x=g.getExtension('WEBGL_debug_renderer_info');return {renderer:x?g.getParameter(x.UNMASKED_RENDERER_WEBGL):'?',maxTex:g.getParameter(g.MAX_TEXTURE_SIZE)}`));
  // The 3D layer from inside the page: does the loop advance, and does the canvas hold her right after a frame is drawn?
