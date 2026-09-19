@@ -1,14 +1,13 @@
 {
-  "version": "0.2.26",
+  "version": "0.2.27",
   "date": "2026-09-19",
-  "title": "A second live voice: Gemini 3.8 Live. Agent settings per character. Reset to defaults.",
-  "description": "Talk to your avatar on Gemini 3.8 Live or Extended Thinking as well as GPT-Live-1, give each character her own reasoning and action engine, and put any Settings page back to its defaults with two clicks.",
+  "title": "GPT-Live Avatar on Windows. She stays in her own window at rest.",
+  "description": "The same app, now on Windows 10 and 11 as well as macOS, from one codebase. On every system she no longer jumps into a full-screen window while she is just standing there.",
   "highlights": [
-    "Gemini 3.8 Live and Gemini 3.8 Live · Extended Thinking as a second live voice system (Settings › Live Voice System). Your reasoning and action engines (OpenAI, xAI, Codex App Server, OpenClaw, Hermes, Grok Build, EnConvo) work with it exactly as with GPT-Live-1. Avatar Show and the group conversation still use GPT-Live-1.",
-    "The voice belongs to the character: Settings › Character and right-click › Character › her name › Voice list the voices of the system in use, with gender beside each one. “Try voices…” opens a small window that stays open: play a voice as often as you like, then Use.",
-    "Agent settings per character. Settings › Reasoning and Actions are the defaults for everyone; any character can have her own reasoning, actions on or off, action engine, permission and engine agent under right-click › Character › her name › Agent, or in Settings › Agents. In Avatar Show and Together each performer uses her own.",
-    "“Reset to defaults” in the header of every Settings page: two clicks, that page only, and it never touches your API keys or sign-ins. New installs start on Delegate · OpenAI · GPT-5.6 Luna for harder questions, with the same key GPT-Live-1 uses.",
-    "Fixes found by asking every voice system and every engine to really create and delete a file: a request transcribed in two pieces no longer cancels its own task; she no longer claims to have done something with Actions off; engine checks work from any Settings page (“Unavailable outside the app”); the Actions page and the right-click menu say which engine really does the work.",
-    "A roomier Settings window."
+    "A Windows version. Windows 10 or newer, 64-bit: the same characters, both live voice systems, Settings, Avatar Show and reasoning with your own API key. She is transparent, frameless and always on top there too, and a tray icon takes the Dock's place — click it to show her, right-click for Bring Avatar Back, Avatar Show, Settings and Quit.",
+    "The Windows installer is a preview and is not code-signed yet, so Windows SmartScreen will warn you: choose More info → Run anyway. The download page lists the SHA-256 so you can check the file first with certutil -hashfile <file> SHA256. A signed installer is coming.",
+    "Every system: she no longer moves into the full-display stage window while standing still. Whether she fits her own window is now judged bone by bone from the vertices each bone actually moves, and her bottom edge comes from her feet rather than from the box around a sandal — so a wide idle pose, a spread of the arms or a shift of weight no longer sends her to the corner of the screen. A wide wardrobe still gets the whole display when she really needs it.",
+    "Check for Updates knows which system it is on. macOS installs the new version in place as before, checked against its checksum, signature and Apple's notarization. Windows finds the new version and hands you the official installer to run; installing from inside the app comes with the signed build.",
+    "Not on Windows yet: Dance Along (dancing to whatever is playing) is macOS-only for now and says so, and EnConvo is a Mac product. Codex and OpenClaw work on Windows; OpenClaw needs its gateway running."
   ]
 }
