@@ -26,9 +26,9 @@ or commit it).
 
 `verify-release` wants the starter packs the signed catalogue names under
 `build\protected\starter\sarah\{base,motions}.gla`, in the catalogue's revision, or it refuses, rightly.
-`electron.exe toolsetch-starter.cjs` fetches them with the app's own downloader (every part and the whole pack
+`electron.exe tools\fetch-starter.cjs` fetches them with the app's own downloader (every part and the whole pack
 checked against the signed catalogue; about 650 MB and a dozen requests of the service's daily limit; packs that
-already match are not fetched again), and hard-links them into `buildssetsundle\sarah` for development
+already match are not fetched again), and hard-links them into `build\assets\bundle\sarah` for development
 runs. A pack it replaces is renamed `*.superseded-<time>`, never deleted.
 The installer is unsigned until there is a certificate, so SmartScreen warns.
 
@@ -65,8 +65,8 @@ The installer is unsigned until there is a certificate, so SmartScreen warns.
   whenever an idle pose spread her arms or shifted her weight). The overflow test now measures her without the
   render rectangle's breathing room, bone by bone rather than by the corners of one box around her, from the
   vertices a bone mostly moves, and downwards by her feet (layout bounds and joints) rather than by the box around
-  a sandal, whose corner lies under the floor (`points.tight` from `meshPoints()` in `web/avatar3d-options.js`; the decision is in the paint
-  loop of `web/avatar.html`). The loose corners still size the render rectangle, so nothing is clipped.
+  a sandal, whose corner lies under the floor (`points.tight` from `meshPoints()` in
+  `web/avatar3d-options.js`; the decision is in the paint loop of `web/avatar.html`). The loose corners still size the render rectangle, so nothing is clipped.
   `window.gla_overflow` records the first time she did not fit, and why.
 
 ## Not done
@@ -74,5 +74,5 @@ The installer is unsigned until there is a certificate, so SmartScreen warns.
 - A person at the machine: a real conversation (echo on speakers, both voice systems), dragging to the
   screen edges, click-through around her at 250 %, flicker when the window resizes (captures show none).
 - App-level QA scripts that link `build/characters` with `fs.symlinkSync`, use `say` or `osascript`.
-- "on this Mac" in `web/settings.html` (about a dozen places).
+- Running the installer end to end (install, first start, uninstall) on a clean account.
 - Code signing, a Windows update path (Phase B). System-audio dancing (Phase C).
