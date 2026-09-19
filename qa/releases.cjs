@@ -12,8 +12,21 @@ const {baseURL}=require('../electron/asset-download.json');
  const arm=installerDetails(latest,{platform:'darwin',arch:'arm64'});
  assert.equal(arm.downloadURL,dmg);assert.equal(arm.sha256,sha);assert.equal(arm.bytes,1047191904);assert.equal(arm.releaseURL,RELEASE_BASE);assert.equal(arm.version,'0.2.10');assert.equal(arm.notes,'New release');
  assert.equal(installerDetails(latest,{platform:'darwin',arch:'x64'}).downloadURL,null,'No Intel installer is offered without one');
- assert.equal(installerDetails(latest,{platform:'win32',arch:'arm64'}).downloadURL,null);
+ assert.equal(installerDetails(latest,{platform:'win32',arch:'arm64'}).downloadURL,null,'Windows on ARM has no installer of its own');
+ assert.equal(installerDetails(latest,{platform:'win32',arch:'x64'}).downloadURL,null,'A macOS-only release offers Windows nothing');
+ assert.equal(installerDetails(latest,{platform:'linux',arch:'x64'}).downloadURL,null);
  assert.equal(installerDetails({...latest,installers:undefined},{platform:'darwin',arch:'arm64'}).downloadURL,dmg,'Flat url/arch fields work alone');
+ // Windows: its own key and its own file name, alongside the macOS installer.
+ const exe=RELEASE_BASE+'gpt-live-avatar-0.2.10-win-x64.exe',esha='c'.repeat(64);
+ const both={...latest,installers:{...latest.installers,'win-x64':{file:'GPT-Live Avatar-0.2.10-win-x64.exe',url:exe,sha256:esha,bytes:797000000}}};
+ const win=installerDetails(both,{platform:'win32',arch:'x64'});
+ assert.equal(win.downloadURL,exe);assert.equal(win.sha256,esha);assert.equal(win.bytes,797000000);assert.equal(win.version,'0.2.10');
+ assert.equal(installerDetails(both,{platform:'darwin',arch:'arm64'}).downloadURL,dmg,'Publishing Windows leaves the macOS installer offered');
+ assert.equal(installerDetails({...both,installers:{'win-x64':both.installers['win-x64']},arch:undefined,url:undefined,sha256:undefined}, {platform:'darwin',arch:'arm64'}).downloadURL,null,'A Windows-only release offers macOS nothing');
+ assert.equal(installerDetails({...both,arch:'win-x64',url:exe,sha256:esha,installers:undefined},{platform:'win32',arch:'x64'}).downloadURL,null,'The flat legacy fields never describe a Windows installer');
+ for(const url of ['https://evil.test/gpt-live-avatar-0.2.10-win-x64.exe',RELEASE_BASE+'gpt-live-avatar-0.2.10-x64.dmg',RELEASE_BASE+'gpt-live-avatar-0.2.11-win-x64.exe',RELEASE_BASE+'gpt-live-avatar-0.2.10-win-x64.exe.exe'])
+  assert.equal(installerDetails({...both,installers:{'win-x64':{...both.installers['win-x64'],url}}},{platform:'win32',arch:'x64'}).downloadURL,null,'Only the exact Windows installer for this version is linked: '+url);
+ assert.equal(installerDetails({...both,installers:{'win-x64':{...both.installers['win-x64'],sha256:'nope'}}},{platform:'win32',arch:'x64'}).downloadURL,null,'A checksum is mandatory on Windows too');
  for(const bad of [{...latest,version:'v0.2.10'},{...latest,version:'0.2.10-beta.1'},{...latest,version:'../x'},{version:5},null,[]])assert.throws(()=>installerDetails(bad,{platform:'darwin',arch:'arm64'}),/unsupported release/);
  for(const url of ['https://evil.test/gpt-live-avatar-0.2.10-arm64.dmg',RELEASE_BASE+'gpt-live-avatar-0.2.11-arm64.dmg',RELEASE_BASE+'gpt-live-avatar-0.2.10-x64.dmg',RELEASE_BASE+'../gpt-live-avatar-0.2.10-arm64.dmg'])
   assert.equal(installerDetails({...latest,url,installers:{arm64:{...latest.installers.arm64,url}}},{platform:'darwin',arch:'arm64'}).downloadURL,null,'Only same-service installers named for the version are linked: '+url);
@@ -23,6 +36,11 @@ const {baseURL}=require('../electron/asset-download.json');
  assert.equal(releaseDetails(doc,{platform:'darwin',arch:'arm64'}).downloadURL,null);
  doc.assets[0].name='GPT-Live.Avatar-0.2.10-arm64.dmg';assert(releaseDetails(doc,{platform:'darwin',arch:'arm64'}).downloadURL);
  assert.equal(releaseDetails(doc,{platform:'darwin',arch:'x64'}).downloadURL,null);
+ assert.equal(releaseDetails(doc,{platform:'win32',arch:'x64'}).downloadURL,null,'A DMG is never offered to Windows');
+ const winAsset={name:'gpt-live-avatar-0.2.10-win-x64.exe',state:'uploaded',browser_download_url:GITHUB_RELEASES+'/download/v0.2.10/gpt-live-avatar-0.2.10-win-x64.exe'};
+ const winDoc={...doc,assets:[...doc.assets,winAsset]};
+ assert.equal(releaseDetails(winDoc,{platform:'win32',arch:'x64'}).downloadURL,winAsset.browser_download_url,'The GitHub fallback finds the Windows installer');
+ assert(releaseDetails(winDoc,{platform:'darwin',arch:'arm64'}).downloadURL,'and still finds the macOS one');
  assert.throws(()=>releaseDetails({...doc,html_url:'https://untrusted.test/release'}));assert.throws(()=>releaseDetails({...doc,draft:true}));
  // Fetch order: the service first; GitHub only when the service fails.
  const github={...doc,tag_name:'v0.2.9',html_url:GITHUB_RELEASES+'/tag/v0.2.9',assets:[]};

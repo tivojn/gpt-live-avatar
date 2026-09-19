@@ -1,32 +1,46 @@
 'use strict';
 const {spawn}=require('node:child_process');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {childEnv}=require('./child-env.cjs');
+const {resolveWindowsCommand,findWindowsCommand,pathDirs}=require('./win-command.cjs');
 const NAMES={openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build'};
-function findRuntime(engine,override=''){
+const engineArgs=(engine,name)=>engine==='grok'?['--no-auto-update','agent','--no-leader','stdio']:name==='hermes-acp'?[]:['acp'];
+const missing=(engine,explicit)=>Error(explicit?`${NAMES[engine]} executable was not found at the saved path. Choose its executable in Settings.`:`Install and configure ${NAMES[engine]} on this ${process.platform==='darwin'?'Mac':'computer'}${engine==='hermes'?', including its ACP extra':''}, then check the connection. Codex is not required.`);
+// → {file,args,prefix}: `prefix` comes before every argument list (on Windows, the script node.exe runs for an npm-installed engine).
+function findRuntime(engine,override='',{platform=process.platform,env=process.env,home=os.homedir()}={}){
  if(!NAMES[engine])throw Error('Unknown agent runtime.');
- const home=os.homedir(),explicit=override||process.env['GLA_'+engine.toUpperCase()+'_PATH'];
+ if(platform==='win32'){
+  const explicit=override||env['GLA_'+engine.toUpperCase()+'_PATH'],names=engine==='hermes'?['hermes','hermes-acp']:[engine==='grok'?'grok':'openclaw'];
+  const dirs=[path.join(home,'.grok','bin'),path.join(home,'.openclaw','bin'),path.join(home,'.local','bin'),path.join(home,'.hermes','hermes-agent','venv','Scripts'),path.join(home,'.hermes','hermes-agent','.venv','Scripts'),...(env.APPDATA?[path.join(env.APPDATA,'npm')]:[]),...pathDirs(env)];
+  const nodeDirs=engine==='openclaw'?[path.join(home,'.openclaw','tools','cli-node')]:[]; // the Node OpenClaw installs for itself; it refuses older ones
+  const found=explicit?resolveWindowsCommand(explicit,env,nodeDirs):findWindowsCommand(names,dirs,env,nodeDirs);
+  if(!found)throw missing(engine,explicit);
+  const name=(found.name||path.basename(explicit||'')).replace(/\.(exe|cmd|ps1|bat)$/i,'').toLowerCase();
+  return {file:found.file,prefix:found.prefix,args:[...found.prefix,...engineArgs(engine,name)]};
+ }
+ const explicit=override||env['GLA_'+engine.toUpperCase()+'_PATH'];
  const names=engine==='hermes'?['hermes','hermes-acp']:[engine==='grok'?'grok':'openclaw'];
  const dirs=[path.join(home,'.grok/bin'),path.join(home,'.openclaw/bin'),path.join(home,'.local/bin'),path.join(home,'.hermes/hermes-agent/venv/bin'),path.join(home,'.hermes/hermes-agent/.venv/bin'),'/opt/homebrew/bin','/usr/local/bin',...(process.env.PATH||'').split(path.delimiter).filter(Boolean)];
  const candidates=explicit?[explicit]:dirs.flatMap(dir=>names.map(name=>path.join(dir,name)));
- for(const file of candidates)try{if(path.isAbsolute(file)&&fs.statSync(file).isFile()){fs.accessSync(file,fs.constants.X_OK);return {file,args:engine==='grok'?['--no-auto-update','agent','--no-leader','stdio']:path.basename(file)==='hermes-acp'?[]:['acp']};}}catch{}
- throw Error(explicit?`${NAMES[engine]} executable was not found at the saved path. Choose its executable in Settings.`:`Install and configure ${NAMES[engine]} on this Mac${engine==='hermes'?', including its ACP extra':''}, then check the connection. Codex is not required.`);
+ for(const file of candidates)try{if(path.isAbsolute(file)&&fs.statSync(file).isFile()){fs.accessSync(file,fs.constants.X_OK);return {file,prefix:[],args:engineArgs(engine,path.basename(file))};}}catch{}
+ throw missing(engine,explicit);
 }
 // ACP JSON-RPC over a private child process's stdio. Never invoke a login shell,
 // copy credentials, emit stderr, or mutate the runtime's global configuration.
 class AcpClient{
  constructor({engine,executable='',agent='',onEvent=()=>{},onRequest=async()=>{throw Error('Unsupported host request.');},spawnImpl=spawn}){Object.assign(this,{engine,executable,agent,onEvent,onRequest,spawnImpl});this.pending=new Map();this.sequence=0;this.buffer='';}
  async start(){
-  const command=findRuntime(this.engine,this.executable),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
-  env.PATH=[path.dirname(command.file),'/opt/homebrew/bin','/usr/local/bin','/usr/bin','/bin',env.PATH||''].join(path.delimiter);
-  const args=[...command.args];if(this.engine==='hermes'&&this.agent){if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(this.agent))throw Error('Invalid Hermes profile.');args.unshift('--profile',this.agent);}
-  this.child=this.spawnImpl(command.file,args,{stdio:['pipe','pipe','pipe'],env});
+  const command=findRuntime(this.engine,this.executable),env=childEnv(path.dirname(command.file));
+  const args=[...command.args];if(this.engine==='hermes'&&this.agent){if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(this.agent))throw Error('Invalid Hermes profile.');args.splice(command.prefix.length,0,'--profile',this.agent);}
+  this.child=this.spawnImpl(command.file,args,{stdio:['pipe','pipe','pipe'],env,windowsHide:true});
   this.child.stdout.setEncoding('utf8');this.child.stdout.on('data',chunk=>{
    this.buffer+=chunk;if(Buffer.byteLength(this.buffer)>4*1024*1024){this.close();return;}
    let at;while((at=this.buffer.indexOf('\n'))>=0){const line=this.buffer.slice(0,at);this.buffer=this.buffer.slice(at+1);if(!line.trim())continue;let frame;try{frame=JSON.parse(line);}catch{continue;}void this.receive(frame);}
   });
-  this.child.stderr.on('data',()=>{});this.child.stdin.on('error',()=>this.fail('The runtime connection closed.'));
+  // stderr is never shown (it can hold paths and tokens); it is only searched for the one failure users keep meeting.
+  let diagnostics='';this.child.stderr.on('data',chunk=>{if(diagnostics.length<4000)diagnostics+=chunk;});this.child.stdin.on('error',()=>this.fail('The runtime connection closed.'));
   this.child.on('error',()=>this.fail(`Could not launch ${NAMES[this.engine]}. Check its executable and ACP setup.`));
-  this.child.on('exit',()=>this.fail(`${NAMES[this.engine]} disconnected. Check its setup and try again.`));
+  this.child.on('exit',()=>setTimeout(()=>this.fail(this.engine==='openclaw'&&/ACP bridge failed.*ECONNREFUSED/.test(diagnostics)?'The OpenClaw gateway is not running. Start it (openclaw gateway), then try again.':`${NAMES[this.engine]} disconnected. Check its setup and try again.`),50)); // a moment for the last of stderr
   this.info=await this.request('initialize',{protocolVersion:1,clientCapabilities:{fs:{readTextFile:false,writeTextFile:false},terminal:false},clientInfo:{name:'gpt-live-avatar',version:require('../package.json').version}});
   if(this.info.protocolVersion!==1)throw Error('This runtime uses an unsupported ACP version.');
   if(this.engine==='grok'){

@@ -91,8 +91,8 @@ const checks=[];
  // A sentence transcribed in two pieces is one request: the tail neither cancels the hand-off nor is left out of it.
  {const live2=new Live(),sent=[],cancelled=[];let said='Create a file named';live2.conversation=()=>[{role:'user',text:said}];const waiting=[];
   new context.Bridge(live2,{answer:async req=>{sent.push(req.history[0].text);return new Promise(r=>waiting.push(r));},cancel:async id=>{cancelled.push(id);}});
-  live2.emit('transcript',{role:'user',id:'u1',final:true});live2.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'d-tail'}});await wait(450);assert.deepEqual(sent,['Create a file named'],'sent with what had been heard');
-  said='Create a file named avatar test dot txt';live2.emit('transcript',{role:'user',id:'u2',continues:true});await wait(450);
+  live2.emit('transcript',{role:'user',id:'u1',final:true});live2.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'d-tail'}});await wait(700);assert.deepEqual(sent,['Create a file named'],'sent with what had been heard');
+  said='Create a file named avatar test dot txt';live2.emit('transcript',{role:'user',id:'u2',continues:true});await wait(700);
   assert.deepEqual(sent,['Create a file named','Create a file named avatar test dot txt'],'the tail sends the same hand-off again, in full');assert.deepEqual(cancelled,['d-tail'],'and withdraws the half one');
   waiting[0]({ok:true,text:'Half answer.'});await wait(10);assert.equal(live2.sent.length,0,'the superseded attempt is ignored');waiting[1]({ok:true,text:'Done.'});await wait(10);assert.deepEqual(live2.sent,[{content:'Done.',id:'d-tail'}]);
   // …while a segment that does not continue the last one is still an interruption

@@ -28,7 +28,7 @@ class AvatarAssets {
   }
   async ensureKeys(){
     if(this.runtime.keys&&Object.keys(this.runtime.keys).length)return;
-    if(!this.safeStorage?.isEncryptionAvailable())throw Error('macOS secure storage is unavailable. Unlock your login keychain and retry.');
+    if(!this.safeStorage?.isEncryptionAvailable())throw Error(process.platform==='darwin'?'macOS secure storage is unavailable. Unlock your login keychain and retry.':'Secure storage is unavailable on this computer. Sign out of '+(process.platform==='win32'?'Windows':'your session')+' and back in, then retry.');
     if(this.keyRequest)return this.keyRequest;
     this.keyRequest=(async()=>{
       if(!this.baseURL||(!this.allowLocal&&new URL(this.baseURL).protocol!=='https:'))throw Error('Protected downloads are not configured for this build.');
@@ -166,10 +166,10 @@ class AvatarAssets {
 
   // ---- model.gltf with only the texture variants that exist locally
   residentDocument(roots) {
-    const file = this.resolve(roots, path.join('runtime', 'resident', 'model.gltf'));
+    const file = this.resolve(roots, 'runtime/resident/model.gltf');
     if (!file) return null;
     const doc = JSON.parse(this.read(file));
-    const exists = name => Boolean(this.resolve(roots, path.join('runtime', 'resident', name)));
+    const exists = name => Boolean(this.resolve(roots, 'runtime/resident/' + name));
     for (const image of doc.images || []) {
       const variants = image.extras && Array.isArray(image.extras.openclamVariants) ? image.extras.openclamVariants : null;
       if (!variants) continue;

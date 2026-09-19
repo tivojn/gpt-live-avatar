@@ -17,8 +17,8 @@ async function discoverAgents(engine,config={},exec=promisify(execFile),fetchImp
  try{
   if(engine==='grok')return {installed:true,agents:[{id:'default',name:'Grok Build',isDefault:true}],kind:'runtime'};
   if(engine==='hermes')return {installed:true,agents:hermesProfiles(),kind:'profile'};
-  const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;env.PATH=[path.dirname(command.file),'/opt/homebrew/bin','/usr/local/bin','/usr/bin','/bin',env.PATH||''].join(path.delimiter);
-  const {stdout}=await exec(command.file,['agents','list','--json'],{env,timeout:20000,maxBuffer:1024*1024});
+  const env=require('./child-env.cjs').childEnv(path.dirname(command.file));
+  const {stdout}=await exec(command.file,[...command.prefix,'agents','list','--json'],{env,timeout:20000,maxBuffer:4*1024*1024,windowsHide:true});
   // Some releases prepend diagnostics; accept only the final JSON array.
   const start=stdout.indexOf('[');const data=JSON.parse(stdout.slice(start));if(!Array.isArray(data))throw Error('Invalid inventory');
   return {installed:true,kind:'agent',agents:data.filter(a=>validAgent(a.id)).map(a=>({id:a.id,name:String(a.identityName||a.name||a.id).slice(0,80),isDefault:a.isDefault===true,model:typeof a.model==='string'?a.model.slice(0,200):''}))};

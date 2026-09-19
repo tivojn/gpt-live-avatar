@@ -610,6 +610,12 @@ export class Avatar3DOptions {
     const corners=b=>{const out=[];if(!b.isEmpty())for(const x of [b.min.x,b.max.x])for(const y of [b.min.y,b.max.y])for(const z of [b.min.z,b.max.z])out.push(new THREE.Vector3(x,y,z));return out;};
     this.avatar.root.updateMatrixWorld(true);
     this.avatar.hipCorrective?.update();
+    // The eight corners of ONE box around everything include corners where nothing is: in perspective the front
+    // bottom corners fall well below her feet (150 of 1536 units for Sarah standing still). Callers that must not
+    // clip use those corners; `tight` is the same pass measured bone box by bone box on the layout plane, for
+    // callers that ask whether she really reaches past an edge.
+    this.avatar.project(point.set(0,0,0));const camera=this.avatar.layoutCamera,flat=new THREE.Vector3();
+    const screen=new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse),tight={left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity};
     for(const mesh of meshes){
       const geometry=mesh.geometry,position=geometry?.attributes.position;
       if(!position?.count)continue;
@@ -621,14 +627,16 @@ export class Avatar3DOptions {
           if(!groups.has(bone)){
             const bind=skin?new THREE.Matrix4().multiplyMatrices(mesh.skeleton.boneInverses[bone],mesh.bindMatrix):new THREE.Matrix4();
             const e=bind.elements,scale=Math.sqrt([0,1,2,4,5,6,8,9,10].reduce((s,i)=>s+e[i]*e[i],0));
-            groups.set(bone,{bone,bind,scale,box:new THREE.Box3()});
+            groups.set(bone,{bone,bind,scale,box:new THREE.Box3(),core:new THREE.Box3()});
           }
           return groups.get(bone);
         };
         for(let i=0;i<position.count;i++){
           local.fromBufferAttribute(position,i);
-          if(skin){for(let k=0;k<4;k++)if(weights.getComponent(i,k)>0){const group=groupFor(indices.getComponent(i,k));group.box.expandByPoint(point.copy(local).applyMatrix4(group.bind));}}
-          else groupFor(-1).box.expandByPoint(local);
+          // `box`: every vertex a bone touches at all. `core`: only those it mostly moves (every vertex has a bone at .25 or more),
+          // because a trace of weight puts far-away vertices in a bone's box, and a posed bone then swings empty corners around.
+          if(skin){for(let k=0;k<4;k++){const w=weights.getComponent(i,k);if(w>0){const group=groupFor(indices.getComponent(i,k));group.box.expandByPoint(point.copy(local).applyMatrix4(group.bind));if(w>=.25)group.core.expandByPoint(point);}}}
+          else{const group=groupFor(-1);group.box.expandByPoint(local);group.core.expandByPoint(local);}
         }
         // A sum of weighted displacement radii contains simultaneous facial
         // shapes too, without re-skinning the dense face on every frame.
@@ -649,9 +657,17 @@ export class Avatar3DOptions {
         if(group.bone>=0)transform.multiply(mesh.bindMatrixInverse).multiply(mesh.skeleton.bones[group.bone].matrixWorld);
         const extent=group.box.clone();if(radius)extent.expandByScalar(radius*group.scale);
         for(const p of corners(extent))box.expandByPoint(point.copy(p).applyMatrix4(transform));
+        const core=group.core.clone();if(radius&&!core.isEmpty())core.expandByScalar(radius*group.scale);
+        for(const p of corners(core)){
+          flat.copy(p).applyMatrix4(transform).applyMatrix4(screen);
+          const x=(flat.x+1)*.5*this.avatar.width,y=(1-flat.y)*.5*this.avatar.height;
+          if(x<tight.left)tight.left=x;if(x>tight.right)tight.right=x;if(y<tight.top)tight.top=y;if(y>tight.bottom)tight.bottom=y;
+        }
       }
     }
-    return corners(box).map(p=>this.avatar.project(p));
+    const points=corners(box).map(p=>this.avatar.project(p));
+    if(points.length&&Number.isFinite(tight.left+tight.top+tight.right+tight.bottom))points.tight=tight;
+    return points;
   }
 
   applyVisibility(selection) {

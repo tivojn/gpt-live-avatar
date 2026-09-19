@@ -42,7 +42,7 @@ function catalogueMenu(cat,send){
 
 // Perform: every way to make her move, and the one way to make her stop.
 function performMenu(state,send,character){
-  const {motions}=catalogueMenu(state.catalogue,send),music=musicMenu(state,send,character);
+  const {motions}=catalogueMenu(state.catalogue,send),music=musicMenu(process.platform==='darwin'?state:{...state,musicSupported:false,musicPlatform:process.platform==='win32'?'Windows':'Linux'},send,character);
   const stop=music.at(-1),dance=music.at(-2),status=music.slice(0,-2);
   return {label:'Perform',submenu:[...status,...motions,...(motions.length?[{type:'separator'}]:[]),dance,{label:'Stay Still',click:send('stay')},stop]};
 }

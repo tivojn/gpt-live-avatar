@@ -181,7 +181,7 @@ const characters=[{slug:'tia',name:'Tia',voice:'marin',clips},{slug:'sarah',name
  assert.match(recorder,/import \{LIP_SYNC_DELAY\} from '\/lip-sync\.js'/,'recorder knows the lip-sync delay line');
  assert.match(recorder,/addAudio\(stream,output=null\)[\s\S]*createDelay\(1\)[\s\S]*source\.connect\(delay\);delay\.connect\(this\.destination\)/,'every recorded voice passes through a delay line');
  assert.match(recorder,/syncDelays\(\)\{[\s\S]*playbackLag|lagFor\(output\)\{const lag=output\?\.playbackLag\?\.\(\)/,'the delay follows the speaker output lag');
- assert.match(recorder,/if\(!this\.active\|\|this\.paused\)return;\n\s*this\.syncDelays\(\);/,'the lag is re-read every recorded frame');
+ assert.match(recorder,/if\(!this\.active\|\|this\.paused\)return;\r?\n\s*this\.syncDelays\(\);/,'the lag is re-read every recorded frame');
  assert.match(show,/stream:\(stream,output\)=>recorder\?\.addAudio\(stream,output\)/,'the Director voice hands its output to the recorder');
  assert.match(show,/function recordAudio\(stream,output\)\{recorder\?\.addAudio\(stream,output\);\}/,'cast voices hand their output to the recorder');
  assert.match(fs.readFileSync(path.join(root,'web/group.js'),'utf8'),/tap\(stream,voice\.output\)/,'audio taps receive the speaking output');

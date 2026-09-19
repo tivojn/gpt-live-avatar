@@ -13,7 +13,7 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   let window = null, pending = null, abort = null, generation = 0;
   let update = { state: 'idle' };
   const details = releaseInfo.version === version ? releaseInfo : { title: 'GPT-Live Avatar', description: releaseInfo.description, highlights: [] };
-  const snapshot = () => ({ version, architecture: process.arch === 'arm64' ? 'Apple silicon' : process.arch === 'x64' ? 'Intel' : process.arch,
+  const snapshot = () => ({ version, platform: process.platform, architecture: process.platform !== 'darwin' ? (process.platform === 'win32' ? 'Windows · ' : '') + process.arch : process.arch === 'arm64' ? 'Apple silicon' : process.arch === 'x64' ? 'Intel' : process.arch,
     date: details.date || '', title: details.title, description: details.description, highlights: details.highlights, update: { ...update, installable: canInstall() } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('gla:app-info:changed', snapshot()); };
   // A quiet check (once, shortly after launch) only ever turns the menu row into
@@ -40,7 +40,10 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   // The release the user is acting on. Each step is theirs to start; a refusal
   // returns to "available" with the reason, and the download is already gone.
   let transfer = null, verified = null, transfers = 0; // its own counter: closing the window must not orphan a download
-  const canInstall = () => Boolean(update.downloadURL && update.sha256);
+  // electron/updater.cjs is entirely macOS tooling (hdiutil, codesign, spctl,
+  // ditto), so it must never run elsewhere: off macOS the user is offered the
+  // official installer to run themselves, however complete latest.json is.
+  const canInstall = () => process.platform === 'darwin' && Boolean(update.downloadURL && update.sha256);
   async function download() {
     if (update.state !== 'available' || !canInstall() || transfer) return;
     const release = { ...update }, own = ++transfers; transfer = new AbortController();

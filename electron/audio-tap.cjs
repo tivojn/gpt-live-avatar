@@ -220,6 +220,7 @@ class AudioTap {
 // players expose the same vocabulary, so one shape covers them.
 
 const osascript = script => new Promise(resolve => {
+  if (process.platform !== 'darwin') { resolve(null); return; } // AppleScript exists only on macOS: nothing is playing as far as we can tell
   execFile('/usr/bin/osascript', ['-e', script], { timeout: 4000 }, (error, stdout) => {
     resolve(error ? null : String(stdout).trim());
   });

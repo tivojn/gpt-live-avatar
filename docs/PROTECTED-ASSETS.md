@@ -150,14 +150,19 @@ gateway host from `electron/asset-download.json`
 
 - `releases/latest.json` — the release record the app's **Check for
   Updates…** reads: `{version, title, notes, publishedAt, arch, url, sha256,
-  bytes, installers: {arm64: {file, url, sha256, bytes}}}`. Cached for five
-  minutes.
+  bytes, installers: {arm64: {file, url, sha256, bytes}, "win-x64": {…}}}`.
+  One entry per platform; the flat `arch`/`url`/`sha256`/`bytes` fields
+  describe the macOS installer, because apps before 0.2.27 read those when
+  `installers[arch]` is missing. Cached for five minutes.
 - `releases/gpt-live-avatar-<version>-<arch>.dmg` — the Apple-signed,
-  notarized installer, streamed from the private bucket with
-  `Content-Disposition: attachment`. Installers are immutable per version.
+  notarized macOS installer, and
+  `releases/gpt-live-avatar-<version>-win-x64.exe` — the Windows NSIS
+  installer, each streamed from the private bucket with
+  `Content-Disposition: attachment` and only under its own exact name and
+  extension. Installers are immutable per version.
 - `releases/` — a small HTML landing page rendered from `latest.json` for the
-  README link (version, checksum, download button, notes). It links only
-  same-origin installer names.
+  README link (version, checksum, a download button per platform, each
+  platform's instructions, notes). It links only same-origin installer names.
 
 `index.json`, `authorize` and every encrypted part remain token-authenticated;
 `deploy.cjs` and `publish-release.cjs` both verify that an unauthenticated
@@ -184,18 +189,32 @@ npm version patch            # or edit package.json + electron/release-info.json
 npm test && npm run dmg      # signed, notarized dist/GPT-Live Avatar-<version>-arm64.dmg
 node tools/cloud/publish-release.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected            # dry run: checksum, cap plan
 node tools/cloud/publish-release.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected --apply --retire-previous
+
+# then the Windows installer for the same version, built on Windows
+# (npm run dist:win) and copied here with its SHA-256 checked on arrival
+node tools/cloud/publish-release.cjs STORAGE_ACCOUNT_ID gpt-live-avatar-protected --target win-x64 --apply
 ```
 
-The publisher hashes the DMG, builds `latest.json` from
-`electron/release-info.json` (or `--notes FILE`) and checks it with the app's
-own parser, plans the storage cap across the account, uploads the installer in
-64 MiB parts, re-reads and verifies its SHA-256, writes `latest.json`, retires
-older `releases/*.dmg` objects when asked, records
-`build/published-release-<version>.json` and `build/SHA256SUMS-<version>.txt`,
-then confirms the public routes and the still-closed catalogue on the live
-gateway. `--verify-live` repeats only the live check. When the previous
+The publisher handles one `--target` per run (`arm64` by default, `x64` or
+`win-x64`; `--installer PATH`, formerly `--dmg`, overrides the expected file
+in `dist/`). It hashes the installer, reads the live `latest.json` and carries
+over the other platform's entry for the same version — re-validated with the
+app's own parser, so nothing it did not write survives, and never an entry for
+another version, whose files this release retires. It builds `latest.json`
+from `electron/release-info.json` (or `--notes FILE`) and checks every entry
+with that parser, plans the storage cap across the account, uploads the
+installer in 64 MiB parts, re-reads and verifies its SHA-256, writes
+`latest.json`, retires installers of **older versions** when asked — never the
+other platform of the version being published — records
+`build/published-release-<version>.json` and `build/SHA256SUMS-<version>.txt`
+(one line per installer the release now offers), then confirms every
+platform's route and the still-closed catalogue on the live gateway.
+`--verify-live` repeats only the live check. When the previous
 installer must be retired to fit under the cap it is removed before the
 upload, so its download link is unavailable for the minutes the upload takes.
+Two installers per release roughly doubles the footprint: read the dry run's
+cap plan first. The gateway must have been redeployed with the `.exe` route
+(`prepare-worker.cjs`, `deploy.cjs`) before the first Windows publish.
 `node qa/publish-release.cjs` covers the plan, multipart transport and
 verification locally without credentials.
 

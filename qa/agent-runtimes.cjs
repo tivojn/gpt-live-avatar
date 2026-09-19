@@ -25,6 +25,24 @@ class Client{
  let seen;const backend=new DelegateBackend({auth:{bearer(){throw Error('Credentials must remain in the selected runtime');}},codex:{answer:async(...args)=>{seen=args;return {text:'Hermes'};},status:async engine=>({models:[engine+':model']})}});
  assert.equal((await backend.answer(1,'route',config,[{role:'user',text:'hello'}])).text,'Hermes');assert.equal(seen[2].agentRuntimeModels.hermes,'openrouter:z-ai/glm-5.1');assert.deepEqual(await backend.models(config),['hermes:model']);
  assert.throws(()=>findRuntime('bad'),/Unknown/);assert.throws(()=>findRuntime('hermes','/does/not/exist'),/saved path/);
+ {const {childEnv}=require('../electron/child-env.cjs');
+  assert.deepEqual(childEnv('/x/bin',{PATH:'/home/bin',ELECTRON_RUN_AS_NODE:'1',KEEP:'1'},'darwin'),{PATH:'/x/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/home/bin',KEEP:'1'});
+  assert.deepEqual(childEnv('C:\\x',{Path:'C:\\Windows',ELECTRON_RUN_AS_NODE:'1'},'win32'),{Path:'C:\\x;C:\\Windows'},'Windows: the existing Path variable is extended, never shadowed by a second PATH');}
+ // Windows: an npm-installed engine is a .cmd shim around a script; it is started as node.exe + script, never through a shell.
+ {const win=fs.mkdtempSync(path.join(os.tmpdir(),'gla-win-')),npm=path.join(win,'npm'),own=path.join(win,'home','.openclaw','tools','cli-node'),find=(env,home=path.join(win,'nobody'))=>findRuntime('openclaw','',{platform:'win32',env,home});
+  try{
+   fs.mkdirSync(path.join(npm,'node_modules','openclaw'),{recursive:true});fs.mkdirSync(own,{recursive:true});fs.mkdirSync(path.join(win,'nodejs'));
+   for(const shim of ['openclaw','openclaw.ps1'])fs.writeFileSync(path.join(npm,shim),'shim');
+   fs.writeFileSync(path.join(npm,'openclaw.cmd'),String.raw`@ECHO off
+endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\node_modules\openclaw\openclaw.mjs" %*
+`);
+   const script=path.join(npm,'node_modules','openclaw','openclaw.mjs'),node=path.join(win,'nodejs','node.exe'),ownNode=path.join(own,'node.exe');fs.writeFileSync(script,'');fs.writeFileSync(node,'');fs.writeFileSync(ownNode,'');
+   assert.throws(()=>find({PATH:npm}),/Node\.js was not found/,'a script engine without any node.exe says what is missing');
+   assert.deepEqual(find({PATH:[npm,path.dirname(node)].join(';')}),{file:node,prefix:[script],args:[script,'acp']},'node.exe from the path runs the script the shim names');
+   assert.equal(find({Path:path.dirname(node),APPDATA:win},path.join(win,'home')).file,ownNode,'the Node that OpenClaw installed for itself comes first; the npm folder under APPDATA is searched without being on the path');
+   fs.writeFileSync(path.join(npm,'openclaw.cmd'),String.raw`"%_prog%"  "%dp0%\..\outside.js" %*`);fs.writeFileSync(path.join(win,'outside.js'),'');
+   assert.throws(()=>find({PATH:[npm,path.dirname(node)].join(';')}),/Install and configure OpenClaw/,'a shim that points outside its own folder is not followed');
+  }finally{fs.rmSync(win,{recursive:true,force:true});}}
  const profiles=fs.mkdtempSync(path.join(os.tmpdir(),'gla-profiles-'));
  try{
   fs.mkdirSync(path.join(profiles,'profiles/tia'),{recursive:true});fs.mkdirSync(path.join(profiles,'profiles/removed'),{recursive:true});fs.mkdirSync(path.join(profiles,'profiles/.deleted/removed'),{recursive:true});fs.writeFileSync(path.join(profiles,'active_profile'),'tia');
@@ -84,7 +102,7 @@ class Client{
   await assert.rejects(a.answer(1,'off',{...cfg,agentEnabled:false},[],'hello','Tia'),/Enable actions/);
   const work=a.answer(1,'x',cfg,[{role:'assistant',text:'Tia created original.txt'},{role:'user',text:'Sarah read that file'}],'Sarah read that file','Sarah',null,r=>receipts.push(r),p=>progress.push(p));await tick();await tick();
   const opened=calls.find(c=>c.url.endsWith('/api/agent/session/new'));assert.equal(opened.body.agentId,'agent|hMTWU_egVCH3lePD_pPx','the character\'s bound agent');
-  const sent=calls.find(c=>c.url.endsWith('/api/agent/messages'));assert.equal(sent.body.sessionId,'sess-1');assert(sent.body.message.includes('Sarah')&&sent.body.message.includes('original.txt')&&sent.body.message.includes(os.tmpdir()));
+  const sent=calls.find(c=>c.url.endsWith('/api/agent/messages'));assert.equal(sent.body.sessionId,'sess-1');assert(sent.body.message.includes('Sarah')&&sent.body.message.includes('original.txt')&&sent.body.message.includes(JSON.stringify(os.tmpdir()).slice(1,-1)));
   assert.deepEqual(progress.at(-1),{state:'working',tool:'runtime'});
   pending.shift().resolve('Sarah: verified.');const result=await work;
   assert.equal(result.text,'Sarah: verified.');assert.equal(result.engine,'enconvo');assert.equal(result.model,'claude-fable-5-1');assert.equal(receipts.length,1);assert.equal(receipts[0].tool,'flow_step');assert.equal(a.jobs.size,0);

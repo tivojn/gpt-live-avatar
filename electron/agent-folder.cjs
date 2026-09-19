@@ -4,8 +4,10 @@ const path = require('node:path');
 
 function absoluteFolder(value) {
   if (typeof value !== 'string' || !path.isAbsolute(value) || value.includes('\0')) return null;
-  const normalized = path.normalize(value), root = path.parse(normalized).root;
-  return normalized.length > root.length ? normalized.replace(/\/+$/, '') : normalized;
+  let normalized = path.normalize(value); const root = path.parse(normalized).root;
+  // path.normalize leaves the platform's own separator at the end: "/" or, on Windows, "\".
+  while (normalized.length > root.length && normalized.endsWith(path.sep)) normalized = normalized.slice(0, -1);
+  return normalized;
 }
 
 function normalizeAgentFolder(config, home = os.homedir()) {

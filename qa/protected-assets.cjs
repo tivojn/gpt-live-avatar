@@ -87,6 +87,18 @@ const {pack,hash}=require('../tools/build-protected-assets.cjs'),{ProtectedPacka
  assert.equal(publicReads,5,'Only a well-formed missing installer name costs one read');
  assert.equal((await pub('releases/latest.json',{method:'POST'})).status,405);
  assert.equal((await pub('releases/../index.json')).status,401,'Normalised paths leave the public prefix');assert.equal((await pub('index.json')).status,401,'The catalogue stays authenticated');assert.equal((await pub(remote.parts[0].file)).status,401,'Encrypted parts stay authenticated');
+ // The Windows installer: its own name, type and download name, served beside the DMG.
+ const exeURL='https://downloads.example/releases/gpt-live-avatar-0.2.22-win-x64.exe';
+ const bothDoc={...latestDoc,installers:{...latestDoc.installers,'win-x64':{url:exeURL,sha256:'c'.repeat(64),bytes:4}}};
+ store.set('releases/latest.json',Buffer.from(JSON.stringify(bothDoc)));store.set('releases/gpt-live-avatar-0.2.22-win-x64.exe',Buffer.from('exe!'));
+ r=await pub('releases/gpt-live-avatar-0.2.22-win-x64.exe');assert.equal(r.status,200);assert.equal(r.headers.get('Content-Type'),'application/octet-stream');assert.equal(r.headers.get('Content-Disposition'),'attachment; filename="GPT-Live Avatar-0.2.22-win-x64.exe"');assert.equal(await r.text(),'exe!');
+ const bothHTML=await (await pub('releases/')).text();
+ assert(bothHTML.includes('href="'+installerURL+'"')&&bothHTML.includes('href="'+exeURL+'"'),'The page links both platforms');
+ assert(bothHTML.includes('macOS 14 or newer')&&bothHTML.includes('Windows 10 or newer')&&bothHTML.includes('SmartScreen'),'The page tells each platform what to do');
+ // An extension that does not belong to the target is not a release object.
+ for(const p of ['releases/gpt-live-avatar-0.2.22-win-x64.dmg','releases/gpt-live-avatar-0.2.22-arm64.exe','releases/gpt-live-avatar-0.2.22-win-arm64.exe'])assert.equal((await pub(p)).status,404,p);
+ store.set('releases/latest.json',Buffer.from(JSON.stringify(latestDoc)));store.delete('releases/gpt-live-avatar-0.2.22-win-x64.exe');
+ assert(!(await (await pub('releases/')).text()).includes('win-x64'),'A macOS-only release advertises no Windows download');
  store.delete('releases/latest.json');r=await pub('releases/latest.json');assert.equal(r.status,404);assert.equal(await r.text(),'No release has been published yet.');assert.equal((await pub('releases/')).status,404);
  assert.equal((await worker.fetch(new Request('https://downloads.example/releases/latest.json'),{DOWNLOAD_TOKEN:'test-token'})).status,503,'Unconfigured storage fails closed');
  console.log('Encrypted round trips, authenticated ranges, tampering, signed catalogues, download integrity, cancellation, atomic replacement, one-read gateway and public installer routes passed.');
