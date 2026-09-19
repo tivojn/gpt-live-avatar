@@ -1,6 +1,7 @@
 'use strict';
 const {spawn}=require('node:child_process');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {childEnv}=require('./child-env.cjs');
 const NAMES={openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build'};
 function findRuntime(engine,override=''){
  if(!NAMES[engine])throw Error('Unknown agent runtime.');
@@ -16,8 +17,7 @@ function findRuntime(engine,override=''){
 class AcpClient{
  constructor({engine,executable='',agent='',onEvent=()=>{},onRequest=async()=>{throw Error('Unsupported host request.');},spawnImpl=spawn}){Object.assign(this,{engine,executable,agent,onEvent,onRequest,spawnImpl});this.pending=new Map();this.sequence=0;this.buffer='';}
  async start(){
-  const command=findRuntime(this.engine,this.executable),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
-  env.PATH=[path.dirname(command.file),'/opt/homebrew/bin','/usr/local/bin','/usr/bin','/bin',env.PATH||''].join(path.delimiter);
+  const command=findRuntime(this.engine,this.executable),env=childEnv(path.dirname(command.file));
   const args=[...command.args];if(this.engine==='hermes'&&this.agent){if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(this.agent))throw Error('Invalid Hermes profile.');args.unshift('--profile',this.agent);}
   this.child=this.spawnImpl(command.file,args,{stdio:['pipe','pipe','pipe'],env});
   this.child.stdout.setEncoding('utf8');this.child.stdout.on('data',chunk=>{

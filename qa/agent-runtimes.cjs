@@ -25,6 +25,9 @@ class Client{
  let seen;const backend=new DelegateBackend({auth:{bearer(){throw Error('Credentials must remain in the selected runtime');}},codex:{answer:async(...args)=>{seen=args;return {text:'Hermes'};},status:async engine=>({models:[engine+':model']})}});
  assert.equal((await backend.answer(1,'route',config,[{role:'user',text:'hello'}])).text,'Hermes');assert.equal(seen[2].agentRuntimeModels.hermes,'openrouter:z-ai/glm-5.1');assert.deepEqual(await backend.models(config),['hermes:model']);
  assert.throws(()=>findRuntime('bad'),/Unknown/);assert.throws(()=>findRuntime('hermes','/does/not/exist'),/saved path/);
+ {const {childEnv}=require('../electron/child-env.cjs');
+  assert.deepEqual(childEnv('/x/bin',{PATH:'/home/bin',ELECTRON_RUN_AS_NODE:'1',KEEP:'1'},'darwin'),{PATH:'/x/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/home/bin',KEEP:'1'});
+  assert.deepEqual(childEnv('C:\\x',{Path:'C:\\Windows',ELECTRON_RUN_AS_NODE:'1'},'win32'),{Path:'C:\\x;C:\\Windows'},'Windows: the existing Path variable is extended, never shadowed by a second PATH');}
  const profiles=fs.mkdtempSync(path.join(os.tmpdir(),'gla-profiles-'));
  try{
   fs.mkdirSync(path.join(profiles,'profiles/tia'),{recursive:true});fs.mkdirSync(path.join(profiles,'profiles/removed'),{recursive:true});fs.mkdirSync(path.join(profiles,'profiles/.deleted/removed'),{recursive:true});fs.writeFileSync(path.join(profiles,'active_profile'),'tia');

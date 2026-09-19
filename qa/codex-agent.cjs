@@ -5,6 +5,25 @@ const {normalizePermission,codexPermissions}=require('../electron/agent-permissi
 assert.equal(normalizePermission(undefined),'full');
 for(const value of ['workspace','auto_review','full'])assert.equal(normalizePermission(value),value);
 for(const invalid of ['',false,{},'typo'])assert.equal(codexPermissions(invalid).approvalPolicy,'on-request');
+// Windows: npm's shims (codex, codex.cmd, codex.ps1) cannot be spawned without a shell; the native executable inside the package can.
+{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{findCodex,codexEnv}=require('../electron/codex-client.cjs');
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'gla-codex-')),npm=path.join(temp,'npm'),find=env=>findCodex({platform:'win32',arch:'x64',env});
+ try{
+  fs.mkdirSync(npm,{recursive:true});for(const shim of ['codex','codex.cmd','codex.ps1'])fs.writeFileSync(path.join(npm,shim),'shim');
+  assert.throws(()=>find({PATH:npm}),/Install Codex CLI/,'a shim alone is never returned: spawning it fails with ENOENT');
+  const vendor=path.join(npm,'node_modules','@openai','codex','node_modules','@openai','codex-win32-x64','vendor','x86_64-pc-windows-msvc'),native=path.join(vendor,'codex','codex.exe');
+  fs.mkdirSync(path.dirname(native),{recursive:true});fs.writeFileSync(native,'exe');fs.mkdirSync(path.join(vendor,'path'));
+  assert.equal(find({PATH:['C:\\nowhere',npm].join(';')}),native,'the native executable behind the npm shim');
+  assert.equal(find({Path:'',APPDATA:temp}),native,'%APPDATA%\\npm even when it is not on the path');
+  assert.equal(find({PATH:'',GLA_CODEX_PATH:path.join(npm,'codex.cmd')}),native,'an override that names a shim resolves the same way');
+  const direct=path.join(temp,'bin','codex.exe');fs.mkdirSync(path.dirname(direct));fs.writeFileSync(direct,'exe');
+  assert.equal(find({PATH:[path.dirname(direct),npm].join(';')}),direct,'a real codex.exe on the path is used as it is');
+  const env=codexEnv(native,{Path:'C:\\Windows',ELECTRON_RUN_AS_NODE:'1'},'win32');
+  assert.deepEqual([env.Path,env.PATH,env.ELECTRON_RUN_AS_NODE,env.CODEX_MANAGED_BY_NPM],[path.join(vendor,'path')+';C:\\Windows',undefined,undefined,'1'],'bundled tools join the existing Path variable, whatever its case');
+  assert.deepEqual(codexEnv('/usr/local/bin/codex',{PATH:'/bin',ELECTRON_RUN_AS_NODE:'1'},'darwin'),{PATH:'/bin'});
+ }finally{fs.rmSync(temp,{recursive:true,force:true});}
+}
 class FakeClient{
  constructor(callbacks){Object.assign(this,callbacks);this.calls=[];this.n=0;}
  async start(){}
