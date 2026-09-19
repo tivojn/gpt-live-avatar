@@ -16,11 +16,17 @@ const js=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
 app.whenReady().then(async()=>{try{
  const solo=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'solo');await until(()=>js(solo,'return Boolean(window.gla_avatar?.resources?.ready)'),'avatar');
  // A deep link from the menus lands on its pane; the window's address stays plain for everything that looks it up.
+ // (a first launch without a key opens Settings by itself, on a plain address: close it so the deep link opens a fresh window)
+ for(const w of BrowserWindow.getAllWindows())if(w.webContents.getURL().includes('/settings.html'))w.destroy();
  await js(solo,"await gla.openSettings('actions');return 1");
  const st=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings.html')),'settings');
  await until(()=>js(st,"return Boolean(document.querySelector('#chip-voice')?.textContent)"),'rendered');
  const selected=()=>js(st,"return document.querySelector('#tabs [aria-selected=true]').dataset.pane");
  assert.equal(await selected(),'actions','opened on the requested pane');
+ // Opened on a pane, the window's address ends in #actions. Every agent check made from Settings (Check agent connection,
+ // Refresh installed agents, the per-character agent lists) must still be accepted as coming from the app.
+ assert.match(st.webContents.getURL(),/\/settings\.html#actions$/);
+ for(const call of ["gla.agent.runtimeStatus('enconvo')","gla.agent.runtimeStatus('openclaw')","gla.agent.inventory()"]){const result=await js(st,'return '+call);assert.notEqual(result?.error,'Unavailable outside the app.',call+' from a deep-linked Settings window');}
  await js(solo,"await gla.openSettings('reasoning');return 1");await until(async()=>await selected()==='reasoning','an open window follows a second deep link');
  // One pane at a time, all of them reachable, arrow keys walk the list.
  const panes=await js(st,"return [...document.querySelectorAll('#tabs .tab')].map(t=>t.dataset.pane)");

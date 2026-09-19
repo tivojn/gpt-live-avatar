@@ -7,7 +7,9 @@ const defaultAvatar=require('./default-avatar.json');
 const {reasoningEngine,actionEngine,runtimeConfig}=require('./delegate.cjs');
 function setupAgent(deps){
  const pending=new Map(),completed=new Map(),questions=new Map();let recent=[];
- const allowed=e=>e.senderFrame===e.sender.mainFrame&&[deps.origin+'/avatar.html',deps.origin+'/group.html',deps.origin+'/settings.html'].includes(e.sender.getURL());
+ // The page, without its #fragment: Settings opened on a pane is settings.html#actions, and comparing the whole address
+ // refused every agent check made from there ("Unavailable outside the app").
+ const allowed=e=>e.senderFrame===e.sender.mainFrame&&[deps.origin+'/avatar.html',deps.origin+'/group.html',deps.origin+'/settings.html'].includes(e.sender.getURL().split('#')[0]);
  const progress=(sender,value)=>{const item={...value,at:Date.now()};if(!sender.isDestroyed())sender.send('gla:agent:progress',item);recent.push(item);recent=recent.slice(-40);};
  const approveRuntime=async p=>{const r=await dialog.showMessageBox({type:'question',title:'GPT-Live Avatar · '+p.character,message:p.character+' needs your approval',detail:[p.command,p.reason].filter(Boolean).join('\n\n').slice(0,12000),buttons:['Allow this action','Decline'],defaultId:1,cancelId:1,signal:p.signal});return r.response===0&&!p.signal.aborted;};
  const runtimes={...Object.fromEntries(['openclaw','hermes','grok'].map(engine=>[engine,new (require('./acp-agent.cjs').AcpAgent)({engine,approve:approveRuntime})])),enconvo:new (require('./enconvo-agent.cjs').EnconvoAgent)({approve:approveRuntime,fetchImpl:(url,init)=>require('electron').net.fetch(url,init)})};
