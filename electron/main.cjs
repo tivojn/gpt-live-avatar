@@ -188,10 +188,11 @@ const liveProvider = () => config.liveProvider === 'gemini' ? 'gemini' : 'openai
 const geminiVoiceFor = slug => (Object.hasOwn(geminiLive.VOICES, config.geminiVoices?.[slug] || '') && config.geminiVoices[slug]) || geminiLive.CHARACTER_VOICES[slug] || geminiLive.DEFAULT_VOICE;
 const voiceLabel = id => id[0].toUpperCase() + id.slice(1);
 const voiceGender = require('./voice-gender.json');
-function characterVoices() {
+function characterVoices(slug = config.avatar) {
+  const own = slug === config.avatar;
   return liveProvider() === 'gemini'
-    ? { system: 'gemini', systemName: 'Gemini 3.8 Live', current: config.geminiVoice, ready: hasGeminiKey(), list: Object.entries(geminiLive.VOICES).map(([id, style]) => ({ id, gender: voiceGender.gemini[id] || '', label: [id, voiceGender.gemini[id], style].filter(Boolean).join(' · ') })) }
-    : { system: 'openai', systemName: 'GPT-Live-1', current: config.voice, ready: hasApiKey(), list: VOICES.map(id => ({ id, gender: voiceGender.openai[id] || '', label: [voiceLabel(id), voiceGender.openai[id], id === 'marin' && 'default'].filter(Boolean).join(' · ') })) };
+    ? { system: 'gemini', systemName: 'Gemini 3.8 Live', current: own ? config.geminiVoice : geminiVoiceFor(slug), ready: hasGeminiKey(), list: Object.entries(geminiLive.VOICES).map(([id, style]) => ({ id, gender: voiceGender.gemini[id] || '', label: [id, voiceGender.gemini[id], style].filter(Boolean).join(' · ') })) }
+    : { system: 'openai', systemName: 'GPT-Live-1', current: own ? config.voice : (config.groupVoices?.[slug] || voiceDefaults[slug] || DEFAULTS.voice), ready: hasApiKey(), list: VOICES.map(id => ({ id, gender: voiceGender.openai[id] || '', label: [voiceLabel(id), voiceGender.openai[id], id === 'marin' && 'default'].filter(Boolean).join(' · ') })) };
 }
 async function fetchModels(key) {
   const response = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } });
@@ -459,8 +460,10 @@ function updateSettings(patch) {
   if(VOICES.includes(patch.voice))config.groupVoices={...voiceDefaults,...config.groupVoices,[config.avatar]:config.voice};
   // One "character voice" for whichever system is in use (Settings › Character and the right-click menu send this).
   if(typeof patch.characterVoice==='string'){
-    if(liveProvider()==='gemini'){if(Object.hasOwn(geminiLive.VOICES,patch.characterVoice))config.geminiVoices={...config.geminiVoices,[config.avatar]:patch.characterVoice};}
-    else if(VOICES.includes(patch.characterVoice)){config.voice=patch.characterVoice;config.groupVoices={...voiceDefaults,...config.groupVoices,[config.avatar]:config.voice};}
+    // characterVoiceFor: another character's voice can be chosen without switching to her (the right-click Character menu)
+    const who=typeof patch.characterVoiceFor==='string'&&(assets?.avatars()||[]).some(a=>a.slug===patch.characterVoiceFor)?patch.characterVoiceFor:config.avatar;
+    if(liveProvider()==='gemini'){if(Object.hasOwn(geminiLive.VOICES,patch.characterVoice))config.geminiVoices={...config.geminiVoices,[who]:patch.characterVoice};}
+    else if(VOICES.includes(patch.characterVoice)){config.groupVoices={...voiceDefaults,...config.groupVoices,[who]:patch.characterVoice};if(who===config.avatar)config.voice=patch.characterVoice;}
   }
   config.geminiVoice=geminiVoiceFor(config.avatar);
   if (!['auto', 'always', 'off'].includes(config.bubbleMode)) config.bubbleMode = 'auto';
@@ -704,19 +707,23 @@ function showAvatarMenu(state) {
     { type: 'separator' },
     performMenu(state, send, state.character),
     lookMenu(state, send),
+    // Mirrors Settings > Character: each character, and under her name what belongs to her: using her, and her voice
+    // (the voices of the live voice system in use, remembered per character).
     { label: 'Character', submenu: [
-      ...(assets?.avatars() || []).map(a => ({ label: a.name + (a.installed ? '' : ' · download in Settings'), type: 'radio', checked: !config.avatarDir && config.avatar === a.slug, enabled: a.installed, click: send('avatar:' + a.slug) })),
-      { type: 'separator' },
-      { label: 'Voice', submenu: [
-        { label: characterVoices().systemName + ' voices · changing one briefly reconnects a live conversation', enabled: false },
-        // The voices of the live voice system in use (GPT-Live-1 or Gemini), remembered per character.
-        ...(voices => voices.list.map(v => ({ label: v.label + (v.id === voices.current ? ' ✓' : ''), submenu: [
-          { label: 'Preview voice', enabled: voices.ready, click: send('voice-preview:' + v.id) },
-          { label: 'Use this voice', type: 'checkbox', checked: voices.current === v.id, click: send('voice:' + v.id) },
-        ] })))(characterVoices()),
-        { type: 'separator' },
-        { label: 'Stop voice preview', enabled: voicePreview.state !== 'idle', click: send('voice-preview:') },
-      ] },
+      ...(assets?.avatars() || []).map(a => { const current = !config.avatarDir && config.avatar === a.slug, voices = characterVoices(a.slug); return {
+        label: (current ? '✓ ' : '') + a.name + (a.installed ? '' : ' · download in Settings'), enabled: a.installed, submenu: [
+          { label: current ? a.name + ' is on screen' : 'Switch to ' + a.name, type: 'radio', checked: current, click: send('avatar:' + a.slug) },
+          { type: 'separator' },
+          { label: 'Voice', submenu: [
+            { label: voices.systemName + ' voices' + (current ? ' · changing one briefly reconnects a live conversation' : ''), enabled: false },
+            ...voices.list.map(v => ({ label: v.label + (v.id === voices.current ? ' ✓' : ''), submenu: [
+              { label: 'Preview voice', enabled: voices.ready, click: send('voice-preview:' + v.id) },
+              { label: 'Use this voice', type: 'checkbox', checked: voices.current === v.id, click: () => updateSettings({ characterVoice: v.id, characterVoiceFor: a.slug }) },
+            ] })),
+            { type: 'separator' },
+            { label: 'Stop voice preview', enabled: voicePreview.state !== 'idle', click: send('voice-preview:') },
+          ] },
+        ] }; }),
     ] },
     agentMenu(avatarReasoningMenu(), avatarPermissionsMenu()),
     { label: 'View', submenu: [

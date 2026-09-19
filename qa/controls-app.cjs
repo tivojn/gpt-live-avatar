@@ -56,7 +56,11 @@ app.whenReady().then(async()=>{
   }
   await js(`gla_avatar.options.select(Object.fromEntries(Object.entries(gla_avatar.options.selection).filter(([k])=>!k.startsWith('texture:'))));void 0`);
   const oldModelURL=await js('(await gla.getSettings()).avatar.modelURL');
-  items=await nativeMenu();items.find(x=>x.label==='Character').submenu.find(x=>x.label==='Sarah').click();await loaded();
+  items=await nativeMenu();{const sarah=items.find(x=>x.label==='Character').submenu.find(x=>x.label==='Sarah');
+   // Character mirrors Settings > Character: under each name, using her and her voice
+   assert.deepEqual(sarah.submenu.filter(x=>x.label).map(x=>x.label),['Switch to Sarah','Voice']);assert(items.find(x=>x.label==='Character').submenu.some(x=>x.label==='✓ Tia'),'the one on screen is ticked');
+   assert(sarah.submenu.find(x=>x.label==='Voice').submenu.some(x=>x.label==='Gleam · female ✓'),'her own voice is ticked under her name, without switching to her');
+   sarah.submenu[0].click();}await loaded();
   await until(()=>js("gla_avatar?.appearance?.items.filter(x=>x.kind==='texture').length===74"),'Sarah color library');
   assert.equal(await js(`(await (await fetch(${JSON.stringify(oldModelURL)})).json()).materials[1].name`),'Top_Tia01A_M','Previous package URL remains pinned');
   await js("Promise.all([gla.selectAvatar('tia'),gla.selectAvatar('sarah'),gla.selectAvatar('tia')])");await loaded();
