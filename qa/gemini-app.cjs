@@ -10,7 +10,7 @@ const repo=process.env.GLA_SOURCE_ROOT||path.resolve(__dirname,'..'),out=process
 fs.rmSync(out+'/profile',{recursive:true,force:true});fs.mkdirSync(out+'/profile',{recursive:true});app.setPath('userData',out+'/profile');process.env.GLA_OPENAI_KEY='sk-qa-not-a-real-key-0123456789'; // reasoning is delegated to the OpenAI API here; the backend is a stand-in, so this key is never used
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');app.commandLine.appendSwitch('use-fake-ui-for-media-stream');app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 systemPreferences.getMediaAccessStatus=()=>'granted';systemPreferences.askForMediaAccess=async()=>true;
-fs.writeFileSync(out+'/profile/config.json',JSON.stringify({avatar:'sarah',quality:'friendly',bubbleMode:'always',conversationSounds:false,wardrobeFlourish:false,instinctEnabled:false,agentEnabled:false,windowWidth:450,windowHeight:750,reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key'}));
+fs.writeFileSync(out+'/profile/config.json',JSON.stringify({avatar:'sarah',quality:'friendly',bubbleMode:'always',geminiModel:'gemini-3.8-live',conversationSounds:false,wardrobeFlourish:false,instinctEnabled:false,agentEnabled:false,windowWidth:450,windowHeight:750,reasoningMode:'delegate',delegateProvider:'openai',delegateAuth:'api_key'}));
 const KEY='AQ.qa-only_key-0123456789abcdefghij';
 // ---- the stand-in: /v1beta/models, /v1beta/auth_tokens, and a WebSocket that speaks Gemini's Live protocol
 const seen={http:[],sockets:[]};

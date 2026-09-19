@@ -7,7 +7,7 @@ const {app,BrowserWindow}=require('electron'),fs=require('node:fs'),path=require
 const root=path.resolve(__dirname,'..'),out=path.join(root,'build/qa-settings-app'),profile=path.join(out,'profile');
 fs.rmSync(profile,{recursive:true,force:true});fs.mkdirSync(profile+'/avatars',{recursive:true});app.setPath('userData',profile);
 fs.symlinkSync(root+'/build/characters/sarah',profile+'/avatars/sarah');
-fs.writeFileSync(profile+'/config.json',JSON.stringify({avatar:'sarah',quality:'friendly',bubbleMode:'off',agentEnabled:true,agentEngine:'enconvo',agentFollowReasoning:false,avatarLooks:{sarah:{}}}));
+fs.writeFileSync(profile+'/config.json',JSON.stringify({avatar:'sarah',quality:'friendly',bubbleMode:'off',reasoningMode:'managed',agentEnabled:true,agentEngine:'enconvo',agentFollowReasoning:false,avatarLooks:{sarah:{}}}));
 const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('console-message',d=>{if(d.level==='error')errors.push(d.message);}));
 require('../electron/main.cjs');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -109,5 +109,21 @@ app.whenReady().then(async()=>{try{
  assert.equal(await js(st,'return (await gla.getSettings()).voice'),before,'choosing a voice does not apply it');assert.equal(await js(st,"return document.querySelector('#useVoice').disabled"),false);
  await js(st,"document.querySelector('#useVoice').click();return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).voice'))!==before,'Use voice commits');
  fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/settings.png',(await st.webContents.capturePage()).toPNG());
+ // Reset a page to the shipped defaults: every page but Shortcuts (which has its own) has the button; two clicks; that page only.
+ assert.deepEqual(await js(st,"return [...document.querySelectorAll('[data-reset-page]')].map(b=>b.closest('.pane').id+':'+b.getAttribute('aria-label'))"),['pane-voice:Reset Live Voice System to defaults','pane-character:Reset Character to defaults','pane-appearance:Reset Appearance to defaults','pane-reasoning:Reset Reasoning to defaults','pane-actions:Reset Actions to defaults','pane-agents:Reset Agents to defaults','pane-instinct:Reset Instinct to defaults']);
+ await js(st,"await gla.setSettings({agentEnabled:true,agentEngine:'enconvo',agentFollowReasoning:false,agentPermissions:{codex:'workspace'},quality:'friendly',instinctEnabled:true,instinctListening:true});gla_settings_pane('actions');return 1");
+ await until(()=>js(st,"return document.querySelector('#reset-actions').disabled===false"),'Actions can be reset');assert.equal(await js(st,"return document.querySelector('#reset-instinct').disabled"),true,'a page already on the defaults has nothing to reset');
+ await js(st,"document.querySelector('#reset-actions').click();return 1");
+ assert.deepEqual(await js(st,"const b=document.querySelector('#reset-actions');return [b.textContent,/Codex App Server/.test(document.querySelector('#pane-actions .resetnote').textContent),(await gla.getSettings()).agentEngine]"),['Click again to reset',true,'enconvo'],'the first click only says what would happen');
+ await js(st,"document.querySelector('#reset-actions').click();return 1");
+ await until(async()=>(await js(st,'return (await gla.getSettings()).agentEngine'))==='codex','Actions reset');
+ {const after=await js(st,'const s=await gla.getSettings();return [s.agentEnabled,s.agentFollowReasoning,s.agentPermissions.codex,s.quality,s.pagesAtDefault.actions,s.pagesAtDefault.appearance,s.avatar.slug||s.avatar.name]');
+  assert.deepEqual(after,[true,true,'full','friendly',true,false,(await js(st,'const a=(await gla.getSettings()).avatar;return a.slug||a.name'))],'that page only: Appearance and the character are as they were');}
+ await until(()=>js(st,"const b=document.querySelector('#reset-actions');return b.disabled&&b.textContent==='Reset to defaults'&&document.querySelector('#agentAccess').value==='full'&&document.querySelector('#agentEnabled').checked"),'the page shows the defaults and the button rests');
+ // one click and no second: it disarms itself, nothing changes
+ await js(st,"gla_settings_pane('appearance');document.querySelector('#reset-appearance').click();const armed=document.querySelector('#reset-appearance').textContent;document.querySelector('#tab-voice').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));return armed");
+ assert.deepEqual(await js(st,"return [document.querySelector('#reset-appearance').textContent,(await gla.getSettings()).quality]"),['Reset to defaults','friendly']);
+ assert.equal((await js(st,"return (await gla.setSettings({resetPage:'keys'})).quality")),'friendly','an unknown page is ignored');
+ await wait(200);fs.writeFileSync(out+'/reset.png',(await st.webContents.capturePage()).toPNG());
  assert.deepEqual(errors,[]);console.log('Settings QA passed: panes, deep links, keyboard, status chips, apply-on-change with a Saved tick, refused values, and the two-step voice.');
 }catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{app.exit(process.exitCode||0);}});

@@ -19,7 +19,7 @@ const { ENGINES, permissions, permissionPatch, installed:installedEngines, provi
 const { historyItems } = require('./live-config.cjs');
 const { DelegateAuth } = require('./delegate-auth.cjs');
 const { Instinct } = require('./instinct.cjs');
-const { DelegateBackend, normalizeDelegate, selected, usesCodexServer, usesCodexActions, reasoningEngine, actionEngine, MODEL_CHOICES } = require('./delegate.cjs');
+const { DelegateBackend, normalizeDelegate, selected, usesCodexServer, usesCodexActions, reasoningEngine, actionEngine, MODEL_CHOICES, DEFAULT_MODELS } = require('./delegate.cjs');
 let delegateAuth, delegateBackend, groupManager, showManager, agentManager, appInfo, instinct;
 const appearanceDefaults = require('./default-appearance.json');
 const defaultAvatar = require('./default-avatar.json');
@@ -56,7 +56,8 @@ const DEFAULTS = {
   agentEngine: 'codex',
   agentFollowReasoning: true,
   agentAccess: 'full',
-  agentCodexModel: '',
+  agentCodexModel: 'gpt-5.6-luna',
+  reasoningMode: 'delegate', delegateProvider: 'openai', delegateAuth: 'api_key', // harder questions go to an OpenAI model with the same key GPT-Live-1 uses
   agentRuntimePaths: {},
   agentRuntimeModels: {},
   avatarAgentBindings: {},
@@ -76,7 +77,7 @@ const DEFAULTS = {
   conversationSounds: true,
   wardrobeFlourish: true, // she runs through her wardrobe each time she comes up or is switched to
   liveProvider: 'openai', // the voice model: 'openai' (GPT-Live-1) or 'gemini' (electron/gemini-live.cjs)
-  geminiModel: 'gemini-3.8-live', geminiVoice: 'Aoede', geminiVoices: {}, geminiThinkingLevel: 'low', // geminiVoice mirrors the current character's entry, as voice mirrors groupVoices
+  geminiModel: 'gemini-3.8-live-extended-thinking', geminiVoice: 'Aoede', geminiVoices: {}, geminiThinkingLevel: 'low', // geminiVoice mirrors the current character's entry, as voice mirrors groupVoices
   showPlaywright: 'openai:gpt-5.6-luna', // who writes Avatar Show scripts: an OpenAI API model, or 'reasoning' to follow the reasoning provider
   instinctEnabled: true, // TypeSafe Jev; has no effect until a TypeSafe key is saved
   instinctListening: true,
@@ -99,6 +100,10 @@ const geminiLive = require('./gemini-live.cjs');
 // Agent settings are defaults plus per-character overrides (electron/character-agents.cjs). Anything that decides how the
 // character ON SCREEN reasons or acts reads her(), never config directly; the Settings window edits the defaults in config.
 const characterAgents = require('./character-agents.cjs');
+const settingsReset = require('./settings-reset.cjs');
+// What a page reset needs beyond DEFAULTS: the shipped reasoning models, and the stock name and personality of the character on screen.
+const resetExtras = () => { const name = avatarInfo().name || config.avatar.split('-').map(part => part[0].toUpperCase() + part.slice(1)).join('-');
+  return { delegateModels: DEFAULT_MODELS, agentFolder: path.join(os.homedir(), 'Downloads'), persona: { name, text: DEFAULTS.persona.replace(DEFAULTS.personaName, name) } }; };
 const her = (slug = config.avatar) => characterAgents.effective({ ...config, liveProvider: config.liveProvider === 'gemini' ? 'gemini' : 'openai' }, slug);
 
 function loadConfig() {
@@ -154,7 +159,7 @@ function saveConfig() {
 function publicSettings({ forCharacter = false } = {}) {
   const c = forCharacter ? her() : config; // the avatar window acts for the character on screen; Settings edits the defaults
   const agentSummaries = Object.fromEntries((assets ? assets.avatars() : []).map(a => [a.slug, characterAgents.summary({ ...config, liveProvider: liveProvider() }, a.slug)]));
-  return { ...c, agentSummaries, defaultAvatar, appVersion:app.getVersion(), liveProvider:liveProvider(), hasGeminiKey:hasGeminiKey(), characterVoices:characterVoices(), gemini:{...geminiLive.choice(config),models:Object.entries(geminiLive.MODELS).map(([id,m])=>({id,label:m.label,thinking:m.thinking})),voices:Object.entries(geminiLive.VOICES).map(([id,style])=>({id,style})),thinkingLevels:geminiLive.THINKING_LEVELS}, showPlaywright:(m=>m?'openai:'+m:'reasoning')(require('./show.cjs').playwrightModel(config)), showPlaywrightChoices:require('./show.cjs').playwrightChoices(), userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(c), effectiveReasoningEngine:reasoningEngine(c), agentAccess:permissions(c)[actionEngine(c)], agentPermissions:permissions(c), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(c), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
+  return { ...c, agentSummaries, pagesAtDefault: Object.fromEntries(Object.keys(settingsReset.PAGES).map(page => [page, settingsReset.isDefault(config, page, DEFAULTS, resetExtras())])), defaultAvatar, appVersion:app.getVersion(), liveProvider:liveProvider(), hasGeminiKey:hasGeminiKey(), characterVoices:characterVoices(), gemini:{...geminiLive.choice(config),models:Object.entries(geminiLive.MODELS).map(([id,m])=>({id,label:m.label,thinking:m.thinking})),voices:Object.entries(geminiLive.VOICES).map(([id,style])=>({id,style})),thinkingLevels:geminiLive.THINKING_LEVELS}, showPlaywright:(m=>m?'openai:'+m:'reasoning')(require('./show.cjs').playwrightModel(config)), showPlaywrightChoices:require('./show.cjs').playwrightChoices(), userHome:os.homedir(), shortcuts:avatarShortcuts?.values||config.shortcuts, shortcutErrors:avatarShortcuts?.errors||{}, effectiveActionEngine:actionEngine(c), effectiveReasoningEngine:reasoningEngine(c), agentAccess:permissions(c)[actionEngine(c)], agentPermissions:permissions(c), installedEngines:installedEngines(config), agentPermissionChoices:PERMISSION_CHOICES, hardware: {memoryGB:Math.round(require('node:os').totalmem()/1073741824)}, delegate: { ...selected(c), accounts: delegateAuth?.status() || {}, choices: MODEL_CHOICES }, appearanceDefaults, voices: VOICES, qualities: QUALITIES, liveModel: LIVE_MODEL, recommendedBackends: RECOMMENDED_BACKENDS, hasKey: hasApiKey(), instinct: instinctSettings(), avatar: avatarInfo(),
     avatars: assets ? assets.avatars() : [], tiers: assets ? assets.status(config.avatar) : null, voicePreview };
 }
 function instinctSettings(){
@@ -405,8 +410,10 @@ function createAvatarWindow() {
 function openSettingsWindow(pane) {
   const hash = typeof pane === 'string' && /^[a-z]{3,12}$/.test(pane) ? '#' + pane : '';
   if (settingsWindow && !settingsWindow.isDestroyed()) { if (hash) void settingsWindow.webContents.executeJavaScript(`window.gla_settings_pane?.(${JSON.stringify(hash.slice(1))})`).catch(() => {}); settingsWindow.focus(); return; }
+  // Roomy by default (the Agents table and the Reasoning page were cramped at 820 x 700), but never larger than the screen it opens on.
+  const area = require('electron').screen.getDisplayNearestPoint(require('electron').screen.getCursorScreenPoint()).workArea;
   settingsWindow = new BrowserWindow({
-    width: 820, height: 700, minWidth: 680, minHeight: 460, title: 'GPT-Live Avatar Settings', show: false,
+    width: Math.min(1080, area.width - 40), height: Math.min(820, area.height - 40), minWidth: 680, minHeight: 460, title: 'GPT-Live Avatar Settings', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   settingsWindow.loadURL(`${serverOrigin}/settings.html${hash}`);
@@ -443,6 +450,12 @@ function updateSettings(patch) {
   if (!patch || typeof patch !== 'object') return publicSettings();
   const previousAvatar=config.avatar;
   const before=JSON.stringify([config.reasoningMode,selected(config),config.agentEnabled,config.agentEngine,config.agentFollowReasoning,config.agentPermissions,config.agentCodexModel,config.agentRuntimePaths,config.agentRuntimeModels,config.avatarAgentBindings]);
+  // Settings › "Reset this page to defaults" (electron/settings-reset.cjs): that page's settings only; keys and sign-ins stay.
+  if(typeof patch.resetPage==='string'&&Object.hasOwn(settingsReset.PAGES,patch.resetPage)){
+    config=settingsReset.resetPage(config,patch.resetPage,DEFAULTS,resetExtras());config.agentPermissions=permissions(config);
+    if(patch.resetPage==='agents'){delegateBackend?.cancelAll();agentManager?.cancelAll();}
+    patch={};
+  }
   if(typeof patch.conversationSounds==='boolean')config.conversationSounds=patch.conversationSounds;
   if(typeof patch.wardrobeFlourish==='boolean')config.wardrobeFlourish=patch.wardrobeFlourish;
   // One character's own agent settings: {slug, set:{…}} changes them (the first change copies what applies to her now),

@@ -50,6 +50,7 @@
   .tier .ok { color: var(--dim); }
   .quality label.on { border-color: var(--text); box-shadow: 0 0 0 1px var(--text) inset; }
   .note { color: var(--dim); font-size: 12px; margin: 8px 0 0; }
+  .pane > header h1 { margin-right: auto; } .resetbtn { font-size: 12px; padding: 4px 10px; white-space: nowrap; } .resetbtn.armed { border-color: var(--text); font-weight: 600; } .resetnote { margin: -6px 2px 10px; text-align: right; } .resetnote:empty { display: none; }
   .range { display: flex; align-items: center; gap: 10px; } .range input { flex: 1; } .range output { width: 44px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
   /* Paths, overrides and the like: there when needed, out of the way otherwise. */
   details.advanced { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; } details.advanced > summary { cursor: pointer; color: var(--dim); font-size: 12px; }
@@ -180,7 +181,7 @@
         <button id="delegateCodexCheck" type="button">Check Codex connection</button>
       </div>
       <div id="delegateRuntime" hidden><p class="note">Uses the selected agent’s own account, model and tools. Configure its credentials in that agent’s app or CLI.</p><button id="delegateRuntimeCheck">Check agent connection</button></div>
-      <p class="note" id="openaiDelegateKey">Uses the OpenAI API key saved under Voice.</p>
+      <p class="note" id="openaiDelegateKey">Uses the OpenAI API key saved under Live Voice System.</p>
       <div id="xaiDelegateKey" hidden>
         <label for="xaiKey">xAI API key</label>
         <div class="row"><input id="xaiKey" type="password" autocomplete="off" placeholder="xai-…"><button id="saveXaiKey" type="button">Validate &amp; save</button><button id="clearXaiKey" type="button">Remove</button></div>
@@ -196,7 +197,7 @@
       </div><p class="note" id="delegateModelNote"></p>
       <div class="row" style="margin-top:10px"><button id="testDelegate" type="button">Test connection</button></div>
       <p class="state" id="delegateTestState" aria-live="polite"></p>
-      <p class="note">Voice and voice previews always use the OpenAI key under Voice, whichever provider reasons.</p>
+      <p class="note" id="voiceKeyNote">GPT-Live-1’s voice and its previews always use the OpenAI key under Live Voice System, whichever provider reasons.</p>
     </section>
     <section>
       <label for="showPlaywright">Avatar Show script writer</label>
@@ -363,6 +364,7 @@
     renderRuntime(settings);renderAgentBindings(settings);
     $('#agentEnabled').checked=settings.agentEnabled===true;$('#agentFolder').value=displayText(settings.agentFolder);
     renderStatus(settings);
+    for(const b of document.querySelectorAll('[data-reset-page]')){const same=settings.pagesAtDefault?.[b.dataset.resetPage]===true;b.disabled=same&&!b.classList.contains('armed');b.title=same?'This page is already on the defaults.':'';}
   }
   // One line per pane that says whether it is working, mirrored as a dot in the sidebar.
   function renderStatus(s){
@@ -398,7 +400,8 @@
     $('#reasoningMode').value=s.reasoningMode;$('#delegateOptions').hidden=s.reasoningMode!=='delegate';$('#managedBackend').hidden=gem||s.reasoningMode==='delegate';
     $('#delegateProvider').value=d.provider;for(const option of $('#delegateProvider').options)if(runtimeNames[option.value])option.disabled=s.installedEngines?.[option.value]===false;
     $('#delegateAuth').replaceChildren(new Option('API key','api_key'),new Option('Account sign-in · OAuth2','oauth2'),...(d.provider==='openai'?[new Option('Codex App Server','codex_app_server')]:[]));if(local)$('#delegateAuth').replaceChildren(new Option('Existing agent connection','local_runtime'));$('#delegateAuth').disabled=local;$('#delegateAuth').value=d.auth;$('#delegateCodex').hidden=!codex;$('#delegateRuntime').hidden=!local;$('#delegateModelControls').hidden=local&&d.provider==='openclaw';
-    $('#openaiDelegateKey').hidden=codex||oauth||d.provider!=='openai';$('#xaiDelegateKey').hidden=codex||oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
+    $('#openaiDelegateKey').hidden=codex||oauth||d.provider!=='openai';$('#voiceKeyNote').hidden=gem||!$('#openaiDelegateKey').hidden; // said once: not under Gemini, and not when the line above already says whose key it is
+   $('#xaiDelegateKey').hidden=codex||oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
     $('#signIn').textContent=d.provider==='openai'?'Sign in with OpenAI':'Sign in with xAI';$('#signIn').disabled=waiting;$('#cancelSignIn').hidden=!waiting;$('#signOut').disabled=!a.signedIn;
     $('#signInNote').textContent=d.provider==='openai'?'Opens the OpenAI browser sign-in flow used by OpenClaw.':'Uses xAI account sign-in for direct reasoning. Grok Build uses its own separate native sign-in.';
     $('#deviceCode').textContent=a.userCode?'Your sign-in code: '+a.userCode:'';
@@ -562,6 +565,23 @@
     };
   }
   addEventListener('blur',stopShortcutCapture);
+  // Every page can be put back to the values the app ships with (electron/settings-reset.cjs). Two clicks, because it
+  // cannot be undone, and the second click says what it will do. API keys and account sign-ins are never touched.
+  const RESET_PAGES={voice:['Live Voice System','Back to GPT-Live-1 with conversation sounds on. Your API keys are kept.'],character:['Character','Every character’s voice on both voice systems, and the name and personality of the one on screen. Outfits are kept.'],
+    appearance:['Appearance','Quality, opacity, the bubble and the wardrobe flourish.'],reasoning:['Reasoning','Back to OpenAI · API key · gpt-5.6-luna, stock models and the Playwright’s model. Sign-ins are kept.'],
+    actions:['Actions','On, following reasoning, Codex App Server otherwise, full access, stock engine paths and models, the Downloads folder.'],agents:['Agents','Everyone back on the defaults, with no engine agent assigned.'],instinct:['Instinct','On and listening. The TypeSafe key is kept.']};
+  for(const [page,[label,what]] of Object.entries(RESET_PAGES)){
+    const note=document.createElement('p'),button=document.createElement('button'),idle='Reset to defaults';let armed=0;button.setAttribute('aria-label','Reset '+label+' to defaults');
+    note.className='note resetnote';note.setAttribute('role','status');button.type='button';button.className='resetbtn';button.id='reset-'+page;button.dataset.resetPage=page;button.textContent=idle;
+    const disarm=()=>{clearTimeout(armed);armed=0;button.textContent=idle;button.classList.remove('armed');note.textContent='';if(SETTINGS)button.disabled=SETTINGS.pagesAtDefault?.[page]===true;};
+    button.onclick=async()=>{
+      if(!armed){armed=setTimeout(disarm,6000);button.textContent='Click again to reset';button.classList.add('armed');note.textContent=what;return;}
+      disarm();await save({resetPage:page});note.textContent=label+' is back on the defaults.';setTimeout(()=>{if(!armed)note.textContent='';},4000);
+    };
+    button.onblur=()=>{if(armed)disarm();};document.addEventListener('pointerdown',e=>{if(armed&&e.target!==button)disarm();},true); // a click anywhere else, or another page, takes the question back
+    // in the page's header, beside its status: always in sight, and it costs the page no height. What it will do appears under the header.
+    const header=$('#pane-'+page+' > header');header.insertBefore(button,header.querySelector('.chip'));header.after(note);
+  }
   $('#resetShortcuts').onclick=()=>saveShortcuts({recover:'CommandOrControl+Shift+0',closeup:'CommandOrControl+Shift+9'});
   let tickTimer=0;
   const tick=(text='Saved')=>{const t=$('#savedTick');t.textContent=text;t.classList.add('on');clearTimeout(tickTimer);tickTimer=setTimeout(()=>t.classList.remove('on'),1400);};

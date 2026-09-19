@@ -15,6 +15,32 @@ to confirm Apple Silicon installer availability and checksums
 release tag and matching checksums for a reproducible reference.
 
 
+## After 0.2.25: shipped defaults, "Reset to defaults" per page, a roomier Settings window
+
+- **Shipped defaults** (`DEFAULTS` in `electron/main.cjs`) for Live Voice
+  System, Reasoning, Actions and Agents now match the developer's working
+  setup of 2026-09-19: GPT-Live-1; Gemini model Extended Thinking, level low;
+  reasoning **Delegate · OpenAI · API key · gpt-5.6-luna** (the same key
+  GPT-Live-1 uses, so a new user needs nothing extra); actions on, following
+  reasoning, Codex App Server otherwise, full access, Codex model gpt-5.6-luna.
+  Two things were deliberately not copied: the Codex App Server *reasoning*
+  model stays blank (blank means "Codex decides"; a shipped value would make
+  blank unselectable), and Agents ships with nobody customised and no engine
+  agent assigned (an EnConvo agent id or a Hermes profile exists only on the
+  Mac that made it, and an assignment to a missing agent fails every task).
+  Existing users keep what they saved; defaults only fill what is absent.
+- **Reset per page** (`electron/settings-reset.cjs`): `PAGES` lists the
+  settings each Settings page owns; `setSettings({resetPage})` puts exactly
+  those back. Never reset: API keys, sign-ins, the character on screen, her
+  outfits, the window. The button sits in the header of every page, beside its
+  status chip (at the bottom it made Reasoning too tall for a 13-inch screen), except on
+  Shortcuts (it has "Restore default shortcuts"), needs two clicks, says what it
+  will do after the first, disarms after 6 s or a click elsewhere, and is
+  disabled when the page already is on the defaults (`pagesAtDefault`).
+  Tests: `qa/settings-reset.cjs` (in `npm test`), `qa/settings-app.cjs`.
+- **Settings window**: opens at 1080 x 820 (was 820 x 700), never larger than
+  the screen it opens on.
+
 ## After 0.2.25: agent settings per character
 
 Settings › Reasoning and Settings › Actions are the **defaults for everyone**.
