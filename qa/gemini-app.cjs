@@ -81,14 +81,29 @@ server.listen(0,'127.0.0.1',()=>{
   template=null;await js(solo,"document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");await until(()=>template,'menu for voices');
   {const mine=template.find(x=>x.label==='✓ Sarah'),voiceMenu=mine.submenu.find(x=>x.label==='Voice').submenu,tia=template.find(x=>x.label==='Tia').submenu.find(x=>x.label==='Voice').submenu;
    assert(tia.some(x=>x.label==='Aoede · female · breezy ✓'),'another character shows her own Gemini voice');
-   tia.find(x=>x.label.startsWith('Zephyr')).submenu.find(x=>x.label==='Use this voice').click();await until(async()=>(await js(solo,'return gla.getSettings()')).geminiVoices.tia==='Zephyr','a voice chosen for a character who is not on screen');
-   assert.equal((await js(solo,'return gla.getSettings()')).gemini.voice,'Kore','and the one on screen keeps hers');assert.match(voiceMenu[0].label,/^Gemini 3\.8 Live voices/);assert.equal(voiceMenu.filter(x=>x.submenu).length,30);assert(voiceMenu.some(x=>x.label==='Kore · female · firm ✓'),'her current Gemini voice is ticked');assert(voiceMenu.some(x=>x.label==='Puck · male · upbeat'),'Google’s published gender beside each voice');assert(!voiceMenu.some(x=>/Marin|Gleam/.test(x.label)),'no GPT-Live-1 voices while Gemini is the system');
-   voiceMenu.find(x=>x.label.startsWith('Puck')).submenu.find(x=>x.label==='Preview voice').click();}
+   tia.find(x=>x.label?.startsWith('Zephyr')).submenu.find(x=>x.label==='Use this voice').click();await until(async()=>(await js(solo,'return gla.getSettings()')).geminiVoices.tia==='Zephyr','a voice chosen for a character who is not on screen');
+   assert.equal((await js(solo,'return gla.getSettings()')).gemini.voice,'Kore','and the one on screen keeps hers');assert.equal(voiceMenu[0].label,'Try voices…');assert.match(voiceMenu.find(x=>x.enabled===false&&/voices/.test(x.label||'')).label,/^Gemini 3\.8 Live voices/);assert.equal(voiceMenu.filter(x=>x.submenu).length,30);assert(voiceMenu.some(x=>x.label==='Kore · female · firm ✓'),'her current Gemini voice is ticked');assert(voiceMenu.some(x=>x.label==='Puck · male · upbeat'),'Google’s published gender beside each voice');assert(!voiceMenu.some(x=>/Marin|Gleam/.test(x.label)),'no GPT-Live-1 voices while Gemini is the system');
+   voiceMenu.find(x=>x.label?.startsWith('Puck')).submenu.find(x=>x.label==='Preview voice').click();}
+  // ---- the voice picker stays open: a native menu closes on every click, so trying voices meant walking the tree again each time
+  template.find(x=>x.label==='✓ Sarah').submenu.find(x=>x.label==='Voice').submenu.find(x=>x.label==='Try voices…').click();
+  const picker=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/voice-picker.html')),'voice picker');
+  await until(()=>js(picker,"return document.querySelectorAll('#list .row').length===30"),'thirty Gemini voices listed');
+  assert.deepEqual(await js(picker,"return [document.querySelector('#title').textContent,document.querySelector('#system').textContent.startsWith('Gemini 3.8 Live voices'),document.querySelector('.row.current .name').firstChild.textContent,document.querySelector('.row.current .use').textContent]"),['Sarah · voice',true,'Kore','✓ In use']);
   const previewPeer=await until(()=>seen.sockets.find(p=>p.messages[0]?.setup?.systemInstruction?.parts[0].text.startsWith('You are providing a short voice sample')),'a preview session');
   assert.equal(previewPeer.messages[0].setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,'Puck');assert.equal(previewPeer.messages[0].setup.model,'models/gemini-3.8-live','previews use the standard model');assert(!('tools' in previewPeer.messages[0].setup));
   await until(()=>previewPeer.messages.some(m=>/voice sample/.test(m.realtimeInput?.text||'')),'asked for the sample');assert.equal(previewPeer.audio,0,'a preview opens no microphone');
   previewPeer.send({serverContent:{outputTranscription:{text:'Hello, it is lovely to meet you.'}}});previewPeer.send({serverContent:{turnComplete:true}});
   await until(()=>previewPeer.socket.destroyed||previewPeer.socket.readableEnded,'the preview hangs up after the sample',15000);
+  // play from the picker, again and again, without it closing; then Use, and it is still there
+  const row=name=>`[...document.querySelectorAll('#list .row')].find(r=>r.querySelector('.name').firstChild.textContent===${JSON.stringify(name)})`;
+  for(let round=1;round<=2;round++){const before=seen.sockets.length;await js(picker,`${row('Leda')}.querySelector('.play').click();return 1`);
+   const peer2=await until(()=>seen.sockets.length>before&&seen.sockets.at(-1).messages[0]?.setup&&seen.sockets.at(-1),'preview '+round+' from the picker');assert.equal(peer2.messages[0].setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,'Leda');
+   await until(()=>js(picker,`return /Stop|…/.test(${row('Leda')}.querySelector('.play').textContent)`),'the row shows it is playing');
+   peer2.send({serverContent:{outputTranscription:{text:'Hello.'}}});peer2.send({serverContent:{turnComplete:true}});await until(()=>js(picker,`return ${row('Leda')}.querySelector('.play').textContent==='▶ Play'`),'ready to play again',15000);assert(!picker.isDestroyed()&&picker.isVisible(),'still open');}
+  await js(picker,`${row('Leda')}.querySelector('.use').click();return 1`);await until(async()=>(await js(solo,'return gla.getSettings()')).geminiVoices.sarah==='Leda','Use from the picker');
+  await until(()=>js(picker,"return document.querySelector('.row.current .name').firstChild.textContent==='Leda'"),'the picker shows the new choice');assert(picker.isVisible());
+  fs.writeFileSync(out+'/voice-picker.png',(await picker.webContents.capturePage()).toPNG());
+  await js(solo,"await gla.setSettings({characterVoice:'Kore'})");picker.close();
   // ---- a conversation
   await until(()=>js(solo,"return /Ready/.test(document.querySelector('#status').textContent)"),'ready');
   template=null;await js(solo,"document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");await until(()=>template,'menu');assert.equal(template.find(x=>x.label==='Start Conversation').enabled,true,'the Gemini key is the one that counts');

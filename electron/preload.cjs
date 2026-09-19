@@ -105,6 +105,7 @@ contextBridge.exposeInMainWorld('gla', {
   stopVoicePreview: () => ipcRenderer.invoke('gla:voice:preview', ''),
   reportVoicePreview: state => ipcRenderer.send('gla:voice:preview-state', state),
   onVoicePreview: callback => subscribe('gla:voice:preview-state', callback),
+  characterVoices: slug => ipcRenderer.invoke('gla:voice:list', slug),
   live: { heartbeat: active => ipcRenderer.send('gla:live:heartbeat', Boolean(active)) },
   // native right-click menu; main answers with an action id
   showMenu: state => ipcRenderer.invoke('gla:menu:show', state),

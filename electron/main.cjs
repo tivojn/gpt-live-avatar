@@ -2,7 +2,7 @@
 // GPT-Live Avatar: a desk companion on OpenAI GPT-Live-1.
 // The main process owns the API key and session creation; the renderer owns
 // WebRTC, the 3D avatar and the overhead bubble.
-const { app, BrowserWindow, ipcMain, safeStorage, net, dialog, shell, screen, session: electronSession, Menu, systemPreferences, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, net, dialog, shell, screen, session: electronSession, Menu, systemPreferences, globalShortcut, nativeTheme } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -156,7 +156,7 @@ function instinctSettings(){
 }
 function broadcastSettings() {
   const value = publicSettings();
-  for (const w of [avatarWindow, settingsWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:settings', value);
+  for (const w of [avatarWindow, settingsWindow, voicePickerWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:settings', value);
   groupManager?.settingsChanged(value);
 }
 
@@ -676,6 +676,23 @@ ipcMain.handle('gla:tap:start', async (event, request = {}) => {
 ipcMain.handle('gla:tap:stop', (event, token) => audioTapOwner.stop(event.sender.id, token));
 
 ipcMain.handle('gla:menu:show', (_event, state) => { showAvatarMenu(state && typeof state === 'object' ? state : {}); return true; });
+// A voice picker that stays open while voices are tried (a native menu closes on every click). One at a time, near the pointer.
+let voicePickerWindow = null;
+function openVoicePicker(slug) {
+  const known = (assets?.avatars() || []).some(a => a.slug === slug) ? slug : config.avatar;
+  if (voicePickerWindow && !voicePickerWindow.isDestroyed()) voicePickerWindow.destroy();
+  const point = screen.getCursorScreenPoint(), area = screen.getDisplayNearestPoint(point).workArea, width = 340, height = 520;
+  voicePickerWindow = new BrowserWindow({ width, height, x: Math.round(Math.min(Math.max(area.x + 8, point.x - width / 2), area.x + area.width - width - 8)), y: Math.round(Math.min(Math.max(area.y + 8, point.y - 60), area.y + area.height - height - 8)),
+    frame: false, resizable: true, minWidth: 300, minHeight: 300, alwaysOnTop: true, fullscreenable: false, minimizable: false, maximizable: false, show: false, title: 'Voices', backgroundColor: nativeTheme.shouldUseDarkColors ? '#111111' : '#ffffff',
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false } });
+  voicePickerWindow.loadURL(`${serverOrigin}/voice-picker.html?character=${encodeURIComponent(known)}`);
+  voicePickerWindow.once('ready-to-show', () => voicePickerWindow?.show());
+  voicePickerWindow.on('closed', () => { voicePickerWindow = null; });
+}
+ipcMain.handle('gla:voice:list', (_event, slug) => {
+  const known = (assets?.avatars() || []).find(a => a.slug === slug) || (assets?.avatars() || []).find(a => a.slug === config.avatar);
+  return { ...characterVoices(known?.slug || config.avatar), name: known?.name || config.personaName, onScreen: (known?.slug || config.avatar) === config.avatar };
+});
 ipcMain.handle('gla:voice:preview', (_event, voice) => {
   const voices = characterVoices();
   if (voice && !voices.list.some(v => v.id === voice)) return { ok: false, error: 'Choose a supported voice.' };
@@ -687,7 +704,7 @@ ipcMain.handle('gla:voice:preview', (_event, voice) => {
 ipcMain.on('gla:voice:preview-state', (event, value) => {
   if (event.sender !== avatarWindow?.webContents) return;
   voicePreview = { state: String(value?.state || 'idle'), voice: VOICES.includes(value?.voice) || Object.hasOwn(geminiLive.VOICES, value?.voice || '') ? value.voice : '', error: String(value?.error || '').slice(0, 500) };
-  for (const w of [avatarWindow, settingsWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:voice:preview-state', voicePreview);
+  for (const w of [avatarWindow, settingsWindow, voicePickerWindow]) if (w && !w.isDestroyed()) w.webContents.send('gla:voice:preview-state', voicePreview);
 });
 ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
 
@@ -715,6 +732,8 @@ function showAvatarMenu(state) {
           { label: current ? a.name + ' is on screen' : 'Switch to ' + a.name, type: 'radio', checked: current, click: send('avatar:' + a.slug) },
           { type: 'separator' },
           { label: 'Voice', submenu: [
+            { label: 'Try voices…', click: () => openVoicePicker(a.slug) }, // stays open: play as often as you like, then Use
+            { type: 'separator' },
             { label: voices.systemName + ' voices' + (current ? ' · changing one briefly reconnects a live conversation' : ''), enabled: false },
             ...voices.list.map(v => ({ label: v.label + (v.id === voices.current ? ' ✓' : ''), submenu: [
               { label: 'Preview voice', enabled: voices.ready, click: send('voice-preview:' + v.id) },

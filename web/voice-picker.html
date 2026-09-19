@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voices</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--ui-bg);color:var(--ui-text);font:13px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;-webkit-user-select:none;user-select:none}
+header{padding:12px 14px 8px;-webkit-app-region:drag;display:flex;align-items:baseline;gap:8px}
+h1{font-size:14px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#close{-webkit-app-region:no-drag;border:0;background:none;color:var(--ui-dim);font-size:16px;line-height:1;cursor:pointer;padding:2px 4px}
+#system{color:var(--ui-dim);font-size:12px;padding:0 14px 8px}
+#list{flex:1;overflow:auto;border-top:1px solid var(--ui-line)}
+.row{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px;border-bottom:1px solid var(--ui-line)}
+.row.current{background:var(--ui-surface)}.row.current .name{font-weight:700}
+.name{flex:1;min-width:0}.name small{color:var(--ui-dim);font-size:12px;margin-left:6px}
+button.act{-webkit-app-region:no-drag;font:inherit;font-size:12px;border:1px solid var(--ui-line-strong);background:var(--ui-surface);color:var(--ui-text);border-radius:7px;padding:3px 10px;cursor:pointer;min-width:52px}
+button.act:disabled{opacity:.45;cursor:default}button.play.on{background:var(--ui-text);color:var(--ui-bg);border-color:var(--ui-text)}
+button.use.on{border-color:var(--ui-text);font-weight:700}
+#state{padding:8px 14px;color:var(--ui-dim);font-size:12px;min-height:34px;border-top:1px solid var(--ui-line)}#state.bad{color:var(--ui-text);font-weight:600}
+</style>
+</head>
+<body>
+<header><h1 id="title">Voices</h1><button id="close" aria-label="Close" title="Close (Esc)">×</button></header>
+<div id="system"></div>
+<div id="list" role="list"></div>
+<div id="state" role="status" aria-live="polite"></div>
+<script type="module">
+// A voice picker that stays open: a native menu closes on every click, so
+// trying several voices meant walking the menu tree again each time. Here ▶
+// can be pressed again and again, and Use is one click away.
+const slug=new URLSearchParams(location.search).get('character')||'',$=id=>document.getElementById(id);
+let settings=await gla.getSettings(),preview={state:'idle',voice:''},voices=null;
+const mine=()=>slug&&slug!==settings.avatar?.slug?slug:'';
+async function load(){voices=await gla.characterVoices(slug);render();}
+function render(){
+  if(!voices)return;
+  $('title').textContent=(voices.name||'Her')+' · voice';$('system').textContent=voices.systemName+' voices'+(voices.onScreen?' · using a new one briefly reconnects a live conversation':'');
+  const list=$('list'),scroll=list.scrollTop;
+  list.replaceChildren(...voices.list.map(v=>{
+    const row=document.createElement('div');row.className='row'+(v.id===voices.current?' current':'');row.setAttribute('role','listitem');
+    const name=document.createElement('span');name.className='name';name.textContent=v.id[0].toUpperCase()+v.id.slice(1);
+    const small=document.createElement('small');small.textContent=v.label.split(' · ').slice(1).join(' · ');name.append(small);
+    const playing=preview.state!=='idle'&&preview.voice===v.id;
+    const play=document.createElement('button');play.className='act play'+(playing?' on':'');play.textContent=playing?(preview.state==='connecting'?'…':'■ Stop'):'▶ Play';play.disabled=!voices.ready;
+    play.onclick=async()=>{const r=playing?await gla.stopVoicePreview():await gla.previewVoice(v.id);if(r&&r.ok===false)status(r.error,true);};
+    const use=document.createElement('button');use.className='act use'+(v.id===voices.current?' on':'');use.textContent=v.id===voices.current?'✓ In use':'Use';use.disabled=v.id===voices.current;
+    use.onclick=async()=>{await gla.stopVoicePreview();settings=await gla.setSettings({characterVoice:v.id,characterVoiceFor:slug});await load();status((voices.name||'She')+' now speaks as '+name.firstChild.textContent+'.');};
+    row.append(name,play,use);return row;}));
+  list.scrollTop=scroll;
+  if(!voices.ready)status('Add your '+(voices.system==='gemini'?'Gemini':'OpenAI')+' key under Settings › Live Voice System to hear voices.',true);
+}
+function status(text,bad=false){$('state').textContent=text||'';$('state').className=bad?'bad':'';}
+gla.onVoicePreview(state=>{preview=state;if(state.error)status(state.error,true);else if(state.state==='idle'&&!$('state').className)status('');render();});
+gla.onSettings(next=>{settings=next;void load();});
+$('close').onclick=()=>window.close();addEventListener('keydown',e=>{if(e.key==='Escape')window.close();});addEventListener('pagehide',()=>{void gla.stopVoicePreview();});
+await load();
+</script>
+</body>
+</html>
