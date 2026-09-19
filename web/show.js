@@ -190,7 +190,7 @@ let castNotes={};
   for(const c of missing)resolved.set(c.motion,'');
   if(!wanted.length){setStatus(missing.length?`Ready. ${missing.length} line(s) use motions not installed for that character; they will play without a motion.`:'All motions are installed.');return;}
   const status=await api.pipeline();pipeline=status.ok?status.status:{available:false,problems:[status.error]};
-  if(!pipeline.available){setStatus(`Custom motions (${wanted.map(w=>w.label).join(', ')}) are not available on this Mac (missing ${pipeline.problems.join('; ')}); using the closest installed motions instead.`);return;}
+  if(!pipeline.available){setStatus(`Custom motions (${wanted.map(w=>w.label).join(', ')}) are not available on this ${navigator.platform.includes('Mac')?'Mac':'computer'} (missing ${pipeline.problems.join('; ')}); using the closest installed motions instead.`);return;}
   const box=$('#showProgress');box.hidden=false;const lines=new Map();const draw=()=>{box.textContent=[...lines.values()].join('\n');};
   for(const w of wanted){lines.set(w.id,`${w.label}: queued`);}draw();
   const off=api.onProgress(p=>{if(!p||!lines.has(p.id))return;const w=wanted.find(x=>x.id===p.id);const detail=p.step==='generate'?`Meshy ${p.status||'text-to-motion'}${p.percent!=null?' '+p.percent+'%':''}${p.attempt>1?' (retry, front-facing prompt)':''}`:p.step==='facing'?(p.maxDeg!=null?`facing check ${p.maxDeg}° ${p.passed?'ok':'turned away, regenerating'}`:'checking that it faces the audience'):p.step==='retarget'?'retargeting in Blender':p.step==='integrate'?`adding to ${p.status||'the libraries'}`:p.step==='failed'?'failed: '+p.error:p.step;lines.set(p.id,`${w.label}: ${detail}`);draw();});

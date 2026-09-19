@@ -297,7 +297,10 @@
   const localDelegate=s=>s.reasoningMode==='delegate'&&s.delegate.auth==='local_runtime';
   const localEngine=()=>SETTINGS.effectiveActionEngine||SETTINGS.agentEngine||'codex';
   const voiceName = voice => voice ? voice[0].toUpperCase() + voice.slice(1) : '';
-  const displayText = text => shortenHomePaths(text, SETTINGS?.userHome);
+  // The wording was written on a Mac. Elsewhere "this Mac" reads "this computer": in every message set from here, and once in the page's own notes.
+  const onMac = navigator.platform.includes('Mac'), here = text => onMac || typeof text !== 'string' ? text : text.replaceAll('this Mac', 'this computer');
+  if (!onMac) { const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); for (let n = walk.nextNode(); n; n = walk.nextNode()) if (n.nodeValue.includes('this Mac') && !n.parentElement.closest('script')) n.nodeValue = here(n.nodeValue); }
+  const displayText = text => here(shortenHomePaths(text, SETTINGS?.userHome));
   const escapeText = text => String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const setState = (el, text, cls = '') => { el.textContent = displayText(text); el.className = 'state ' + cls; };
 
@@ -358,7 +361,7 @@
     $('#sharedCodexEngine').hidden=false;
     const engineLabel=engine==='codex'?'Codex App Server':runtimeNames[engine];
     $('#sharedCodexEngine').textContent=following?'Actions are carried out by '+engineLabel+', because '+engineLabel+' is your reasoning provider (Settings › Reasoning) and actions follow it. Change the reasoning provider and actions move with it. Permissions below belong to '+engineLabel+'.'
-      :!canFollow?reasoningName+' answers questions but cannot act on this Mac, so real tasks (files, apps, the browser) are carried out by '+engineLabel+'. Choose another engine above, or switch actions off.'
+      :!canFollow?reasoningName+' answers questions but cannot act on '+here('this Mac')+', so real tasks (files, apps, the browser) are carried out by '+engineLabel+'. Choose another engine above, or switch actions off.'
       :'Actions: '+engineLabel+', independent of your reasoning provider. Changing reasoning will keep this action engine.';
     $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
     renderRuntime(settings);renderAgentBindings(settings);
@@ -448,7 +451,7 @@
   }
   function renderRuntime(s){
     const engine=localEngine(),local=Boolean(runtimeNames[engine]);$('#runtimeOptions').hidden=!local;if(!local)return;
-    const shared=engine===s.effectiveReasoningEngine;$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on this Mac. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':engine==='hermes'?'Install Hermes with its ACP extra.':engine==='enconvo'?'Keep the EnConvo app open; its local API answers at http://localhost:54535 by default.':'Sign in with Grok Build using grok login.');
+    const shared=engine===s.effectiveReasoningEngine;$('#runtimeNote').textContent=runtimeNames[engine]+' must be installed and configured on '+here('this Mac')+'. Its own provider usage and tool requirements apply. '+(engine==='openclaw'?'Keep the OpenClaw gateway running.':engine==='hermes'?'Install Hermes with its ACP extra.':engine==='enconvo'?'Keep the EnConvo app open; its local API answers at http://localhost:54535 by default.':'Sign in with Grok Build using grok login.');
     $('#runtimePathLabel').textContent=engine==='enconvo'?'Service URL (optional)':'Agent executable (optional)';$('#runtimePath').placeholder=engine==='enconvo'?'http://localhost:54535':'Detect automatically';
     if(document.activeElement!==$('#runtimePath'))$('#runtimePath').value=engine==='enconvo'?(s.agentRuntimePaths?.[engine]||''):displayText(s.agentRuntimePaths?.[engine]);
     $('#runtimeModelRow').hidden=shared||engine==='openclaw'||engine==='enconvo';if(document.activeElement!==$('#runtimeModel'))$('#runtimeModel').value=s.agentRuntimeModels?.[engine]||'';
@@ -525,7 +528,7 @@
       else if (t.present) right = `<span class="ok">Ready</span>${(tier === 'base' && status.bundled || t.removable===false) ? '' : `<button data-remove="${tier}" type="button" ${busy ? 'disabled' : ''}>Remove</button>`}`;
       else if (t.available) right = `<button data-download="${tier}" type="button" ${busy ? 'disabled' : ''}>Download ${MB(t.bytes)}</button>`;
       else right = '<small>Not published</small>';
-      const note = active && progress.phase === 'error' ? `<small style="color:var(--text);font-weight:600">${escapeText(displayText(progress.error))}</small>` : `<small>${t.present ? 'Installed on this Mac.' : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
+      const note = active && progress.phase === 'error' ? `<small style="color:var(--text);font-weight:600">${escapeText(displayText(progress.error))}</small>` : `<small>${t.present ? here('Installed on this Mac.') : tier==='motions'?'Updated movement and new animations; outfits and textures stay the same.':tier === 'base' ? 'Needed before this avatar can be used.' : 'Used by the matching quality setting; without it the largest installed textures are used.'}</small>`;
       rows.push(`<div class="tier"><div><div>${t.label}</div>${note}</div><div class="row" style="margin:0">${right}</div>${active && progress.phase !== 'error' ? `<div class="bar"><i style="width:${progress.percent}%"></i></div>` : ''}</div>`);
     }
     box.innerHTML = rows.join('');

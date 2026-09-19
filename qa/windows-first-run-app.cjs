@@ -74,7 +74,7 @@ app.whenReady().then(async()=>{try{
  step('menu',await js('try{await gla.showMenu({});return "opened"}catch(e){return "failed: "+e.message}'));await wait(300);
  // Settings opens and lays out
  await js('gla.openSettings?.()').catch(()=>{});const st=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings.html')),'settings window',15000);
- if(st){await wait(1500);step('settings',{bounds:st.getBounds(),font:await st.webContents.executeJavaScript("getComputedStyle(document.body).fontFamily+' -> '+(document.fonts?[...document.fonts].length:0)"),panesFit:await st.webContents.executeJavaScript("(()=>{const m=document.querySelector('main');return [m.scrollHeight,m.clientHeight]})()")});
+ if(st){await wait(1500);step('settings',{bounds:st.getBounds(),font:await st.webContents.executeJavaScript("getComputedStyle(document.body).fontFamily+' -> '+(document.fonts?[...document.fonts].length:0)"),panesFit:await st.webContents.executeJavaScript("(()=>{const m=document.querySelector('main');return [m.scrollHeight,m.clientHeight]})()"),saysThisMac:await st.webContents.executeJavaScript("(document.body.innerText.match(/this Mac/g)||[]).length"),consoleErrors:report.errors.length});
   fs.writeFileSync(path.join(out,'settings.png'),(await st.webContents.capturePage()).toPNG());}
  step('done');
 }catch(e){report.errors.push('probe: '+(e.stack||e.message).slice(0,600));}finally{finish();}});
