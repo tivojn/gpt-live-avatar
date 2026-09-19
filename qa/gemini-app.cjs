@@ -139,13 +139,13 @@ server.listen(0,'127.0.0.1',()=>{
    await js(solo,"await gla.setSettings({reasoningMode:'managed',agentEnabled:true,agentEngine:'grok',agentFollowReasoning:true})");await wait(200);
    let items=await open(),reasoning=items.find(x=>x.label==='Reasoning').submenu,actions=items.find(x=>x.label==='Actions & Permissions').submenu;
    assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label),['Gemini reasoning'],'the built-in reasoning of the system in use is an item, and the ticked one');assert(!reasoning.some(x=>/GPT-Live/.test(x.label)));
-   assert.equal(actions[0].label,'Let avatars carry out my requests');assert.equal(actions[0].checked,true);assert.equal(actions[1].label,'Carried out by Grok Build (Gemini reasoning cannot act on this Mac)');
+   assert.equal(actions[0].label,'Let avatars carry out my requests');assert.equal(actions[0].checked,true);assert(!actions.some(x=>/^Carried out by/.test(x.label||'')),'who does the work is said once, not twice');
    const follow=actions.find(x=>x.label?.startsWith('Follow reasoning agent'));assert.deepEqual([follow.label,follow.enabled,follow.checked],['Follow reasoning agent · not possible with Gemini reasoning',false,false],'not ticked when nothing is being followed');
    assert.deepEqual(actions.filter(x=>x.label?.startsWith('✓ ')).map(x=>x.label.replace(' · not installed','')),['✓ Grok Build']);
    // choosing in the menu is choosing in Settings
    reasoning.find(x=>x.label?.startsWith('Codex App Server')).click();await until(async()=>(await js(solo,'return (await gla.getSettings()).effectiveReasoningEngine'))==='codex','menu choice saved');
    items=await open();reasoning=items.find(x=>x.label==='Reasoning').submenu;actions=items.find(x=>x.label==='Actions & Permissions').submenu;
-   assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label.replace(' · not installed','')),['Codex App Server']);assert.deepEqual([actions.find(x=>x.label==='Follow reasoning agent · now Codex App Server').checked,actions[1].label],[true,'Carried out by Codex App Server, your reasoning provider'],'the menu names who is being followed');
+   assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label.replace(' · not installed','')),['Codex App Server']);assert.equal(actions.find(x=>x.label==='Follow reasoning agent · now Codex App Server').checked,true,'the menu names who is being followed');assert.deepEqual(actions.filter(x=>x.label?.startsWith('✓ ')).map(x=>x.label.replace(' · not installed','')),['✓ Codex App Server']);
    actions[0].click();await until(async()=>(await js(solo,'return (await gla.getSettings()).agentEnabled'))===false,'actions off from the menu');
    actions=(await open()).find(x=>x.label==='Actions & Permissions').submenu;assert.deepEqual([actions[0].checked,actions[1].label],[false,'Off: she will say she cannot do it']);
    await js(solo,"await gla.setSettings({agentEnabled:false})");}
