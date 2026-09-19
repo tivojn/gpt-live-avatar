@@ -47,6 +47,12 @@ app.whenReady().then(async()=>{try{
  const tickOn=()=>js(st,"return document.querySelector('#savedTick').classList.contains('on')");
  await js(st,"gla_settings_pane('appearance');const b=document.querySelector('#bubbleMode');b.value='always';b.dispatchEvent(new Event('change'));return 1");
  await until(tickOn,'Saved tick after a select');assert.equal((await js(st,'return (await gla.getSettings()).bubbleMode')),'always');
+ // "Follow reasoning agent" says who that is: the option, its note and the chip all name the provider being followed
+ await js(st,"await gla.setSettings({reasoningMode:'delegate',delegateProvider:'hermes',delegateAuth:'local_runtime',agentEnabled:true,agentFollowReasoning:true});gla_settings_pane('actions');return 1");
+ await until(()=>js(st,"return document.querySelector('#agentEngine').value==='follow'&&/now Hermes/.test(document.querySelector('#agentEngine').selectedOptions[0].textContent)"),'the option names Hermes');
+ assert.deepEqual(await js(st,"return [document.querySelector('#agentEngine').selectedOptions[0].textContent,/^Actions are carried out by Hermes, because Hermes is your reasoning provider/.test(document.querySelector('#sharedCodexEngine').textContent),document.querySelector('#chip-actions').textContent]"),['Follow reasoning agent · now Hermes (default)',true,'On · Hermes']);
+ await js(st,"await gla.setSettings({reasoningMode:'delegate',delegateProvider:'enconvo',delegateAuth:'local_runtime'});return 1");await until(()=>js(st,"return /now EnConvo/.test(document.querySelector('#agentEngine').selectedOptions[0].textContent)&&document.querySelector('#chip-actions').textContent==='On · EnConvo'"),'changing the reasoning provider moves the name with it');
+ await js(st,"await gla.setSettings({reasoningMode:'managed',agentEnabled:true,agentEngine:'enconvo',agentFollowReasoning:false});gla_settings_pane('appearance');return 1");
  // The wardrobe flourish switch: on unless turned off, saved as it changes, and the avatar's menu row follows it.
  assert.equal(await js(st,"return document.querySelector('#wardrobeFlourish').checked"),true);assert.equal(await js(st,"return document.querySelector('#wardrobeFlourish').closest('.pane').id"),'pane-appearance');
  await js(st,"document.querySelector('#wardrobeFlourish').click();return 1");await until(async()=>(await js(st,'return (await gla.getSettings()).wardrobeFlourish'))===false,'flourish off is saved');

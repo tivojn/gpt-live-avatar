@@ -38,9 +38,9 @@ function providerMenu(config,{active,update,openSettings,available=installed(con
  const values=permissions(config),on=config.agentEnabled!==false,canFollow=Boolean(following),follows=on&&canFollow&&config.agentFollowReasoning!==false;
  return {label:'Actions & Permissions',submenu:[
   {label:'Let avatars carry out my requests',type:'checkbox',checked:on,click:()=>update({agentEnabled:!on})},
-  {label:!on?'Off: she will say she cannot do it':follows?'Carried out by '+ENGINES[active]+', the agent that also reasons':'Carried out by '+ENGINES[active]+(canFollow?'':' ('+(config.reasoningMode==='delegate'?'your reasoning provider':builtInReasoning(config))+' cannot act on this Mac)'),enabled:false},
+  {label:!on?'Off: she will say she cannot do it':follows?'Carried out by '+ENGINES[active]+', your reasoning provider':'Carried out by '+ENGINES[active]+(canFollow?'':' ('+(config.reasoningMode==='delegate'?'your reasoning provider':builtInReasoning(config))+' cannot act on this Mac)'),enabled:false},
   {type:'separator'},
-  {label:canFollow?'Follow reasoning agent':'Follow reasoning agent · not possible with '+(config.reasoningMode==='delegate'?'this reasoning provider':builtInReasoning(config)),type:'checkbox',checked:follows,enabled:on&&canFollow,click:()=>update({agentFollowReasoning:!follows})},
+  {label:canFollow?'Follow reasoning agent · now '+ENGINES[following]:'Follow reasoning agent · not possible with '+(config.reasoningMode==='delegate'?'this reasoning provider':builtInReasoning(config)),type:'checkbox',checked:follows,enabled:on&&canFollow,click:()=>update({agentFollowReasoning:!follows})},
   ...Object.entries(ENGINES).map(([engine,label])=>({label:(on&&active===engine?'✓ ':'')+label+(available[engine]?'':' · not installed'),enabled:on,submenu:[
    {label:'Use '+label+' for actions',type:'radio',checked:on&&active===engine,enabled:available[engine],click:()=>update({agentEngine:engine,agentFollowReasoning:false})},
    {type:'separator'},

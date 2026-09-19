@@ -351,11 +351,12 @@
     // the pane shows the engine that really does the work instead of pretending to follow.
     const canFollow=Boolean(settings.effectiveReasoningEngine),following=settings.agentFollowReasoning!==false&&canFollow;
     const reasoningName=settings.reasoningMode==='delegate'?({openai:'OpenAI',xai:'xAI',...runtimeNames})[settings.delegate.provider]+' reasoning':settings.liveProvider==='gemini'?'Gemini reasoning':'GPT-Live reasoning';
-    const follow=[...$('#agentEngine').options].find(o=>o.value==='follow');follow.disabled=!canFollow;follow.textContent=canFollow?'Follow reasoning agent (default)':'Follow reasoning agent · not possible with '+reasoningName;
+    const follow=[...$('#agentEngine').options].find(o=>o.value==='follow');follow.disabled=!canFollow;const followedName=canFollow?(settings.effectiveReasoningEngine==='codex'?'Codex App Server':runtimeNames[settings.effectiveReasoningEngine]):'';
+    follow.textContent=canFollow?'Follow reasoning agent · now '+followedName+' (default)':'Follow reasoning agent · not possible with '+reasoningName;
     $('#agentEngine').value=following?'follow':engine;
     $('#sharedCodexEngine').hidden=false;
     const engineLabel=engine==='codex'?'Codex App Server':runtimeNames[engine];
-    $('#sharedCodexEngine').textContent=following?'Actions: '+engineLabel+', the same agent that reasons. Permissions below belong to it.'
+    $('#sharedCodexEngine').textContent=following?'Actions are carried out by '+engineLabel+', because '+engineLabel+' is your reasoning provider (Settings › Reasoning) and actions follow it. Change the reasoning provider and actions move with it. Permissions below belong to '+engineLabel+'.'
       :!canFollow?reasoningName+' answers questions but cannot act on this Mac, so real tasks (files, apps, the browser) are carried out by '+engineLabel+'. Choose another engine above, or switch actions off.'
       :'Actions: '+engineLabel+', independent of your reasoning provider. Changing reasoning will keep this action engine.';
     $('#legacyCodexModel').hidden=sharedCodex;$('#legacyCodexCheck').hidden=sharedCodex;$('#codexOptions').hidden=engine!=='codex';renderPermissions(settings);renderModelPicker('agentCodexModel', [...(settings.delegate.choices.openai||[]), ...codexModelChoices], settings.agentCodexModel||'', true);
