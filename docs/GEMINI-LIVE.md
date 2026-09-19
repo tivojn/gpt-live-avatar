@@ -76,6 +76,26 @@ and `sessionResumption`. On `goAway` or a dropped socket the client reconnects
 with the last resumable handle (up to three times) without the window seeing
 the state change, and also passes the transcript in case the handle is refused.
 
+## Settings and voices
+
+- **Live Voice System** (was "Voice"): the system selector and only that
+  system's key and options. Nothing about the other system is on the page.
+- **The voice belongs to the character**, per system: Settings › Character and
+  right-click › Character › Voice list the voices of the system in use
+  (`characterVoices()` in `electron/main.cjs`; one setting, `characterVoice`).
+  GPT-Live-1 voices live in `groupVoices`, Gemini's in `geminiVoices`, each
+  with a default per character.
+- **Preview** works on both. A Gemini preview is a session of its own on the
+  standard model: no microphone, no tools, the sample sentence as its prompt.
+- **Reasoning** follows the system. Under Gemini the built-in mode is "Gemini
+  reasoning": Gemini alone, no function declared, nothing reaches another
+  model (unless Actions are on, which is the user's choice of an engine).
+- **Gender beside each voice** (`electron/voice-gender.json`): Google's
+  published table for Gemini. OpenAI publishes none for GPT-Live-1;
+  `qa/voice-pitch-app.cjs --live` measured each voice's pitch, but that method
+  agreed with Google on only 20 of 30 Gemini voices, so it is used only where
+  unambiguous. Beacon and Delta are unlabelled until someone listens.
+
 ## Tests
 
 - `qa/gemini-live.cjs` (in `npm test`): choices, setup message, hand-off

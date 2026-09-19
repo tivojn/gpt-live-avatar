@@ -187,10 +187,11 @@ const liveProvider = () => config.liveProvider === 'gemini' ? 'gemini' : 'openai
 // A character's voice belongs to the live voice system in use: GPT-Live-1's voices or Gemini's, each remembered per character.
 const geminiVoiceFor = slug => (Object.hasOwn(geminiLive.VOICES, config.geminiVoices?.[slug] || '') && config.geminiVoices[slug]) || geminiLive.CHARACTER_VOICES[slug] || geminiLive.DEFAULT_VOICE;
 const voiceLabel = id => id[0].toUpperCase() + id.slice(1);
+const voiceGender = require('./voice-gender.json');
 function characterVoices() {
   return liveProvider() === 'gemini'
-    ? { system: 'gemini', systemName: 'Gemini 3.8 Live', current: config.geminiVoice, ready: hasGeminiKey(), list: Object.entries(geminiLive.VOICES).map(([id, style]) => ({ id, label: id + ' · ' + style })) }
-    : { system: 'openai', systemName: 'GPT-Live-1', current: config.voice, ready: hasApiKey(), list: VOICES.map(id => ({ id, label: voiceLabel(id) + (id === 'marin' ? ' · default' : '') })) };
+    ? { system: 'gemini', systemName: 'Gemini 3.8 Live', current: config.geminiVoice, ready: hasGeminiKey(), list: Object.entries(geminiLive.VOICES).map(([id, style]) => ({ id, gender: voiceGender.gemini[id] || '', label: [id, voiceGender.gemini[id], style].filter(Boolean).join(' · ') })) }
+    : { system: 'openai', systemName: 'GPT-Live-1', current: config.voice, ready: hasApiKey(), list: VOICES.map(id => ({ id, gender: voiceGender.openai[id] || '', label: [voiceLabel(id), voiceGender.openai[id], id === 'marin' && 'default'].filter(Boolean).join(' · ') })) };
 }
 async function fetchModels(key) {
   const response = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } });
