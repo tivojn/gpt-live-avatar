@@ -53,8 +53,12 @@ The installer is unsigned until there is a certificate, so SmartScreen warns.
   always are.
 - **Dance Along** is a macOS Core Audio tap. Off macOS the row is disabled and says so; `osascript` is never
   started. A spoken request answers "The audio listener is not available on this system." (Phase C.)
-- **Updates**: the window says in-app install is not available on Windows yet. `electron/releases.cjs` offers
-  no installer off macOS, so the macOS verifier is never reached. (Phase B.)
+- **Updates**: "Check for Updates…" finds the new version on Windows and offers the official installer to
+  download and run; installing from inside the app is Phase B. `electron/releases.cjs` looks up
+  `installers['win-x64']` and accepts only
+  `<release service>/releases/gpt-live-avatar-<version>-win-x64.exe` with its published SHA-256 and size.
+  `canInstall()` in `electron/app-info.cjs` is false off macOS whatever the release document says, so
+  `electron/updater.cjs` — entirely `hdiutil`, `codesign`, `spctl`, `ditto` — is never reached.
 - **DPI rounding**: at 250 % a 360 x 510 window is created 360 x 512 and comes back from the stage 362 x 512.
   Never wait for an exact size or compare bounds for equality; `stageGrown` allows 2 px.
 - **Checkouts are CRLF** (`core.autocrlf=true`). Tests that match source text use `\r?\n`.
@@ -69,10 +73,40 @@ The installer is unsigned until there is a certificate, so SmartScreen warns.
   `web/avatar3d-options.js`; the decision is in the paint loop of `web/avatar.html`). The loose corners still size the render rectangle, so nothing is clipped.
   `window.gla_overflow` records the first time she did not fit, and why.
 
+## Releasing both platforms
+
+One version, one tag, two installers in the same `releases/latest.json`. Each installer is built on its own
+machine and published from the machine that holds the R2 writer credential (the Mac). The publisher is run
+**once per platform** and the second run keeps the first one's installer:
+
+```bash
+# on the Mac, after npm run dmg
+node tools/cloud/publish-release.cjs <ACCOUNT_ID> gpt-live-avatar-protected --apply
+# still on the Mac, with the .exe copied over from Windows and its SHA-256 checked
+node tools/cloud/publish-release.cjs <ACCOUNT_ID> gpt-live-avatar-protected --target win-x64 --apply
+```
+
+- `--target arm64` (the default), `x64` or `win-x64`; `--installer PATH` overrides the expected file in
+  `dist/` (`--dmg` is the old spelling). The Windows default is `dist/gpt-live-avatar-<version>-win-x64.exe`.
+- Before writing, the publisher reads the live `releases/latest.json` and carries over the other platform's
+  entry **for the same version only** — an entry for another version names a file this release retires.
+  It re-validates every carried entry with the app's own parser, so nothing it did not write survives.
+- The flat `arch`/`url`/`sha256`/`bytes` fields keep describing the macOS installer, because apps before
+  0.2.27 read those when `installers[arch]` is missing.
+- `--retire-previous` retires **older versions only**, both platforms' installers; it never removes the
+  other platform of the version being published. Two installers per release roughly doubles the storage
+  footprint: read the dry run's cap plan before `--apply`.
+- The Worker serves the `.exe` under the same exact-name rule as the DMG
+  (`application/octet-stream`, `Content-Disposition: attachment`), and the landing page lists both with
+  each platform's instructions. Redeploy it (`tools/cloud/prepare-worker.cjs`, `deploy.cjs`) from the Mac
+  before publishing a Windows installer for the first time, or the `.exe` route 404s.
+- Never run `build-protected-assets`, `upload-r2.cjs`, key rotation or `deploy.cjs` from Windows.
+
 ## Not done
 
 - A person at the machine: a real conversation (echo on speakers, both voice systems), dragging to the
   screen edges, click-through around her at 250 %, flicker when the window resizes (captures show none).
 - App-level QA scripts that link `build/characters` with `fs.symlinkSync`, use `say` or `osascript`.
 - Running the installer end to end (install, first start, uninstall) on a clean account.
-- Code signing, a Windows update path (Phase B). System-audio dancing (Phase C).
+- Code signing (the installer is unsigned, so SmartScreen warns) and installing an update from inside the
+  app (Phase B). System-audio dancing (Phase C).

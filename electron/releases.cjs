@@ -34,6 +34,18 @@ function compareVersions(left, right) {
   }
   return 0;
 }
+// One installer per platform and architecture. `key` names the entry inside
+// releases/latest.json and the installer file on the release service. macOS
+// keys stay the bare architecture so documents published for 0.2.22 and later,
+// and the apps that read them, keep working unchanged.
+const INSTALLER_TARGETS = {
+  darwin: { arm64: { key: 'arm64', extension: 'dmg' }, x64: { key: 'x64', extension: 'dmg' } },
+  win32: { x64: { key: 'win-x64', extension: 'exe' } },
+};
+function installerTarget(platform, arch) {
+  const target = INSTALLER_TARGETS[platform]?.[arch];
+  return target ? { ...target, name: version => 'gpt-live-avatar-' + version + '-' + target.key + '.' + target.extension } : null;
+}
 // releases/latest.json as written by tools/cloud/publish-release.cjs.
 function installerDetails(doc, { arch = process.arch, platform = process.platform } = {}) {
   const unsupported = () => Error('The release service returned an unsupported release.');
@@ -43,10 +55,12 @@ function installerDetails(doc, { arch = process.arch, platform = process.platfor
   const version = doc.version;
   const installers = doc.installers && typeof doc.installers === 'object' && !Array.isArray(doc.installers) ? doc.installers : {};
   let downloadURL = null, sha256 = null, bytes = null;
-  if (RELEASE_BASE && platform === 'darwin' && ['arm64', 'x64'].includes(arch)) {
-    const entry = installers[arch] || (doc.arch === arch ? doc : null);
-    // Only an installer on the configured release service, named for this exact version and architecture.
-    if (entry && typeof entry === 'object' && entry.url === RELEASE_BASE + 'gpt-live-avatar-' + version + '-' + arch + '.dmg' &&
+  const target = installerTarget(platform, arch);
+  if (RELEASE_BASE && target) {
+    // The flat url/arch fields are the pre-0.2.27, macOS-only shape of this document.
+    const entry = installers[target.key] || (platform === 'darwin' && doc.arch === arch ? doc : null);
+    // Only an installer on the configured release service, named for this exact version and target.
+    if (entry && typeof entry === 'object' && entry.url === RELEASE_BASE + target.name(version) &&
         /^[a-f0-9]{64}$/.test(entry.sha256 || '') && Number.isSafeInteger(entry.bytes) && entry.bytes > 0) {
       downloadURL = entry.url; sha256 = entry.sha256; bytes = entry.bytes;
     }
@@ -63,9 +77,11 @@ function releaseDetails(doc, { arch = process.arch, platform = process.platform 
   const page = GITHUB_RELEASES + '/tag/' + tag;
   if (doc.html_url !== page) throw Error('The release link could not be verified.');
   let downloadURL = null;
-  if (platform === 'darwin' && ['arm64', 'x64'].includes(arch)) {
+  const target = installerTarget(platform, arch);
+  if (target) {
+    const suffix = '-' + target.key + '.' + target.extension;
     const asset = (Array.isArray(doc.assets) ? doc.assets : []).find(a => {
-      if (a.state !== 'uploaded' || typeof a.name !== 'string' || !a.name.endsWith('-' + arch + '.dmg')) return false;
+      if (a.state !== 'uploaded' || typeof a.name !== 'string' || !a.name.endsWith(suffix)) return false;
       const prefix = GITHUB_RELEASES + '/download/' + tag + '/';
       if (typeof a.browser_download_url !== 'string' || !a.browser_download_url.startsWith(prefix)) return false;
       try {
@@ -120,4 +136,4 @@ async function latestRelease({ signal, fetchImpl = fetch, arch, platform } = {})
     catch (githubError) { if (signal?.aborted) throw githubError; throw serviceError; }
   }
 }
-module.exports = { REPOSITORY, RELEASES, GITHUB_RELEASES, RELEASE_BASE, LATEST_URL, compareVersions, installerDetails, releaseDetails, latestRelease };
+module.exports = { REPOSITORY, RELEASES, GITHUB_RELEASES, RELEASE_BASE, LATEST_URL, INSTALLER_TARGETS, installerTarget, compareVersions, installerDetails, releaseDetails, latestRelease };

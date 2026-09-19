@@ -1,7 +1,7 @@
 'use strict';
 // Local-only publisher checks. No real credentials, Wrangler or cloud requests.
 const assert=require('node:assert/strict'),crypto=require('node:crypto'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {releaseNotes,buildLatest,planRelease,createS3Writer,verifyLive,installerKey,parseArguments,PREFIX}=require('../tools/cloud/publish-release.cjs');
+const {releaseNotes,buildLatest,readPublished,planRelease,createS3Writer,verifyLive,installerKey,parseArguments,PREFIX}=require('../tools/cloud/publish-release.cjs');
 const {installerDetails}=require('../electron/releases.cjs');
 const {baseURL,storageCapBytes:CAP}=require('../electron/asset-download.json');
 const account='0123456789abcdef0123456789abcdef',bucket='gpt-live-avatar-protected';
@@ -22,6 +22,44 @@ async function check(name,run){await run();checks++;console.log('PASS '+name);}
    assert.deepEqual(Object.keys(doc),['version','title','notes','publishedAt','arch','url','sha256','bytes','installers']);
    for(const version of ['v0.2.22','0.2.22-rc.1','0.2','../x'])assert.throws(()=>buildLatest({version,sha256:sha,bytes:1}),/final semantic/);
    assert.throws(()=>buildLatest({version:'0.2.22',sha256:'bad',bytes:1}),/checksum/);
+   assert.throws(()=>buildLatest({version:'0.2.22',target:'linux-x64',sha256:sha,bytes:1}),/Unknown release target/);
+  });
+  const esha=crypto.createHash('sha256').update('windows installer').digest('hex');
+  await check('a Windows installer publishes under its own key and file name',async()=>{
+   const doc=buildLatest({version:'0.2.22',target:'win-x64',sha256:esha,bytes:797_000_000,title:'T',notes:'N'});
+   assert.equal(doc.installers['win-x64'].url,baseURL+'releases/gpt-live-avatar-0.2.22-win-x64.exe');
+   assert.equal(doc.installers['win-x64'].file,'GPT-Live Avatar-0.2.22-win-x64.exe');
+   assert.equal(installerDetails(doc,{platform:'win32',arch:'x64'}).downloadURL,doc.installers['win-x64'].url);
+   assert.equal(installerDetails(doc,{platform:'darwin',arch:'arm64'}).downloadURL,null,'A Windows-only release offers macOS nothing');
+   assert(!('arch' in doc)&&!('url' in doc),'The flat legacy fields describe macOS only, so a Windows-only release omits them');
+   assert.equal(installerKey('0.2.22','win-x64'),PREFIX+'gpt-live-avatar-0.2.22-win-x64.exe');
+  });
+  await check('publishing one platform keeps the other platform of the same version',async()=>{
+   const mac=buildLatest({version:'0.2.22',sha256:sha,bytes:1_047_191_904,title:'T',notes:'N'});
+   const both=buildLatest({version:'0.2.22',target:'win-x64',sha256:esha,bytes:797_000_000,title:'T',notes:'N',previous:mac});
+   assert.deepEqual(Object.keys(both.installers).sort(),['arm64','win-x64']);
+   assert.equal(installerDetails(both,{platform:'darwin',arch:'arm64'}).downloadURL,mac.installers.arm64.url,'The macOS installer survives a Windows publish');
+   assert.equal(installerDetails(both,{platform:'win32',arch:'x64'}).downloadURL,both.installers['win-x64'].url);
+   assert.equal(both.arch,'arm64');assert.equal(both.url,mac.url);assert.equal(both.sha256,sha,'Apps before 0.2.27 still read the macOS installer from the flat fields');
+   const back=buildLatest({version:'0.2.22',sha256:sha,bytes:1_047_191_904,title:'T',notes:'N',previous:both});
+   assert.deepEqual(Object.keys(back.installers).sort(),['arm64','win-x64'],'and the other way round');
+   // A previous document for another version names files this release retires.
+   const older=buildLatest({version:'0.2.21',target:'win-x64',sha256:esha,bytes:797_000_000});
+   assert.deepEqual(Object.keys(buildLatest({version:'0.2.22',sha256:sha,bytes:1,previous:older}).installers),['arm64'],'Another version is never carried over');
+   for(const tampered of [{...both.installers['win-x64'],url:'https://evil.test/x.exe'},{...both.installers['win-x64'],sha256:'nope'},{...both.installers['win-x64'],bytes:0},'string',null])
+    assert.deepEqual(Object.keys(buildLatest({version:'0.2.22',sha256:sha,bytes:1,previous:{...both,installers:{'win-x64':tampered}}}).installers),['arm64'],'Only an entry this publisher could have written is carried over');
+   for(const previous of [null,undefined,'x',[],{version:'0.2.22'},{version:'0.2.22',installers:'x'}])
+    assert.deepEqual(Object.keys(buildLatest({version:'0.2.22',sha256:sha,bytes:1,previous}).installers),['arm64']);
+  });
+  await check('the published listing is read without credentials and tolerates its absence',async()=>{
+   const doc={version:'0.2.21',installers:{}};
+   const serve=response=>async(url,init)=>{assert.equal(url,baseURL+'releases/latest.json');assert.equal(init.redirect,'error');return response();};
+   assert.deepEqual(await readPublished({fetcher:serve(()=>new Response(JSON.stringify(doc)))}),doc);
+   for(const status of [404,401])assert.equal(await readPublished({fetcher:serve(()=>new Response('',{status}))}),null,'Nothing published yet is not an error');
+   await assert.rejects(readPublished({fetcher:serve(()=>new Response('',{status:500}))}),/HTTP 500/);
+   await assert.rejects(readPublished({fetcher:serve(()=>new Response('not json'))}),/not valid JSON/);
+   await assert.rejects(readPublished({fetcher:serve(()=>new Response('x'.repeat(65537)))}),/too large/);
+   await assert.rejects(readPublished({fetcher:serve(()=>{throw new TypeError('fetch failed');})}),/Could not reach the release service/);
   });
   const key=installerKey('0.2.22','arm64'),bytes=1_000_000_000,std=(k,size)=>({key:k,size,storage_class:'Standard'});
   await check('storage-cap plan keeps installers immutable and retires older ones only when asked',async()=>{
@@ -37,6 +75,17 @@ async function check(name,run){await run();checks++;console.log('PASS '+name);}
    assert.throws(()=>planRelease({buckets:[{name:bucket,objects:[std('parts',CAP)]}],target:bucket,key,bytes,latestBytes:600,retirePrevious:true}),/Retire verified old assets/);
    assert.throws(()=>planRelease({buckets:[{name:bucket,objects:[{key:'x',size:1,storage_class:'InfrequentAccess'}]}],target:bucket,key,bytes,latestBytes:1}),/storage class/);
    assert.throws(()=>planRelease({buckets:[{name:'other',objects:[]}],target:bucket,key,bytes,latestBytes:1}),/does not exist/);
+  });
+  await check('retiring previous installers never removes the other platform of this version',async()=>{
+   const winKey=installerKey('0.2.22','win-x64'),old=PREFIX+'gpt-live-avatar-0.2.21-arm64.dmg',oldWin=PREFIX+'gpt-live-avatar-0.2.21-win-x64.exe';
+   const buckets=[{name:bucket,objects:[std(winKey,797_000_000),std(old,900_000_000),std(oldWin,760_000_000),std(PREFIX+'latest.json',500)]}];
+   // Publishing macOS for 0.2.22 while its Windows installer is already up.
+   const plan=planRelease({buckets,target:bucket,key,bytes,latestBytes:600,version:'0.2.22',retirePrevious:true});
+   assert.deepEqual(plan.previous.sort(),[old,oldWin].sort(),'Only older versions count as previous');
+   assert(!plan.previous.includes(winKey),'The Windows installer just published for this version is kept');
+   assert.deepEqual(plan.retire.sort(),[old,oldWin].sort(),'Both platforms of the old version are retired');
+   // Without an explicit version the key itself says which release this is.
+   assert.deepEqual(planRelease({buckets,target:bucket,key:winKey,bytes:797_000_000,latestBytes:600}).previous.sort(),[old,oldWin].sort());
   });
   await check('missing or wrongly scoped writer credentials never upload',async()=>{
    assert.equal(await createS3Writer(account,bucket,{credentialsPath:path.join(temporary,'missing.json')}),null);
@@ -109,9 +158,12 @@ async function check(name,run){await run();checks++;console.log('PASS '+name);}
    await assert.rejects(verifyLive(doc,{fetcher:live(doc,{catalogue:200})}),/rejecting unauthenticated/);
   });
   await check('argument parsing',async()=>{
-   assert.deepEqual(parseArguments([account,bucket]),{account,bucket,apply:false,retirePrevious:false,verifyLive:false,dmg:null,notes:null});
-   assert.deepEqual(parseArguments([account,bucket,'--apply','--retire-previous','--dmg','x.dmg','--notes','n.md','--verify-live']),{account,bucket,apply:true,retirePrevious:true,verifyLive:true,dmg:'x.dmg',notes:'n.md'});
+   assert.deepEqual(parseArguments([account,bucket]),{account,bucket,apply:false,retirePrevious:false,verifyLive:false,target:'arm64',installer:null,notes:null});
+   assert.deepEqual(parseArguments([account,bucket,'--apply','--retire-previous','--installer','x.dmg','--notes','n.md','--verify-live']),{account,bucket,apply:true,retirePrevious:true,verifyLive:true,target:'arm64',installer:'x.dmg',notes:'n.md'});
+   assert.equal(parseArguments([account,bucket,'--dmg','x.dmg']).installer,'x.dmg','--dmg still works');
+   assert.equal(parseArguments([account,bucket,'--target','win-x64','--installer','x.exe']).target,'win-x64');
    assert.throws(()=>parseArguments(['bad',bucket]),/Usage/);assert.throws(()=>parseArguments([account,'other']),/Usage/);assert.throws(()=>parseArguments([account,bucket,'--force']),/Usage/);
+   assert.throws(()=>parseArguments([account,bucket,'--target','linux-x64']),/Usage/);assert.throws(()=>parseArguments([account,bucket,'--target']),/Usage/);
   });
  }finally{fs.rmSync(temporary,{recursive:true,force:true});}
  console.log(`Release publisher verification: ${checks} local checks passed.`);
