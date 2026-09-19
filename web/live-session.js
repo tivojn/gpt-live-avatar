@@ -34,5 +34,5 @@ export class LiveSession extends EventTarget {
 // Read and write through to the active client: the window reads these, and QA scripts set them to stage a situation.
 for (const name of ['state', 'muted', 'suspended', 'microphone', 'remoteStream', 'generation', 'receiveOnly', 'reasoningMode', 'resumed', 'voice', 'sessionId', 'working', 'history', 'events', 'peer', '_nextEventId'])
   Object.defineProperty(LiveSession.prototype, name, { configurable: true, get() { return this.active[name]; }, set(value) { this.active[name] = value; } });
-for (const name of ['stop', 'send', 'appendInstructions', 'appendCommentary', 'userText', 'setMuted', 'suspendInput', 'stopSpeaking', 'remember', 'conversation', 'resetInputTranscript', '_onEvent', '_setState', '_emit'])
+for (const name of ['stop', 'send', 'appendInstructions', 'appendCommentary', 'userText', 'cancelDelegation', 'setMuted', 'suspendInput', 'stopSpeaking', 'remember', 'conversation', 'resetInputTranscript', '_onEvent', '_setState', '_emit'])
   LiveSession.prototype[name] = function (...args) { return this.active[name](...args); };

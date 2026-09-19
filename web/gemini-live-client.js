@@ -148,7 +148,7 @@ export class GeminiLiveClient extends LiveClient {
     const status = message.interactionStatus ?? message.interaction_status ?? content?.interactionStatus ?? content?.interaction_status;
     if (typeof status === 'string') { const working = status.toUpperCase() === 'IN_PROGRESS'; if (working !== this.working) { this.working = working; this._emit('event', { type: 'gemini.interaction', working }); } }
     for (const call of message.toolCall?.functionCalls || []) this._toolCall(call);
-    for (const id of message.toolCallCancellation?.ids || []) { if (this.calls.delete(id)) { clearTimeout(this.answers.get(id)?.timer); this.answers.delete(id); this._emit('event', { type: 'session.delegation.cancelled', delegation: { id } }); } }
+    for (const id of message.toolCallCancellation?.ids || []) { clearTimeout(this.calls.get(id)?.watchdog); if (this.calls.delete(id)) { clearTimeout(this.answers.get(id)?.timer); this.answers.delete(id); this._emit('event', { type: 'session.delegation.cancelled', delegation: { id } }); } }
     if (message.sessionResumptionUpdate) { const update = message.sessionResumptionUpdate; if (update.resumable !== false && typeof update.newHandle === 'string' && update.newHandle) this.handle = update.newHandle; }
     if (message.usageMetadata) this.usage = message.usageMetadata;
     if (message.goAway) void this._resume('go_away');
@@ -158,10 +158,21 @@ export class GeminiLiveClient extends LiveClient {
   _toolCall(call) {
     if (!call || typeof call.id !== 'string') return;
     if (call.name !== this.tool || this.receiveOnly) { this._send({ toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { error: 'This function is not available.' } }] } }); return; }
-    this.calls.set(call.id, { name: call.name, request: String(call.args?.request || '').slice(0, 2000) });
+    // Every call gets an answer, whatever happens to the work behind it: an unanswered call leaves Extended Thinking
+    // "in progress" for the rest of the session, saying she is on it and never taking another request.
+    this.calls.set(call.id, { name: call.name, request: String(call.args?.request || '').slice(0, 2000), watchdog: setTimeout(() => this._answer(call.id, { error: 'The assistant did not finish in time. Tell the user briefly, and do not claim anything was done.' }), 11 * 60 * 1000) });
     this._emit('event', { type: 'session.delegation.created', delegation: { id: call.id, target: 'client', request: this.calls.get(call.id).request } });
   }
 
+  _answer(id, response, { silent = false } = {}) {
+    const call = this.calls.get(id); if (!call) return false;
+    clearTimeout(call.watchdog); clearTimeout(this.answers.get(id)?.timer); this.answers.delete(id); this.calls.delete(id);
+    // INTERRUPT lets the standard model speak a result at once, SILENT keeps a cancellation to itself. Extended Thinking
+    // schedules its own speech and closes the socket (1007) if the field is present at all.
+    return this._send({ toolResponse: { functionResponses: [{ id, name: call.name, response, ...(this.thinking ? {} : { scheduling: silent ? 'SILENT' : 'INTERRUPT' }) }] } });
+  }
+  // The app gave up on a hand-off (the user moved on, or stopped her): close the call so Gemini is free again.
+  cancelDelegation(id) { return this._answer(id, { result: 'Cancelled by the application because the user moved on. Do not mention this; attend to what the user said last.' }, { silent: true }); }
   send() { return false; } // GPT-Live event objects have no meaning here; callers use the methods below
   _note(content) { return this._send({ realtimeInput: { text: NOTE + String(content || '').slice(0, 4000) } }); }
   userText(content) { return this._send({ realtimeInput: { text: String(content || '').slice(0, 4000) } }); } // the user's own words, typed: no application-note prefix
@@ -173,12 +184,7 @@ export class GeminiLiveClient extends LiveClient {
     if (!this.socket || this.socket.readyState !== 1) return false;
     const answer = this.answers.get(delegation_id) || { text: '', timer: 0 }; this.answers.set(delegation_id, answer);
     answer.text += String(content || ''); clearTimeout(answer.timer);
-    answer.timer = setTimeout(() => {
-      const call = this.calls.get(delegation_id); this.answers.delete(delegation_id); this.calls.delete(delegation_id);
-      // INTERRUPT lets the standard model speak the result at once. Extended Thinking schedules its own speech and closes the
-      // socket (1007, "Function response scheduling is not supported for this model") if the field is present at all.
-      if (call) this._send({ toolResponse: { functionResponses: [{ id: delegation_id, name: call.name, response: { result: answer.text.slice(0, 12000) }, ...(this.thinking ? {} : { scheduling: 'INTERRUPT' }) }] } });
-    }, 40);
+    answer.timer = setTimeout(() => this._answer(delegation_id, { result: answer.text.slice(0, 12000) }), 40);
     return true;
   }
   suspendInput(suspended) {
@@ -210,6 +216,7 @@ export class GeminiLiveClient extends LiveClient {
     ++this.generation; clearTimeout(this.startTimer);
     for (const role of ['user', 'assistant']) this._finish(role);
     for (const answer of this.answers.values()) clearTimeout(answer.timer);
+    for (const call of this.calls.values()) clearTimeout(call.watchdog);
     this.answers.clear(); this.calls.clear();
     const socket = this.socket; this.socket = null;
     if (socket) { socket.onclose = null; socket.onmessage = null; try { socket.close(1000); } catch {} }

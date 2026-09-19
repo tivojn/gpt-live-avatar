@@ -115,6 +115,43 @@ the state change, and also passes the transcript in case the handle is refused.
   Set `agentEnabled:false` in any test profile: it defaults to on and would
   send test questions to the user's real agent engine.
 
+## Action matrix (2026-09-19)
+
+`bash qa/action-matrix.sh`: every voice system against every action engine,
+with the real services and the real engines on this Mac. In a live
+conversation she is asked **aloud** (macOS text-to-speech fed in as her
+microphone) to create a text file on the Desktop and then to delete it; the
+file system decides. Final results, create / delete in seconds:
+
+| | Actions off | Codex | OpenClaw | Hermes | Grok Build | EnConvo |
+|---|---|---|---|---|---|---|
+| GPT-Live-1 | declines honestly | 19 / 48 | 16 / 30 | 15 / 20 | 19 / 31 | 13 / 15 |
+| Gemini 3.8 Live | declines honestly | 23 / 32 | 19 / 32 | 17 / 21 | 19 / 86 | 13 / 16 |
+| Extended Thinking | declines honestly | 21 / 33 | 23 / 34 | 18 / 33 | 25 / 41 | 17 / 20 |
+
+What it found, all fixed:
+
+1. **A sentence transcribed in two pieces cancelled its own task** (legacy,
+   both systems). The tail of "create a file named … avatar test dot txt"
+   arrives as a new user segment after she has handed off; `DelegateClient`
+   took every new segment for an interruption. `LiveClient` now marks a
+   segment that picks up within 2.5 s of the last one as `continues`; such a
+   segment extends the wait or sends the same hand-off again in full.
+2. **An unanswered function call froze Extended Thinking.** When the app gave
+   up on a hand-off (the user spoke again), Gemini was never told; Extended
+   Thinking keeps the session "in progress" until every call is answered, so
+   she kept saying she was on it and never took another task.
+   `cancelDelegation()` now closes the call (SILENT on the standard model),
+   and a watchdog answers any call still open after 11 minutes.
+3. **Extended Thinking claimed success with nothing connected** ("I have
+   created the file on your desktop"). With Actions off the prompt now states
+   her limits (`NO_ACTIONS`); three reruns all declined.
+4. The first OpenClaw and Hermes failures were the engines' own (model off,
+   expired login), reported honestly by her on both systems.
+
+Grok Build keeps working after the job is done (a dozen more steps), so her
+spoken confirmation comes late. That is the engine's pace.
+
 ## What the real service taught us
 
 These are not in the docs the way one would expect; each cost a failed run.

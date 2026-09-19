@@ -46,7 +46,7 @@ const pcm=hex=>Buffer.from(hex,'hex').toString('base64');
  assert.deepEqual(t.client.conversation().slice(-2),[{role:'user',text:'What is the time?'},{role:'assistant',text:'It is noon.'}]);assert.deepEqual(t.of('turn-start').map(x=>x.role),['user','assistant']);
  // ---- the user speaks over her: what is queued is not heard
  socket.server({serverContent:{outputTranscription:{text:'Let me tell you a long'}}});socket.server({serverContent:{interrupted:true}});
- assert.equal(t.audio.log.flushed,1);assert.deepEqual(t.of('transcript').at(-1),{role:'assistant',id:t.of('transcript').at(-1).id,text:'Let me tell you a long',final:true});
+ assert.equal(t.audio.log.flushed,1);{const last=t.of('transcript').at(-1);assert.deepEqual([last.role,last.text,last.final],['assistant','Let me tell you a long',true]);}
  // ---- her one function is the app's delegation
  socket.server({toolCall:{functionCalls:[{id:'call-1',name:'ask_assistant',args:{request:'What is 17 times 23?'}},{id:'call-2',name:'format_disk',args:{}}]}});
  assert.deepEqual(t.of('event').filter(e=>e.type==='session.delegation.created'),[{type:'session.delegation.created',delegation:{id:'call-1',target:'client',request:'What is 17 times 23?'}}],'announced the way GPT-Live-1 announces a delegation');
@@ -58,6 +58,10 @@ const pcm=hex=>Buffer.from(hex,'hex').toString('base64');
  socket.server({toolCall:{functionCalls:[{id:'call-3',name:'ask_assistant',args:{request:'x'}}]}});socket.server({toolCallCancellation:{ids:['call-3']}});
  assert.equal(t.client.appendCommentary('stale','call-3'),false,'a cancelled hand-off is not answered, and its result is not spoken as a note');
  // ---- notes from the app, and Stop Talking
+ // a hand-off the app gives up on is closed too, quietly: an open call would hold Gemini (Extended Thinking above all) "in progress" for good
+ socket.server({toolCall:{functionCalls:[{id:'call-5',name:'ask_assistant',args:{request:'z'}}]}});assert.equal(t.client.cancelDelegation('call-5'),true);
+ assert.deepEqual([socket.sent.at(-1).toolResponse.functionResponses[0].id,socket.sent.at(-1).toolResponse.functionResponses[0].scheduling,/Cancelled by the application/.test(socket.sent.at(-1).toolResponse.functionResponses[0].response.result)],['call-5','SILENT',true]);
+ assert.equal(t.client.cancelDelegation('call-5'),false,'once');assert.equal(t.client.appendCommentary('late','call-5'),false);
  // Extended Thinking schedules its own speech: Google closes the socket (1007) if a scheduling field is sent to it
  t.client.thinking=true;socket.server({toolCall:{functionCalls:[{id:'call-4',name:'ask_assistant',args:{request:'y'}}]}});t.client.appendCommentary('done','call-4');await wait(70);
  assert.deepEqual(socket.sent.at(-1),{toolResponse:{functionResponses:[{id:'call-4',name:'ask_assistant',response:{result:'done'}}]}});t.client.thinking=false;

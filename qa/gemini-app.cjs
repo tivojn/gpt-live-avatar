@@ -119,7 +119,7 @@ server.listen(0,'127.0.0.1',()=>{
   // ---- "Gemini reasoning": Gemini alone. No function is declared, so nothing can be handed to any other model.
   await js(solo,"await gla.setSettings({reasoningMode:'managed'})");await wait(300);const sockets=seen.sockets.length;
   await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='connected'"),'connected alone');const alone=await until(()=>seen.sockets.length>sockets&&seen.sockets.at(-1).messages[0]?.setup,'its setup');
-  assert(!('tools' in alone),'no function in Gemini reasoning mode');assert(!/Hand-off policy|ask_assistant/.test(alone.systemInstruction.parts[0].text),'and no hand-off wording');assert(!('tools' in seen.http.findLast(r=>r.url==='/v1beta/auth_tokens').body.bidiGenerateContentSetup));
+  assert(!('tools' in alone),'no function in Gemini reasoning mode');assert.match(alone.systemInstruction.parts[0].text,/Capability limits: you cannot do anything on the user’s computer/,'and she is told she cannot act, so she does not claim to');assert(!/Hand-off policy|ask_assistant/.test(alone.systemInstruction.parts[0].text),'and no hand-off wording');assert(!('tools' in seen.http.findLast(r=>r.url==='/v1beta/auth_tokens').body.bidiGenerateContentSetup));
   await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='idle'"),'ended alone');
   // ---- back to GPT-Live-1: the old path, asking for its own key
   await js(solo,"await gla.setSettings({liveProvider:'openai'})");await until(()=>js(solo,"return /Add your OpenAI key/.test(document.querySelector('#status').textContent)||true"),'provider switched');

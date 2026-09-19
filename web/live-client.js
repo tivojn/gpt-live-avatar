@@ -119,7 +119,12 @@ export class LiveClient extends EventTarget {
     const gap = seg && Number.isFinite(event.start_ms) && Number.isFinite(seg.endMs) ? event.start_ms - seg.endMs : 0;
     if (seg && (gap > 800 || now - seg.updatedAt > 2000)) { this._finish(role); seg = null; }
     if (!seg) {
-      seg = this._segments[role] = { id: `${role}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, text: '', startMs: event.start_ms, endMs: event.end_ms, updatedAt: now, timer: 0 };
+      // A pause inside one sentence ("a file named … avatar test") splits it into two segments. `continues` says this
+      // one picks up within 2.5 s of where the last one of the same speaker stopped, on the session clock when there is
+      // one: the same utterance going on, not a new request. A hand-off in flight must not be cancelled by it.
+      const prior = this._lastSegment?.[role];
+      const continues = Boolean(prior) && (Number.isFinite(event.start_ms) && Number.isFinite(prior.endMs) ? event.start_ms - prior.endMs < 2500 : now - prior.at < 2500);
+      seg = this._segments[role] = { id: `${role}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, text: '', startMs: event.start_ms, endMs: event.end_ms, updatedAt: now, timer: 0, continues };
       this._emit('turn-start', { role, id: seg.id });
     }
     seg.text += event.delta || '';
@@ -127,15 +132,16 @@ export class LiveClient extends EventTarget {
     seg.updatedAt = now;
     clearTimeout(seg.timer);
     seg.timer = setTimeout(() => this._finish(role), 1200);
-    this._emit('transcript', { role, id: seg.id, text: seg.text, final: false });
+    this._emit('transcript', { role, id: seg.id, text: seg.text, final: false, continues: seg.continues });
   }
   _finish(role) {
     const seg = this._segments[role];
     if (!seg) return;
     clearTimeout(seg.timer);
     this._segments[role] = null;
+    (this._lastSegment ||= {})[role] = { endMs: seg.endMs, at: seg.updatedAt };
     this.remember(role, seg.text.trim());
-    this._emit('transcript', { role, id: seg.id, text: seg.text.trim(), final: true });
+    this._emit('transcript', { role, id: seg.id, text: seg.text.trim(), final: true, continues: seg.continues });
   }
   resetInputTranscript() {
     clearTimeout(this._segments.user?.timer);this._segments.user=null;
@@ -162,6 +168,7 @@ export class LiveClient extends EventTarget {
   }
   appendInstructions(content) { return this.send({ type: 'session.instructions.append', content, delegation_id: null }); }
   appendCommentary(content, delegation_id = null) { return this.send({ type: 'session.commentary.append', content, delegation_id }); }
+  cancelDelegation() { return false; } // GPT-Live-1 needs no answer for a delegation the app gave up on
   // Something the user typed instead of saying.
   userText(content) { return this.appendCommentary(content); }
   setMuted(muted) {

@@ -48,6 +48,9 @@ function handOffPolicy({agent=false,engine='',thinking=false,knowledge=true}={})
     `Do not call it when:\n- It is a greeting, small talk, a feeling, a compliment or something you can answer from the conversation${thinking||!knowledge?', or something you can reason out yourself':''}.\n- The user asks for an animation, pose, one-shot dance, gesture or movement (excluding the dance-along music control): answer yourself with the affirmative intention described above.`,
     'Before calling it, say one short natural line such as “Let me check.” Then wait: never guess the result, never claim a task is done before the result says so, and when the result arrives give it in your own words, briefly.'].join('\n\n');
 }
+// Said whenever no action engine is connected. Without it Extended Thinking answered "I have created the file on your
+// desktop" to a spoken request, with nothing behind it (qa/action-matrix-app.cjs, 2026-09-19); the other models declined.
+const NO_ACTIONS='Capability limits: you cannot do anything on the user’s computer or online. No files or folders, no apps, no shell, no browser, no messages, reminders or purchases, and you cannot look at the screen or the desktop. Never say or imply that you did, are doing or will do such a task, and never describe its result. Say plainly that you cannot do it from here, and that Actions can be switched on in Settings so an agent can.';
 function historyText(history){
   const lines=[];let bytes=0;
   for(const item of (Array.isArray(history)?history:[]).slice(-48).reverse()){
@@ -119,4 +122,4 @@ async function createSession({key,config,instructions,history,delegate,resumeHan
     urls:['v1beta','v1alpha'].map(version=>base.replace('{version}',version)+'?access_token='+encodeURIComponent(token)).filter((url,i,all)=>all.indexOf(url)===i),
     setup}; // the socket still needs a first setup message; the sealed one in the token is what counts
 }
-module.exports={MODELS,VOICES,CHARACTER_VOICES,DEFAULT_MODEL,DEFAULT_VOICE,THINKING_LEVELS,TOOL,validKey,choice,handOffPolicy,historyText,buildSetup,availableModels,createToken,createSession};
+module.exports={MODELS,VOICES,CHARACTER_VOICES,NO_ACTIONS,DEFAULT_MODEL,DEFAULT_VOICE,THINKING_LEVELS,TOOL,validKey,choice,handOffPolicy,historyText,buildSetup,availableModels,createToken,createSession};

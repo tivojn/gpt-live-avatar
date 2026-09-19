@@ -88,6 +88,19 @@ const checks=[];
  const bridge=new context.Bridge(live,{answer:async req=>{requests.push(req);return new Promise(r=>finish=r);},cancel:async()=>{}});
  live.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'delegate-1'}});live.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'delegate-1'}});await wait(420);assert.equal(requests.length,1);assert.equal(requests[0].history[0].text,'Unfinished question segment');finish({ok:true,text:'Answer.'});await wait(10);assert.equal(live.sent[0].id,'delegate-1');
  live.emit('transcript',{role:'user',id:'turn-1'});live.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'delegate-2'}});await wait(500);live.emit('transcript',{role:'user',id:'turn-2'});finish({ok:true,text:'Stale.'});await wait(10);assert.equal(live.sent.length,1);
+ // A sentence transcribed in two pieces is one request: the tail neither cancels the hand-off nor is left out of it.
+ {const live2=new Live(),sent=[],cancelled=[];let said='Create a file named';live2.conversation=()=>[{role:'user',text:said}];const waiting=[];
+  new context.Bridge(live2,{answer:async req=>{sent.push(req.history[0].text);return new Promise(r=>waiting.push(r));},cancel:async id=>{cancelled.push(id);}});
+  live2.emit('transcript',{role:'user',id:'u1',final:true});live2.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'d-tail'}});await wait(450);assert.deepEqual(sent,['Create a file named'],'sent with what had been heard');
+  said='Create a file named avatar test dot txt';live2.emit('transcript',{role:'user',id:'u2',continues:true});await wait(450);
+  assert.deepEqual(sent,['Create a file named','Create a file named avatar test dot txt'],'the tail sends the same hand-off again, in full');assert.deepEqual(cancelled,['d-tail'],'and withdraws the half one');
+  waiting[0]({ok:true,text:'Half answer.'});await wait(10);assert.equal(live2.sent.length,0,'the superseded attempt is ignored');waiting[1]({ok:true,text:'Done.'});await wait(10);assert.deepEqual(live2.sent,[{content:'Done.',id:'d-tail'}]);
+  // …while a segment that does not continue the last one is still an interruption
+  const closed=[];live2.cancelDelegation=id=>closed.push(id);
+  live2.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'d-cut'}});await wait(450);live2.emit('transcript',{role:'user',id:'u3',continues:false});waiting[2]({ok:true,text:'Stale.'});await wait(10);assert.equal(live2.sent.length,1);assert.deepEqual(cancelled,['d-tail','d-cut']);assert.deepEqual(closed,['d-cut'],'and the voice model is told its hand-off is closed');
+  // before it has been sent, a tail only extends the wait
+  const live3=new Live(),sent3=[];let said3='List';live3.conversation=()=>[{role:'user',text:said3}];new context.Bridge(live3,{answer:async req=>{sent3.push(req.history[0].text);return {ok:true,text:'ok'};},cancel:async()=>{}});
+  live3.emit('transcript',{role:'user',id:'a1',final:true});live3.emit('event',{type:'session.delegation.created',delegation:{target:'client',id:'d-wait'}});await wait(200);said3='List my desktop folder';live3.emit('transcript',{role:'user',id:'a2',continues:true});await wait(600);assert.deepEqual(sent3,['List my desktop folder'],'one request, with the whole sentence');}
  live.emit('state',{state:'idle'});const chinese='你好🙂'.repeat(700);const chunks=context.chunks(chinese);assert.equal(chunks.join(''),chinese);assert(chunks.every(s=>Buffer.byteLength(s)<=400));
  auth.close();checks.push('Real delegation ID, unfinished transcript, duplicate suppression, interrupted answers and multilingual append limits');
  fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({checks},null,2));console.log(checks.join('\n'));
