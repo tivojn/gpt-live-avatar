@@ -773,7 +773,7 @@ agentUI=installAgentUI({api:gla.agent,name:currentCharacter,onStatus:taskStatus,
  throw Error('Unknown avatar action.');
 }});
 
-const preview = new VoicePreview({ createSession: (sdp, options) => gla.createLiveSession(sdp, options), live, audio,
+const preview = new VoicePreview({ provider: () => settings.liveProvider, createSession: (sdp, options) => gla.createLiveSession(sdp, options), live, audio,
   notify: state => { gla.reportVoicePreview(state); if (state.error) toast(state.error, 6000); else if (state.state !== 'idle') toast(`${state.state === 'connecting' ? 'Loading' : 'Playing'} ${state.voice} voice preview…`, 3000); } });
 addEventListener('pagehide', () => preview.stop());
 window.gla_live = live; // debug handle
@@ -969,7 +969,7 @@ gla.onMenuAction(id => {
   else if (id === 'steer') agentUI.open(currentCharacter());
   else if (id.startsWith('avatar:')) void gla.selectAvatar(id.slice(7));
   else if (id.startsWith('voice-preview:')) { const voice = id.slice(14); if (voice) void preview.start(voice); else preview.stop(); }
-  else if (id.startsWith('voice:')) void gla.setSettings({ voice: id.slice(6) });
+  else if (id.startsWith('voice:')) void gla.setSettings({ characterVoice: id.slice(6) }); // a voice of the live voice system in use, kept per character
   else if (id.startsWith('bubble:')) gla.setSettings({ bubbleMode: id.slice(7), bubble: id.slice(7) !== 'off' });
   else if (id.startsWith('motion:')) void performAction('clip:' + id.slice(7)).catch(e => toast(e.message));
   else if (id.startsWith('pose:') && avatar && avatar.options) { avatar.motion && avatar.motion.stop(); avatar.options.select({ ...avatar.options.selection, body: id.slice(5), hands: undefined, leftHand: undefined, rightHand: undefined }); wake(); }

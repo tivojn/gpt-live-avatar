@@ -1,32 +1,41 @@
 import { LiveClient } from '/live-client.js';
+import { GeminiLiveClient } from '/gemini-live-client.js';
 
 export class VoicePreview {
-  constructor({ createSession, live, audio, notify }) {
-    this.live = live; this.audio = audio; this.notify = notify;
+  // provider(): 'openai' or 'gemini', read when a preview starts: a voice is sampled on the live voice system it belongs to.
+  constructor({ createSession, live, audio, notify, provider = () => 'openai' }) {
+    this.live = live; this.audio = audio; this.notify = notify; this.provider = provider;
     this.sample = new Audio(); this.sample.autoplay = true;
-    this.client = new LiveClient({ createSession }); this.voice = ''; this.timer = 0;
-    this.client.addEventListener('remote-track', ({ detail }) => {
+    this.clients = { openai: new LiveClient({ createSession }), gemini: new GeminiLiveClient({ createSession }) };
+    this.client = this.clients.openai; this.voice = ''; this.timer = 0;
+    for (const client of Object.values(this.clients)) this.wire(client);
+  }
+  wire(client) {
+    const mine = handler => event => { if (client === this.client) handler(event); }; // only the client in use speaks for the preview
+    client.addEventListener('remote-track', mine(({ detail }) => {
       this.sample.srcObject = detail.stream;
       this.sample.play().catch(() => this.fail('Voice preview could not play. Please try again.'));
-    });
-    this.client.addEventListener('state', ({ detail }) => {
+    }));
+    client.addEventListener('state', mine(({ detail }) => {
       if (detail.state === 'idle') { this.cleanup(); return; }
       this.notify({ state: detail.state, voice: this.voice });
       if (detail.state === 'connected') {
-        this.client.appendCommentary('Read the short voice sample now, then remain silent.');
+        // GPT-Live takes this as commentary; Gemini needs someone to ask, so it goes as a typed request there.
+        if (client === this.clients.gemini) client.userText('Please say your short voice sample now.'); else client.appendCommentary('Read the short voice sample now, then remain silent.');
         this.timer = setTimeout(() => this.stop(), 12000);
       }
-    });
-    this.client.addEventListener('transcript', ({ detail }) => {
+    }));
+    client.addEventListener('transcript', mine(({ detail }) => {
       if (detail.role === 'assistant' && detail.final) {
         clearTimeout(this.finishTimer);
         this.finishTimer = setTimeout(() => this.stop(), 2200);
       } else if (detail.role === 'assistant') clearTimeout(this.finishTimer);
-    });
-    this.client.addEventListener('error', ({ detail }) => this.fail(detail.message));
+    }));
+    client.addEventListener('error', mine(({ detail }) => this.fail(detail.message)));
   }
   async start(voice) {
     this.stop();
+    this.client = this.clients[this.provider() === 'gemini' ? 'gemini' : 'openai'];
     this.voice = voice;
     this.error = '';
     this.priorAudioMuted = this.audio.muted;

@@ -54,7 +54,7 @@ const avatarWindow = { isDestroyed: () => false, webContents: { send: (...args) 
 const avatarMenu = require(path.join(root, 'electron/avatar-menu.cjs'));
 const soloContext = { ...avatarMenu, avatarWindow, Menu: { buildFromTemplate: template => ({ popup: () => { built = template; } }) },
   config: { agentEnabled: false }, avatarInfo: () => ({ name: 'Sarah' }), avatarReasoningMenu: () => ({ label: 'Reasoning' }), avatarPermissionsMenu: () => ({ label: 'Permissions' }),
-  assets: null, VOICES: [], voicePreview: { state: 'idle' }, avatarShortcuts: null, DEFAULT_SHORTCUTS: {}, appInfo: { menu: () => [] }, app: { name: 'Test' },
+  assets: null, VOICES: [], characterVoices: () => ({ system: 'openai', systemName: 'GPT-Live-1', current: 'marin', ready: true, list: [{ id: 'marin', label: 'Marin · default' }] }), voicePreview: { state: 'idle' }, avatarShortcuts: null, DEFAULT_SHORTCUTS: {}, appInfo: { menu: () => [] }, app: { name: 'Test' },
   openSettingsWindow() {}, requestAvatarRecovery() {}, requestAvatarCloseup() {}, groupManager: { open() {} } };
 vm.runInNewContext(mainSource.slice(mainSource.indexOf('function showAvatarMenu(state) {'), mainSource.indexOf('// A live session may only run while she is on screen.')), soloContext);
 soloContext.showAvatarMenu({ character: 'sarah', music: session });

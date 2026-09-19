@@ -57,6 +57,7 @@ app.whenReady().then(async()=>{const report=[];try{
   await js("/* same path the app uses for a verified result */ 0");
   r.events=[...new Set((await js('return gla_debug().events.map(e=>e[1])')).filter(x=>/gemini\.(closed|resum|interaction|interrupted)|delegation|error/.test(x)))];
   r.noteReadAloud=/application note/i.test(r.plain.text+' '+r.handOff.text);
+  r.usage=await js('return gla_live.active.usage');r.sessionSeconds=Math.round((Date.now()-t0)/1000); // Google's own token count for the session so far
   await js('gla_call()');await until(()=>js("return gla_debug().state==='idle'"),'ended');await wait(800);
  }
  console.log(JSON.stringify({report,consoleErrors:errors.filter(e=>!/Autofill|DevTools/.test(e)).slice(0,5)},null,1));

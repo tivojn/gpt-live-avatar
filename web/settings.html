@@ -65,7 +65,7 @@
 <nav aria-label="Settings">
   <div class="app">GPT-Live Avatar</div>
   <div role="tablist" aria-orientation="vertical" id="tabs">
-    <button class="tab" role="tab" id="tab-voice" aria-controls="pane-voice" data-pane="voice">Voice<span class="dot" id="dot-voice"></span></button>
+    <button class="tab" role="tab" id="tab-voice" aria-controls="pane-voice" data-pane="voice">Live Voice System<span class="dot" id="dot-voice"></span></button>
     <button class="tab" role="tab" id="tab-character" aria-controls="pane-character" data-pane="character">Character<span class="dot" id="dot-character"></span></button>
     <button class="tab" role="tab" id="tab-appearance" aria-controls="pane-appearance" data-pane="appearance">Appearance<span class="dot" id="dot-appearance"></span></button>
     <button class="tab" role="tab" id="tab-reasoning" aria-controls="pane-reasoning" data-pane="reasoning">Reasoning<span class="dot" id="dot-reasoning"></span></button>
@@ -78,9 +78,9 @@
 </nav>
 <main>
   <div class="pane" id="pane-voice" role="tabpanel" aria-labelledby="tab-voice">
-    <header><h1>Voice</h1><span class="chip" id="chip-voice"></span></header>
+    <header><h1>Live Voice System</h1><span class="chip" id="chip-voice"></span></header>
     <section>
-      <label for="liveProvider">Voice model</label>
+      <label for="liveProvider">Live voice system</label>
       <select id="liveProvider"><option value="openai">GPT-Live-1 · OpenAI</option><option value="gemini">Gemini 3.8 Live · Google</option></select>
       <p class="note" id="liveProviderNote"></p>
     </section>
@@ -96,11 +96,9 @@
       <select id="geminiModel"></select>
       <div id="geminiThinkingRow"><label for="geminiThinkingLevel">Thinking</label>
       <select id="geminiThinkingLevel"><option value="low">Low · quickest</option><option value="medium">Medium</option><option value="high">High · most careful</option></select></div>
-      <label for="geminiVoice">Gemini voice</label>
-      <select id="geminiVoice"></select>
-      <p class="note">Your avatar talks with Gemini Live directly from this Mac; the key stays encrypted here. Extended Thinking reasons in the background and may say a short line while it works. Reasoning and action engines work as with GPT-Live-1. Avatar Show voices and voice previews still use GPT-Live-1 for now.</p>
+      <p class="note">Your avatar talks with Gemini Live directly from this Mac; the key stays encrypted here. Extended Thinking reasons in the background and may say a short line while it works. Each character’s voice is chosen under Character. Avatar Show still speaks through its own voices for now.</p>
     </section>
-    <section>
+    <section id="openaiSection">
       <h2>OpenAI API key</h2>
       <div class="row">
         <input id="key" type="password" aria-label="OpenAI API key" placeholder="sk-… (stored encrypted, never shown again)" autocomplete="off">
@@ -111,10 +109,6 @@
       <p class="note">Your avatar talks with GPT-Live-1 directly from this Mac. The key stays encrypted here.</p>
     </section>
     <section>
-      <label for="voice">Voice</label>
-      <div class="row"><select id="voice"></select><button id="previewVoice" type="button">Preview</button><button id="useVoice" type="button" class="pri">Use voice</button></div>
-      <p class="state" id="voiceState" aria-live="polite"></p>
-      <p class="note">Listen first. Using a new voice briefly reconnects a live conversation and keeps the recent transcript.</p>
       <label><input id="conversationSounds" type="checkbox"> Conversation sounds</label>
       <p class="note">Soft cues when connecting, ready and ending, in the solo window and in Avatar Show.</p>
     </section>
@@ -123,9 +117,12 @@
   <div class="pane" id="pane-character" role="tabpanel" aria-labelledby="tab-character" hidden>
     <header><h1>Character</h1><span class="chip" id="chip-character"></span></header>
     <section>
-      <h2>Avatar</h2>
+      <h2>Avatar and voice</h2>
       <div class="row"><select id="avatarSelect" aria-label="Avatar"></select><button id="refreshAssets" type="button" title="Check the cloud catalogue for new avatars and packages">Check cloud</button></div>
       <p class="state" id="avatarState">Checking…</p>
+      <label for="voice" id="voiceLabel">Voice</label>
+      <div class="row"><select id="voice"></select><button id="previewVoice" type="button">Preview</button><button id="useVoice" type="button" class="pri">Use voice</button></div>
+      <p class="state" id="voiceState" aria-live="polite"></p>
       <details id="tiersBox"><summary id="tiersSummary" style="cursor:pointer;color:var(--dim);font-size:12px;margin-top:8px">Installed packs</summary><div class="tiers" id="tiers"></div></details>
       <details class="advanced"><summary>Advanced: use an OpenClam avatar package folder</summary>
         <div class="row" style="margin-top:6px"><input id="avatarDir" type="text" readonly aria-label="Avatar package folder" placeholder="Using the built-in package"><button id="chooseAvatar" type="button">Choose folder…</button><button id="useBundled" type="button">Use built-in</button></div>
@@ -164,8 +161,9 @@
     <header><h1>Reasoning</h1><span class="chip" id="chip-reasoning"></span></header>
     <section>
       <label for="reasoningMode">Mode</label>
-      <select id="reasoningMode"><option value="managed">GPT-Live reasoning</option><option value="delegate">Delegate mode</option></select>
-      <p class="note">GPT-Live answers most things itself. Delegate mode sends harder questions to the provider you choose. Changing modes briefly reconnects a live conversation.</p>
+      <select id="reasoningMode"><option value="managed" id="reasoningManaged">GPT-Live reasoning</option><option value="delegate">Delegate mode</option></select>
+      <p class="note" id="reasoningNote">GPT-Live answers most things itself. Delegate mode sends harder questions to the provider you choose. Changing modes briefly reconnects a live conversation.</p>
+      <p class="note" id="geminiReasoningNote" hidden></p>
       <div id="managedBackend">
       <label for="backend">Model for harder questions</label>
       <div class="row"><select id="backend"></select><button id="refreshModels" type="button">Refresh list</button></div>
@@ -297,26 +295,29 @@
   const runtimeConnections={}, runtimeNames={openclaw:'OpenClaw',hermes:'Hermes',grok:'Grok Build',enconvo:'EnConvo'};
   const localDelegate=s=>s.reasoningMode==='delegate'&&s.delegate.auth==='local_runtime';
   const localEngine=()=>SETTINGS.effectiveActionEngine||SETTINGS.agentEngine||'codex';
-  const voiceName = voice => voice[0].toUpperCase() + voice.slice(1);
+  const voiceName = voice => voice ? voice[0].toUpperCase() + voice.slice(1) : '';
   const displayText = text => shortenHomePaths(text, SETTINGS?.userHome);
   const escapeText = text => String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const setState = (el, text, cls = '') => { el.textContent = displayText(text); el.className = 'state ' + cls; };
 
   function render(settings) {
-    const previousVoice = SETTINGS?.voice; SETTINGS = settings;
+    const previousVoice = SETTINGS?.characterVoices && SETTINGS.characterVoices.system + ':' + SETTINGS.characterVoices.current; SETTINGS = settings;
     voicePreview = settings.voicePreview || voicePreview;
-    if (!voiceDraft || previousVoice !== settings.voice) voiceDraft = settings.voice;
-    $('#voice').innerHTML = settings.voices.map(v => `<option value="${v}" ${v === voiceDraft ? 'selected' : ''}>${v[0].toUpperCase() + v.slice(1)}${v === 'marin' ? ' · default' : ''}</option>`).join('');
+    // The character's voice is one of the live voice system's own: GPT-Live-1's or Gemini's, each remembered per character.
+    const voices = settings.characterVoices;
+    if (!voiceDraft || previousVoice !== voices.system + ':' + voices.current || !voices.list.some(v => v.id === voiceDraft)) voiceDraft = voices.current;
+    $('#voice').replaceChildren(...voices.list.map(v => { const o = document.createElement('option'); o.value = v.id; o.textContent = v.label; o.selected = v.id === voiceDraft; return o; }));
+    $('#voiceLabel').textContent = (settings.avatar?.name || 'Her') + '’s ' + voices.systemName + ' voice';
+    $('#voiceLabel').title = 'These are the voices of ' + voices.systemName + ', the live voice system in use (change it under Live Voice System). Each character keeps her own. Using a new voice briefly reconnects a live conversation and keeps the recent transcript.';
     updateVoiceState();
     renderShortcuts();
     $('#conversationSounds').checked=settings.conversationSounds!==false;
     $('#wardrobeFlourish').checked=settings.wardrobeFlourish!==false;
     {const g=settings.gemini||{},on=settings.liveProvider==='gemini';
-     $('#liveProvider').value=on?'gemini':'openai';$('#geminiSection').hidden=!on;
-     $('#liveProviderNote').textContent=on?'She speaks and listens with Gemini Live. Changing the voice model briefly reconnects a live conversation and keeps the recent transcript.':'She speaks and listens with GPT-Live-1. Choose Gemini 3.8 Live to use Google’s voice model instead, including Extended Thinking.';
+     $('#liveProvider').value=on?'gemini':'openai';$('#geminiSection').hidden=!on;$('#openaiSection').hidden=on; // only the chosen system's settings are on the page
+     $('#liveProviderNote').textContent='The system she speaks and listens with. Changing it briefly reconnects a live conversation and keeps the recent transcript; each character’s voice is chosen under Character.';
      const fill=(select,items,label)=>select.replaceChildren(...items.map(item=>{const o=document.createElement('option');o.value=item.id;o.textContent=label(item);return o;}));
      fill($('#geminiModel'),g.models||[],m=>m.label);$('#geminiModel').value=g.model||'';
-     fill($('#geminiVoice'),g.voices||[],v=>v.id+' · '+v.style);$('#geminiVoice').value=g.voice||'';
      $('#geminiThinkingLevel').value=g.thinkingLevel||'low';$('#geminiThinkingRow').hidden=!g.thinking;
      if(!$('#geminiKeyState').dataset.busy)setState($('#geminiKeyState'),settings.hasGeminiKey?'Gemini key stored on this Mac.':'No Gemini key yet. Paste one and validate.',settings.hasGeminiKey?'ok':'bad');}
     {const select=$('#showPlaywright'),names={'gpt-5.6-luna':'GPT-5.6 Luna · fastest','gpt-5.6-terra':'GPT-5.6 Terra','gpt-5.6-sol':'GPT-5.6 Sol','gpt-6-astra':'GPT-6 Astra · most capable, slower'};
@@ -358,11 +359,11 @@
   function renderStatus(s){
     const set=(pane,text,cls='')=>{const chip=$('#chip-'+pane);if(chip){chip.textContent=displayText(text);chip.className='chip '+cls;}$('#dot-'+pane).className='dot '+(cls||'off');};
     const a=s.avatar||{},instinct=s.instinct||{},engine=localEngine(),engineName=engine==='codex'?'Codex':runtimeNames[engine]||engine;
-    if(s.liveProvider==='gemini')set('voice',s.hasGeminiKey?(s.gemini?.models||[]).find(m=>m.id===s.gemini.model)?.label+' · '+s.gemini.voice:'Needs a Gemini API key',s.hasGeminiKey?'ok':'bad');
-    else set('voice',s.hasKey?'Connected · '+voiceName(s.voice||'marin'):'Needs an API key',s.hasKey?'ok':'bad');
-    set('character',a.ok&&!a.fallbackFor?a.name+' · '+a.clips+' motions':a.fallbackFor?a.fallbackFor+' is not downloaded':(a.problem||'No avatar'),a.ok&&!a.fallbackFor?'ok':'bad');
+    if(s.liveProvider==='gemini')set('voice',s.hasGeminiKey?(s.gemini?.models||[]).find(m=>m.id===s.gemini.model)?.label||'Gemini':'Needs a Gemini API key',s.hasGeminiKey?'ok':'bad');
+    else set('voice',s.hasKey?'GPT-Live-1 · connected':'Needs an OpenAI API key',s.hasKey?'ok':'bad');
+    set('character',a.ok&&!a.fallbackFor?a.name+' · '+voiceName(s.characterVoices?.current||'')+' · '+a.clips+' motions':a.fallbackFor?a.fallbackFor+' is not downloaded':(a.problem||'No avatar'),a.ok&&!a.fallbackFor?'ok':'bad');
     set('appearance',({friendly:'Resource friendly',balanced:'Balanced',best:'Best quality'})[s.quality]||'');
-    set('reasoning',s.reasoningMode==='delegate'?'Delegate · '+({openai:'OpenAI',xai:'xAI',...runtimeNames})[s.delegate.provider]+(s.delegate.model?' · '+s.delegate.model:''):'GPT-Live · '+(s.backendModel||'default model'),'ok');
+    set('reasoning',s.reasoningMode==='delegate'?'Delegate · '+({openai:'OpenAI',xai:'xAI',...runtimeNames})[s.delegate.provider]+(s.delegate.model?' · '+s.delegate.model:''):(s.liveProvider==='gemini'?'Gemini · '+((s.gemini?.models||[]).find(m=>m.id===s.gemini?.model)?.thinking?'Extended Thinking · '+(s.gemini.thinkingLevel||'low'):'built-in'):'GPT-Live · '+(s.backendModel||'default model')),'ok');
     set('actions',s.agentEnabled===true?'On · '+engineName:'Off',s.agentEnabled===true?'ok':'');
     set('instinct',!instinct.hasKey?'Off · built-in rules':instinct.state==='bad-key'?'Key rejected':instinct.enabled===false?'Switched off':'On'+(instinct.lastLatencyMs?' · '+instinct.lastLatencyMs+' ms':''),instinct.state==='bad-key'?'bad':instinct.hasKey&&instinct.enabled!==false?'ok':'');
     const bound=['openclaw','hermes','enconvo'].includes(engine),assigned=bound?(s.avatars||[]).filter(c=>s.avatarAgentBindings?.[c.slug]?.[engine]).length:0;
@@ -378,7 +379,14 @@
   }
   function renderDelegate(s) {
     const d=s.delegate,local=d.auth==='local_runtime',a=d.accounts[d.provider]||{},oauth=d.auth==='oauth2',codex=d.auth==='codex_app_server',waiting=['starting','waiting'].includes(a.state);
-    $('#reasoningMode').value=s.reasoningMode;$('#delegateOptions').hidden=s.reasoningMode!=='delegate';$('#managedBackend').hidden=s.reasoningMode==='delegate';
+    // The built-in mode belongs to the live voice system: GPT-Live-1 hands harder questions to an OpenAI model on OpenAI's side;
+    // Gemini reasons by itself (Extended Thinking is the model for that) and nothing else is involved.
+    const gem=s.liveProvider==='gemini',gemModel=(s.gemini?.models||[]).find(m=>m.id===s.gemini?.model);
+    $('#reasoningManaged').textContent=gem?'Gemini reasoning':'GPT-Live reasoning';
+    $('#reasoningNote').textContent=gem?'Gemini answers everything itself, with no other model involved. Delegate mode sends harder questions to the provider you choose. Changing modes briefly reconnects a live conversation.':'GPT-Live answers most things itself. Delegate mode sends harder questions to the provider you choose. Changing modes briefly reconnects a live conversation.';
+    $('#geminiReasoningNote').hidden=!gem||s.reasoningMode==='delegate';
+    $('#geminiReasoningNote').textContent=gemModel?.thinking?'Extended Thinking is on ('+(s.gemini.thinkingLevel||'low')+'): she reasons in the background before answering. Change the level under Live Voice System.':'For harder questions choose Gemini 3.8 Live · Extended Thinking under Live Voice System: it reasons in the background before answering.';
+    $('#reasoningMode').value=s.reasoningMode;$('#delegateOptions').hidden=s.reasoningMode!=='delegate';$('#managedBackend').hidden=gem||s.reasoningMode==='delegate';
     $('#delegateProvider').value=d.provider;for(const option of $('#delegateProvider').options)if(runtimeNames[option.value])option.disabled=s.installedEngines?.[option.value]===false;
     $('#delegateAuth').replaceChildren(new Option('API key','api_key'),new Option('Account sign-in · OAuth2','oauth2'),...(d.provider==='openai'?[new Option('Codex App Server','codex_app_server')]:[]));if(local)$('#delegateAuth').replaceChildren(new Option('Existing agent connection','local_runtime'));$('#delegateAuth').disabled=local;$('#delegateAuth').value=d.auth;$('#delegateCodex').hidden=!codex;$('#delegateRuntime').hidden=!local;$('#delegateModelControls').hidden=local&&d.provider==='openclaw';
     $('#openaiDelegateKey').hidden=codex||oauth||d.provider!=='openai';$('#xaiDelegateKey').hidden=codex||oauth||d.provider!=='xai';$('#delegateLogin').hidden=!oauth;
@@ -556,7 +564,7 @@
   $('#conversationSounds').onchange=()=>save({conversationSounds:$('#conversationSounds').checked});
   $('#wardrobeFlourish').onchange=()=>save({wardrobeFlourish:$('#wardrobeFlourish').checked});
   $('#liveProvider').onchange=()=>save({liveProvider:$('#liveProvider').value});
-  for(const id of ['geminiModel','geminiVoice','geminiThinkingLevel'])$('#'+id).onchange=()=>save({[id]:$('#'+id).value});
+  for(const id of ['geminiModel','geminiThinkingLevel'])$('#'+id).onchange=()=>save({[id]:$('#'+id).value});
   $('#saveGeminiKey').onclick=async()=>{
     const key=$('#geminiKey').value.trim();if(!key)return;
     const state=$('#geminiKeyState');state.dataset.busy='1';setState(state,'Validating with Google…');
@@ -587,15 +595,16 @@
   $('#testDelegate').onclick=async()=>{const route=JSON.stringify(SETTINGS.delegate);$('#testDelegate').disabled=true;setState($('#delegateTestState'),'Asking the selected model for a short reply…');try{const r=await gla.delegate.test();if(route!==JSON.stringify(SETTINGS.delegate)){setState($('#delegateTestState'),'Selection changed. Test the new selection.');return;}setState($('#delegateTestState'),r.ok?`${r.model}: ${r.text}`:r.error,r.ok?'ok':'bad');}finally{$('#testDelegate').disabled=false;}};
   $('#backend').onchange = () => save({ backendModel: $('#backend').value });
   function updateVoiceState() {
-    $('#useVoice').disabled = voiceDraft === SETTINGS?.voice;
+    const voices = SETTINGS?.characterVoices || { current: '', ready: false, list: [] };
+    $('#useVoice').disabled = voiceDraft === voices.current;
     $('#previewVoice').textContent = voicePreview.state !== 'idle' ? 'Stop preview' : 'Preview';
-    $('#previewVoice').disabled = !SETTINGS?.hasKey;
-    const status = voicePreview.error || (voicePreview.state !== 'idle' ? `${voicePreview.state === 'connecting' ? 'Loading' : 'Playing'} ${voiceName(voicePreview.voice)}…` : `Current voice: ${voiceName(SETTINGS?.voice || 'marin')}.`);
+    $('#previewVoice').disabled = !voices.ready;
+    const status = voicePreview.error || (voicePreview.state !== 'idle' ? `${voicePreview.state === 'connecting' ? 'Loading' : 'Playing'} ${voiceName(voicePreview.voice)}…` : voices.ready ? `Current voice: ${voiceName(voices.current || 'marin')}.` : `Add your ${voices.system === 'gemini' ? 'Gemini' : 'OpenAI'} key under Live Voice System to preview voices.`);
     setState($('#voiceState'), status, voicePreview.error ? 'bad' : '');
   }
   gla.onVoicePreview(state => { voicePreview = state; updateVoiceState(); });
   $('#voice').onchange = () => { voiceDraft = $('#voice').value; updateVoiceState(); };
-  $('#useVoice').onclick = async () => { await gla.stopVoicePreview(); await save({ voice: voiceDraft }); };
+  $('#useVoice').onclick = async () => { await gla.stopVoicePreview(); await save({ characterVoice: voiceDraft }); };
   $('#previewVoice').onclick = async () => {
     const result = voicePreview.state !== 'idle' ? await gla.stopVoicePreview() : await gla.previewVoice(voiceDraft);
     if (!result.ok) setState($('#voiceState'), result.error, 'bad');

@@ -61,15 +61,34 @@ server.listen(0,'127.0.0.1',()=>{
   assert.equal(await js(st,"return document.querySelector('#geminiThinkingRow').hidden"),true,'no thinking level for the standard model');
   await js(st,"const m=document.querySelector('#geminiModel');m.value='gemini-3.8-live-extended-thinking';m.dispatchEvent(new Event('change'));return 1");
   await until(()=>js(st,"return !document.querySelector('#geminiThinkingRow').hidden"),'thinking level appears for Extended Thinking');
-  await js(st,"const t=document.querySelector('#geminiThinkingLevel');t.value='medium';t.dispatchEvent(new Event('change'));const v=document.querySelector('#geminiVoice');v.value='Kore';v.dispatchEvent(new Event('change'));return 1");
+  await js(st,"const t=document.querySelector('#geminiThinkingLevel');t.value='medium';t.dispatchEvent(new Event('change'));return 1");
+  // only the chosen system's settings are on the page, and the voice lives with the character
+  assert.deepEqual(await js(st,"return [document.querySelector('#openaiSection').hidden,document.querySelector('#geminiSection').hidden,Boolean(document.querySelector('#geminiVoice')),document.querySelector('#voice').closest('.pane').id,document.querySelector('#tab-voice').textContent.trim()]"),[true,false,false,'pane-character','Live Voice System']);
+  assert.deepEqual(await js(st,"const v=document.querySelector('#voice');return [v.options.length,v.value,document.querySelector('#voiceLabel').textContent]"),[30,'Leda','Sarah’s Gemini 3.8 Live voice'],'Gemini’s voices, Sarah’s own default');
+  await js(st,"gla_settings_pane('character');const v=document.querySelector('#voice');v.value='Kore';v.dispatchEvent(new Event('change'));document.querySelector('#useVoice').click();return 1");
   await until(async()=>{const s=await js(st,'return gla.getSettings()');return s.liveProvider==='gemini'&&s.hasGeminiKey&&s.gemini.model==='gemini-3.8-live-extended-thinking'&&s.gemini.thinkingLevel==='medium'&&s.gemini.voice==='Kore';},'choices saved');
-  assert.match(await js(st,"return document.querySelector('#chip-voice').textContent"),/Extended Thinking · Kore/);assert.equal(await js(st,"return document.querySelector('#geminiVoice').options.length"),30);
+  assert.match(await js(st,"return document.querySelector('#chip-voice').textContent"),/Extended Thinking$/);assert.match(await js(st,"return document.querySelector('#chip-character').textContent"),/^Sarah · Kore · /);
+  assert.equal((await js(st,'return gla.getSettings()')).geminiVoices.sarah,'Kore','kept per character');
+  // the Reasoning pane speaks the system's language: no "GPT-Live reasoning" and no OpenAI model picker while Gemini is the system
+  await js(st,"await gla.setSettings({reasoningMode:'managed'});gla_settings_pane('reasoning');return 1");
+  await until(()=>js(st,"return document.querySelector('#reasoningManaged').textContent==='Gemini reasoning'&&document.querySelector('#reasoningMode').value==='managed'"),'Gemini reasoning is the built-in mode');
+  assert.deepEqual(await js(st,"return [document.querySelector('#managedBackend').hidden,document.querySelector('#geminiReasoningNote').hidden,/Extended Thinking is on \\(medium\\)/.test(document.querySelector('#geminiReasoningNote').textContent),document.querySelector('#chip-reasoning').textContent,/GPT/.test(document.querySelector('#reasoningNote').textContent)]"),[true,false,true,'Gemini · Extended Thinking · medium',false]);
+  await js(st,"await gla.setSettings({reasoningMode:'delegate'});return 1");await until(()=>js(st,"return document.querySelector('#geminiReasoningNote').hidden&&!document.querySelector('#delegateOptions').hidden"),'Delegate mode is unchanged');
   assert(!JSON.stringify(await js(st,'return gla.getSettings()')).includes(KEY),'the key is not in the settings the windows receive');st.close();
+  // ---- the right-click menu lists the same system's voices, and a preview is a short Gemini session of its own
+  template=null;await js(solo,"document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");await until(()=>template,'menu for voices');
+  {const voiceMenu=template.find(x=>x.label==='Voice').submenu;assert.match(voiceMenu[0].label,/^Gemini 3\.8 Live voices/);assert.equal(voiceMenu.filter(x=>x.submenu).length,30);assert(voiceMenu.some(x=>x.label==='Kore · firm ✓'),'her current Gemini voice is ticked');assert(!voiceMenu.some(x=>/Marin|Gleam/.test(x.label)),'no GPT-Live-1 voices while Gemini is the system');
+   voiceMenu.find(x=>x.label.startsWith('Puck')).submenu.find(x=>x.label==='Preview voice').click();}
+  const previewPeer=await until(()=>seen.sockets.find(p=>p.messages[0]?.setup?.systemInstruction?.parts[0].text.startsWith('You are providing a short voice sample')),'a preview session');
+  assert.equal(previewPeer.messages[0].setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,'Puck');assert.equal(previewPeer.messages[0].setup.model,'models/gemini-3.8-live','previews use the standard model');assert(!('tools' in previewPeer.messages[0].setup));
+  await until(()=>previewPeer.messages.some(m=>/voice sample/.test(m.realtimeInput?.text||'')),'asked for the sample');assert.equal(previewPeer.audio,0,'a preview opens no microphone');
+  previewPeer.send({serverContent:{outputTranscription:{text:'Hello, it is lovely to meet you.'}}});previewPeer.send({serverContent:{turnComplete:true}});
+  await until(()=>previewPeer.socket.destroyed||previewPeer.socket.readableEnded,'the preview hangs up after the sample',15000);
   // ---- a conversation
   await until(()=>js(solo,"return /Ready/.test(document.querySelector('#status').textContent)"),'ready');
   template=null;await js(solo,"document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");await until(()=>template,'menu');assert.equal(template.find(x=>x.label==='Start Conversation').enabled,true,'the Gemini key is the one that counts');
   await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='connected'"),'connected');
-  const tokenRequest=seen.http.find(r=>r.url==='/v1beta/auth_tokens');assert.equal(tokenRequest.key,KEY);assert.equal(tokenRequest.body.uses,1);assert.equal(tokenRequest.body.bidiGenerateContentSetup.model,'models/gemini-3.8-live-extended-thinking');assert.match(tokenRequest.body.bidiGenerateContentSetup.systemInstruction.parts[0].text,/^You are Sarah/,'the whole setup is sealed into the token');assert(!('fieldMask' in tokenRequest.body));
+  const tokenRequest=seen.http.findLast(r=>r.url==='/v1beta/auth_tokens'); // the first one was the voice preview'sassert.equal(tokenRequest.key,KEY);assert.equal(tokenRequest.body.uses,1);assert.equal(tokenRequest.body.bidiGenerateContentSetup.model,'models/gemini-3.8-live-extended-thinking');assert.match(tokenRequest.body.bidiGenerateContentSetup.systemInstruction.parts[0].text,/^You are Sarah/,'the whole setup is sealed into the token');assert(!('fieldMask' in tokenRequest.body));
   const peer=seen.sockets.at(-1);assert.match(peer.url,/^\/ws\/v1beta\/BidiGenerateContentConstrained\?access_token=auth_tokens%2Fqa-\d+$/);assert(!peer.url.includes(KEY));
   const setup=peer.messages[0].setup;assert.equal(setup.model,'models/gemini-3.8-live-extended-thinking');assert.deepEqual(setup.generationConfig.thinkingConfig,{thinkingLevel:'MEDIUM'});assert.equal(setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName,'Kore');
   const prompt=setup.systemInstruction.parts[0].text;assert.match(prompt,/^You are Sarah, the voice of an animated 3D companion/);assert.match(prompt,/Hand-off policy: you have one function, ask_assistant/);assert(!/Delegation policy:\nBackend tools/.test(prompt),'GPT-Live-1’s backend wording is not sent to Gemini');assert.match(prompt,/installed body animations/);
@@ -95,9 +114,14 @@ server.listen(0,'127.0.0.1',()=>{
   await js(solo,"document.querySelector('#hushBtn')?.click()");await until(()=>peer.messages.some(m=>/Stop speaking now/.test(m.realtimeInput?.text||'')),'Stop Talking reaches Gemini as a note');
   await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='idle'"),'ended');await until(()=>peer.socket.destroyed||peer.socket.readableEnded,'socket closed',10000);
   fs.writeFileSync(out+'/after.png',(await solo.webContents.capturePage()).toPNG());
+  // ---- "Gemini reasoning": Gemini alone. No function is declared, so nothing can be handed to any other model.
+  await js(solo,"await gla.setSettings({reasoningMode:'managed'})");await wait(300);const sockets=seen.sockets.length;
+  await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='connected'"),'connected alone');const alone=await until(()=>seen.sockets.length>sockets&&seen.sockets.at(-1).messages[0]?.setup,'its setup');
+  assert(!('tools' in alone),'no function in Gemini reasoning mode');assert(!/Hand-off policy|ask_assistant/.test(alone.systemInstruction.parts[0].text),'and no hand-off wording');assert(!('tools' in seen.http.findLast(r=>r.url==='/v1beta/auth_tokens').body.bidiGenerateContentSetup));
+  await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='idle'"),'ended alone');
   // ---- back to GPT-Live-1: the old path, asking for its own key
   await js(solo,"await gla.setSettings({liveProvider:'openai'})");await until(()=>js(solo,"return /Add your OpenAI key/.test(document.querySelector('#status').textContent)||true"),'provider switched');
-  const refused=await js(solo,"return gla.createLiveSession('',{provider:'gemini',history:[]})");assert.equal(refused.ok,false);assert.match(refused.error,/not the selected voice model/,'a window cannot obtain a Gemini token while GPT-Live-1 is selected');
+  const refused=await js(solo,"return gla.createLiveSession('',{provider:'gemini',history:[]})");assert.equal(refused.ok,false);assert.match(refused.error,/not the selected live voice system/,'a window cannot obtain a Gemini token while GPT-Live-1 is selected');
   assert.deepEqual(errors.filter(e=>!/Autofill|DevTools|srtp/.test(e)),[],'no console errors');
   console.log('Gemini app QA passed: Settings and key check, single-use token, setup and hand-off prompt, 16 kHz microphone stream ('+peer.audio+' blocks), function call answered by the reasoning path, reply heard/shown/lip-synced, Stop Talking, hang-up, provider guard.');
  }catch(e){console.error(e);console.error(errors.slice(-5));process.exitCode=1;}finally{server.close();app.exit(process.exitCode||0);}});

@@ -31,7 +31,7 @@ app.whenReady().then(async()=>{try{
  await js(st,"document.querySelector('#tab-voice').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true}));return 1");assert.equal(await selected(),'shortcuts','the list wraps');
  // Status at a glance: a chip per pane and the same verdict as a dot beside its name.
  const chips=await js(st,"return Object.fromEntries([...document.querySelectorAll('.chip')].map(c=>[c.id.slice(5),c.textContent]))");
- assert.equal(chips.voice,'Needs an API key');assert.match(chips.character,/^Sarah · \d+ motions$/);assert.equal(chips.actions,'On · EnConvo');assert.match(chips.agents,/^EnConvo · /);assert.match(chips.instinct,/built-in rules/);
+ assert.equal(chips.voice,'Needs an OpenAI API key');assert.match(chips.character,/^Sarah · Gleam · \d+ motions$/,'the character chip names her voice');assert.equal(chips.actions,'On · EnConvo');assert.match(chips.agents,/^EnConvo · /);assert.match(chips.instinct,/built-in rules/);
  assert.equal(await js(st,"return document.querySelector('#dot-voice').className"),'dot bad');assert.equal(await js(st,"return document.querySelector('#dot-actions').className"),'dot ok');
  assert.match(await js(st,"return document.querySelector('#appVersion').textContent"),/^Version \d/);
  assert.deepEqual(await js(st,"gla_settings_pane('agents');return [...document.querySelectorAll('#agentBindingsTable th')].filter(t=>getComputedStyle(t).display!=='none').map(t=>t.textContent)"),['Character','EnConvo agent'],'only the engine in use has a column');

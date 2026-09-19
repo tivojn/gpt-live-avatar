@@ -25,6 +25,9 @@ const DEFAULT_MODEL='gemini-3.8-live',DEFAULT_VOICE='Aoede',THINKING_LEVELS=['lo
 // Prebuilt voices of the Live API, with Google's own one-word characterisation.
 const VOICES={Aoede:'breezy',Kore:'firm',Leda:'youthful',Zephyr:'bright',Callirrhoe:'easy-going',Autonoe:'bright',Despina:'smooth',Erinome:'clear',Laomedeia:'upbeat',Achernar:'soft',Gacrux:'mature',Pulcherrima:'forward',Vindemiatrix:'gentle',Sulafat:'warm',
   Puck:'upbeat',Charon:'informative',Fenrir:'excitable',Orus:'firm',Enceladus:'breathy',Iapetus:'clear',Umbriel:'easy-going',Algieba:'smooth',Algenib:'gravelly',Rasalgethi:'informative',Alnilam:'firm',Schedar:'even',Achird:'friendly',Zubenelgenubi:'casual',Sadachbia:'lively',Sadaltager:'knowledgeable'};
+// Each character's own Gemini voice until the user picks another (the GPT-Live-1 counterpart is default-voices.json).
+const CHARACTER_VOICES={tia:'Aoede',sarah:'Leda',iselda:'Kore','ming-mei':'Callirrhoe',seraphim:'Zephyr'};
+const SAMPLE='You are providing a short voice sample. When asked, say only: "Hello, it is lovely to meet you. I am here to listen, help, and keep you company." Then remain silent.';
 const TOOL='ask_assistant';
 
 const validKey=value=>typeof value==='string'&&/^[A-Za-z0-9._-]{20,400}$/.test(value);
@@ -35,10 +38,14 @@ function choice(config={}){
     thinkingLevel:THINKING_LEVELS.includes(config.geminiThinkingLevel)?config.geminiThinkingLevel:'low'};
 }
 // The hand-off paragraph of the system prompt. GPT-Live-1 is told about its backend; Gemini is told about its one function.
-function handOffPolicy({agent=false,engine='',thinking=false}={}){
-  return [`Hand-off policy: you have one function, ${TOOL}. It reaches ${agent?'the external agent engine ('+engine+') that does real work on the user’s Mac, and a knowledge assistant':'a knowledge assistant'}; it runs in the background and its verified result comes back to you.`,
-    `Call ${TOOL} when:\n- ${thinking?'The answer depends on current facts, figures or sources you cannot verify yourself':'The request needs careful reasoning, detailed facts or figures you are not confident about'}.${agent?'\n- The user asks for any real task: files, code, the shell, screenshots, the browser or another app. Pass the whole request, including any avatar movement combined with it.':''}`,
-    `Do not call it when:\n- It is a greeting, small talk, a feeling, a compliment or something you can answer from the conversation${thinking?', or something you can reason out yourself':''}.\n- The user asks for an animation, pose, one-shot dance, gesture or movement (excluding the dance-along music control): answer yourself with the affirmative intention described above.`,
+// agent: real tasks go to the action engine. knowledge: Delegate mode is on, so hard questions go to the reasoning provider.
+function handOffPolicy({agent=false,engine='',thinking=false,knowledge=true}={}){
+  const behind=[agent&&'the external agent engine ('+engine+') that does real work on the user’s Mac',knowledge&&'a knowledge assistant'].filter(Boolean).join(', and ');
+  const when=[knowledge&&(thinking?'The answer depends on current facts, figures or sources you cannot verify yourself':'The request needs careful reasoning, detailed facts or figures you are not confident about')+'.',
+    agent&&'The user asks for any real task: files, code, the shell, screenshots, the browser or another app. Pass the whole request, including any avatar movement combined with it.'].filter(Boolean);
+  return [`Hand-off policy: you have one function, ${TOOL}. It reaches ${behind}; it runs in the background and its verified result comes back to you.`,
+    `Call ${TOOL} when:\n- ${when.join('\n- ')}`,
+    `Do not call it when:\n- It is a greeting, small talk, a feeling, a compliment or something you can answer from the conversation${thinking||!knowledge?', or something you can reason out yourself':''}.\n- The user asks for an animation, pose, one-shot dance, gesture or movement (excluding the dance-along music control): answer yourself with the affirmative intention described above.`,
     'Before calling it, say one short natural line such as “Let me check.” Then wait: never guess the result, never claim a task is done before the result says so, and when the result arrives give it in your own words, briefly.'].join('\n\n');
 }
 function historyText(history){
@@ -52,7 +59,9 @@ function historyText(history){
   return lines.length?'The conversation so far (you were reconnected; continue it naturally and do not greet again):\n'+lines.join('\n'):'';
 }
 // The first message on the socket. `instructions` is the app's system prompt with handOffPolicy() already in it.
-function buildSetup({config={},instructions='',history=[],delegate=true,resumeHandle=''}={}){
+// preview: a voice sample. Always the standard model (quickest, and it does not greet by itself), no tools, no history, no resumption.
+function buildSetup({config={},instructions='',history=[],delegate=true,resumeHandle='',preview=false,voice:sampleVoice=''}={}){
+  if(preview)return {setup:{model:'models/'+DEFAULT_MODEL,generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:Object.hasOwn(VOICES,sampleVoice)?sampleVoice:choice(config).voice}}}},systemInstruction:{parts:[{text:SAMPLE}]},outputAudioTranscription:{}}};
   const {model,thinking,voice,thinkingLevel}=choice(config),past=historyText(history);
   return {setup:{
     model:'models/'+model,
@@ -103,11 +112,11 @@ async function createToken({key,setup,fetchImpl=fetch,now=Date.now(),signal}={})
   return token;
 }
 // What the renderer needs to open the session. v1beta first; older deployments only knew the constrained endpoint under v1alpha.
-async function createSession({key,config,instructions,history,delegate,resumeHandle,fetchImpl=fetch,signal}={}){
-  const picked=choice(config),setup=buildSetup({config,instructions,history,delegate,resumeHandle}),token=await createToken({key,setup,fetchImpl,signal});
+async function createSession({key,config,instructions,history,delegate,resumeHandle,preview=false,voice='',fetchImpl=fetch,signal}={}){
+  const picked=preview?{model:DEFAULT_MODEL,voice:Object.hasOwn(VOICES,voice)?voice:choice(config).voice,thinking:false}:choice(config),setup=buildSetup({config,instructions,history,delegate,resumeHandle,preview,voice}),token=await createToken({key,setup,fetchImpl,signal});
   const base=process.env.GLA_GEMINI_SOCKET||SOCKET;
   return {provider:'gemini',model:picked.model,voice:picked.voice,thinking:picked.thinking,tool:TOOL,
     urls:['v1beta','v1alpha'].map(version=>base.replace('{version}',version)+'?access_token='+encodeURIComponent(token)).filter((url,i,all)=>all.indexOf(url)===i),
     setup}; // the socket still needs a first setup message; the sealed one in the token is what counts
 }
-module.exports={MODELS,VOICES,DEFAULT_MODEL,DEFAULT_VOICE,THINKING_LEVELS,TOOL,validKey,choice,handOffPolicy,historyText,buildSetup,availableModels,createToken,createSession};
+module.exports={MODELS,VOICES,CHARACTER_VOICES,DEFAULT_MODEL,DEFAULT_VOICE,THINKING_LEVELS,TOOL,validKey,choice,handOffPolicy,historyText,buildSetup,availableModels,createToken,createSession};

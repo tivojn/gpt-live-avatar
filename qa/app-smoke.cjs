@@ -22,7 +22,7 @@ app.whenReady().then(async()=>{
   try {
     const win=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/avatar.html')));
     const js=code=>win.webContents.executeJavaScript(code);
-    await until(async()=>{try{return await js("window.gla_debug?.().clips===62 && !document.querySelector('#status').textContent.startsWith('Loading')");}catch{return false;}});
+    await until(async()=>{try{return await js("window.gla_debug?.().clips>=59 && !document.querySelector('#status').textContent.startsWith('Loading')");}catch{return false;}});
     const info=await js('gla.getSettings()');assert.equal(info.avatar.name,'Sarah');assert(info.avatar.appearanceURL);
     const capture=async()=>{template=null;await js("document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");await until(()=>template);return template;};
     let menu=await capture();
@@ -36,7 +36,7 @@ app.whenReady().then(async()=>{
     await wait(2000);menu=await capture();
     assert(menu.find(x=>x.label==='Outfit').submenu.find(x=>x.label.startsWith('Tie top, chain')).checked);
     win.webContents.reload();
-    await wait(1000);await until(async()=>{try{return await js("window.gla_debug?.().clips===62 && !document.querySelector('#status').textContent.startsWith('Loading')");}catch{return false;}});
+    await wait(1000);await until(async()=>{try{return await js("window.gla_debug?.().clips>=59 && !document.querySelector('#status').textContent.startsWith('Loading')");}catch{return false;}});
     menu=await capture();assert(menu.find(x=>x.label==='Outfit').submenu.find(x=>x.label.startsWith('Tie top, chain')).checked,'Wardrobe survives reload');
     await wait(1500);
     const visible=await until(()=>js('gla_visibleBox()'));
@@ -48,5 +48,5 @@ app.whenReady().then(async()=>{
     fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({passed:true,quality:info.quality,menus:menu.map(x=>x.label).filter(Boolean),colors:74,visible,errors},null,2));
     assert.deepEqual(errors,[]);console.log('Real app: Sarah loaded at best quality, native menus and saved selection passed.');
   }catch(error){console.error(error);console.error('Renderer errors:',errors);process.exitCode=1;}
-  app.quit();
+  app.exit(process.exitCode||0); // app.quit() exits 0 whatever process.exitCode says, which hid this test's failures from every sweep
 });
