@@ -10,7 +10,7 @@ function findRuntime(engine,override=''){
  const dirs=[path.join(home,'.grok/bin'),path.join(home,'.openclaw/bin'),path.join(home,'.local/bin'),path.join(home,'.hermes/hermes-agent/venv/bin'),path.join(home,'.hermes/hermes-agent/.venv/bin'),'/opt/homebrew/bin','/usr/local/bin',...(process.env.PATH||'').split(path.delimiter).filter(Boolean)];
  const candidates=explicit?[explicit]:dirs.flatMap(dir=>names.map(name=>path.join(dir,name)));
  for(const file of candidates)try{if(path.isAbsolute(file)&&fs.statSync(file).isFile()){fs.accessSync(file,fs.constants.X_OK);return {file,args:engine==='grok'?['--no-auto-update','agent','--no-leader','stdio']:path.basename(file)==='hermes-acp'?[]:['acp']};}}catch{}
- throw Error(explicit?`${NAMES[engine]} executable was not found at the saved path. Choose its executable in Settings.`:`Install and configure ${NAMES[engine]} on this Mac${engine==='hermes'?', including its ACP extra':''}, then check the connection. Codex is not required.`);
+ throw Error(explicit?`${NAMES[engine]} executable was not found at the saved path. Choose its executable in Settings.`:`Install and configure ${NAMES[engine]} on this ${process.platform==='darwin'?'Mac':'computer'}${engine==='hermes'?', including its ACP extra':''}, then check the connection. Codex is not required.`);
 }
 // ACP JSON-RPC over a private child process's stdio. Never invoke a login shell,
 // copy credentials, emit stderr, or mutate the runtime's global configuration.

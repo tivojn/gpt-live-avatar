@@ -13,7 +13,7 @@ function createAppInfo({ origin, fetchRelease = latestRelease, openExternal, ver
   let window = null, pending = null, abort = null, generation = 0;
   let update = { state: 'idle' };
   const details = releaseInfo.version === version ? releaseInfo : { title: 'GPT-Live Avatar', description: releaseInfo.description, highlights: [] };
-  const snapshot = () => ({ version, architecture: process.arch === 'arm64' ? 'Apple silicon' : process.arch === 'x64' ? 'Intel' : process.arch,
+  const snapshot = () => ({ version, platform: process.platform, architecture: process.platform !== 'darwin' ? (process.platform === 'win32' ? 'Windows · ' : '') + process.arch : process.arch === 'arm64' ? 'Apple silicon' : process.arch === 'x64' ? 'Intel' : process.arch,
     date: details.date || '', title: details.title, description: details.description, highlights: details.highlights, update: { ...update, installable: canInstall() } });
   const publish = () => { if (window && !window.isDestroyed()) window.webContents.send('gla:app-info:changed', snapshot()); };
   // A quiet check (once, shortly after launch) only ever turns the menu row into
