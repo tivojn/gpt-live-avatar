@@ -116,6 +116,21 @@ server.listen(0,'127.0.0.1',()=>{
   await js(solo,"document.querySelector('#hushBtn')?.click()");await until(()=>peer.messages.some(m=>/Stop speaking now/.test(m.realtimeInput?.text||'')),'Stop Talking reaches Gemini as a note');
   await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='idle'"),'ended');await until(()=>peer.socket.destroyed||peer.socket.readableEnded,'socket closed',10000);
   fs.writeFileSync(out+'/after.png',(await solo.webContents.capturePage()).toPNG());
+  // ---- the right-click Agent menu says what Settings says, with the same thing ticked
+  {const open=async()=>{template=null;await js(solo,"document.querySelector('#bubble').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))");return until(()=>template,'agent menu');};
+   await js(solo,"await gla.setSettings({reasoningMode:'managed',agentEnabled:true,agentEngine:'grok',agentFollowReasoning:true})");await wait(200);
+   let items=await open(),reasoning=items.find(x=>x.label==='Reasoning').submenu,actions=items.find(x=>x.label==='Actions & Permissions').submenu;
+   assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label),['Gemini reasoning'],'the built-in reasoning of the system in use is an item, and the ticked one');assert(!reasoning.some(x=>/GPT-Live/.test(x.label)));
+   assert.equal(actions[0].label,'Let avatars carry out my requests');assert.equal(actions[0].checked,true);assert.equal(actions[1].label,'Carried out by Grok Build (Gemini reasoning cannot act on this Mac)');
+   const follow=actions.find(x=>x.label?.startsWith('Follow reasoning agent'));assert.deepEqual([follow.label,follow.enabled,follow.checked],['Follow reasoning agent · not possible with Gemini reasoning',false,false],'not ticked when nothing is being followed');
+   assert.deepEqual(actions.filter(x=>x.label?.startsWith('✓ ')).map(x=>x.label.replace(' · not installed','')),['✓ Grok Build']);
+   // choosing in the menu is choosing in Settings
+   reasoning.find(x=>x.label?.startsWith('Codex App Server')).click();await until(async()=>(await js(solo,'return (await gla.getSettings()).effectiveReasoningEngine'))==='codex','menu choice saved');
+   items=await open();reasoning=items.find(x=>x.label==='Reasoning').submenu;actions=items.find(x=>x.label==='Actions & Permissions').submenu;
+   assert.deepEqual(reasoning.filter(x=>x.checked).map(x=>x.label.replace(' · not installed','')),['Codex App Server']);assert.deepEqual([actions.find(x=>x.label==='Follow reasoning agent').checked,actions[1].label],[true,'Carried out by Codex App Server, the agent that also reasons']);
+   actions[0].click();await until(async()=>(await js(solo,'return (await gla.getSettings()).agentEnabled'))===false,'actions off from the menu');
+   actions=(await open()).find(x=>x.label==='Actions & Permissions').submenu;assert.deepEqual([actions[0].checked,actions[1].label],[false,'Off: she will say she cannot do it']);
+   await js(solo,"await gla.setSettings({agentEnabled:false})");}
   // ---- "Gemini reasoning": Gemini alone. No function is declared, so nothing can be handed to any other model.
   await js(solo,"await gla.setSettings({reasoningMode:'managed'})");await wait(300);const sockets=seen.sockets.length;
   await js(solo,'gla_call()');await until(()=>js(solo,"return gla_debug().state==='connected'"),'connected alone');const alone=await until(()=>seen.sockets.length>sockets&&seen.sockets.at(-1).messages[0]?.setup,'its setup');

@@ -25,7 +25,7 @@ app.whenReady().then(async()=>{try{
  await run(settings,"await document.querySelector('#runtimeCheck').onclick()");assert.match(await run(settings,"return document.querySelector('#runtimeState').textContent"),/EnConvo connected/);
  await run(settings,"document.querySelector('#agentBindings').closest('section').scrollIntoView({block:'start'})");await wait(250);fs.writeFileSync(out+'/agent-choices.png',(await settings.webContents.capturePage()).toPNG());
  await run(settings,"document.querySelector('#agentEngine').closest('section').scrollIntoView({block:'start'})");await wait(250);fs.writeFileSync(out+'/action-engine.png',(await settings.webContents.capturePage()).toPNG());
- await run(solo,'await gla.showMenu({})');const provider=templates.flatMap(t=>t).find(x=>x.label==='Delegate Reasoning Provider');assert(provider);assert(provider.submenu.some(x=>/EnConvo/.test(x.label)),'EnConvo in the native reasoning menu');
+ await run(solo,'await gla.showMenu({})');const provider=templates.flatMap(t=>t).find(x=>x.label==='Reasoning');assert(provider);assert(provider.submenu.some(x=>/EnConvo/.test(x.label)),'EnConvo in the native reasoning menu');
  console.log('Reasoning through EnConvo (Mavis)…');
  const reason=await run(solo,"return gla.delegate.answer({id:'enconvo-reason',history:[{role:'user',text:'What is seven times eight? Reply in one short sentence.'}]})");assert(reason.ok,reason.error);assert.equal(reason.engine,'enconvo');assert.match(reason.text,/56|fifty.six/i);
  console.log('Action through EnConvo (Mavis)…');

@@ -689,8 +689,8 @@ ipcMain.on('gla:voice:preview-state', (event, value) => {
 ipcMain.on('gla:live:heartbeat', (_event, active) => { liveActive = Boolean(active); liveHeartbeatAt = Date.now(); });
 
 // ---------------------------------------------------------------- avatar menu and hang-up watchdog
-function avatarPermissionsMenu() { return providerMenu(config,{active:actionEngine(config),update:updateSettings,openSettings:()=>openSettingsWindow('actions')}); }
-function avatarReasoningMenu() { return reasoningMenu(config,{active:reasoningEngine(config),update:updateSettings,openSettings:()=>openSettingsWindow('reasoning')}); }
+function avatarPermissionsMenu() { return providerMenu({...config,liveProvider:liveProvider()},{active:actionEngine(config),following:reasoningEngine(config),update:updateSettings,openSettings:()=>openSettingsWindow('actions')}); }
+function avatarReasoningMenu() { return reasoningMenu({...config,liveProvider:liveProvider()},{active:reasoningEngine(config),update:updateSettings,openSettings:()=>openSettingsWindow('reasoning')}); }
 function showAvatarMenu(state) {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
   const send = id => () => { if (avatarWindow && !avatarWindow.isDestroyed()) avatarWindow.webContents.send('gla:menu-action', id); };

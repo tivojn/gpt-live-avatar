@@ -763,7 +763,7 @@ credentials and M2/16 GB performance still need their own acceptance tests.
 
 Use `electron/shortcuts.cjs` only if EnConvo does not already own shortcuts. The defaults are **⌘⇧0** for recovery and **⌘⇧9** for a face close-up. `web/avatar-closeup.js` provides the framing calculation; both solo and Together use it without modifying models. Settings records custom combinations and handles conflicts.
 
-Action permissions are under **Action Engine & Permissions**, separate from **Delegate Reasoning Provider**. `agentFollowReasoning` defaults to true. An explicit external action choice turns following off and preserves independent action models and permissions. EnConvo can replace both routing controls with its own agent system.
+Action permissions are under **Actions & Permissions**, separate from **Reasoning**. `agentFollowReasoning` defaults to true. An explicit external action choice turns following off and preserves independent action models and permissions. EnConvo can replace both routing controls with its own agent system.
 
 All five avatars now have 65 motions. `tools/retarget-meshy-motion.py` preserves the Meshy source’s body orientation and movement amplitude. The optional signed `motionUpdate` package contains only `runtime/motions/`; apply it before the base package for those paths, after verifying its signature, checksums, authenticated chunks and matching base revision. The Tia installer includes this encrypted overlay. Do not copy raw model or motion data into a public EnConvo repository.
 

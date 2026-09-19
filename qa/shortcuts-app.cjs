@@ -10,7 +10,7 @@ const errors=[];app.on('browser-window-created',(_e,w)=>w.webContents.on('consol
 require('../electron/main.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms)),run=(w,code)=>w.webContents.executeJavaScript('(async()=>{'+code+'})()');
 async function until(fn,label){const end=Date.now()+120000;while(Date.now()<end){const result=await fn();if(result)return result;await wait(100);}throw Error('Timed out: '+label);}
 const access=async w=>run(w,'return (await gla.getSettings()).agentAccess');
-const permissionItems=()=>menu.find(i=>i.label==='Action Engine & Permissions').submenu.find(i=>i.submenu&&i.label.includes('Codex App Server')).submenu.filter(i=>['Ask for approval','Approve for me','Full access'].includes(i.label));
+const permissionItems=()=>menu.find(i=>i.label==='Actions & Permissions').submenu.find(i=>i.submenu&&i.label.includes('Codex App Server')).submenu.filter(i=>['Ask for approval','Approve for me','Full access'].includes(i.label));
 const picker=async w=>run(w,"return document.querySelector('#agentAccess').value");
 app.whenReady().then(async()=>{try{
  const solo=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/avatar.html')),'solo');await until(()=>run(solo,'return window.gla_avatar?.resources.ready'),'avatar');

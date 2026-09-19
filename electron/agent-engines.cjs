@@ -30,24 +30,34 @@ function installed(config){
   return [engine,true];
  }catch{return [engine,false];}}));
 }
-function providerMenu(config,{active,update,openSettings,available=installed(config)}){
- const values=permissions(config);
- return {label:'Action Engine & Permissions',submenu:[
-  {label:'Follow reasoning agent',type:'checkbox',checked:config.agentFollowReasoning!==false,click:()=>update({agentFollowReasoning:config.agentFollowReasoning===false})},
-  {label:'Handling actions: '+ENGINES[active],enabled:false},
+// The two Agent submenus mirror Settings > Reasoning and Settings > Actions: the same choices, the same one ticked.
+// The built-in reasoning belongs to the live voice system in use (GPT-Live reasoning or Gemini reasoning). It answers
+// questions but cannot act on this Mac, so actions can only "follow" a reasoning provider that is itself an agent.
+const builtInReasoning=config=>config.liveProvider==='gemini'?'Gemini reasoning':'GPT-Live reasoning';
+function providerMenu(config,{active,update,openSettings,available=installed(config),following=null}){
+ const values=permissions(config),on=config.agentEnabled!==false,canFollow=Boolean(following),follows=on&&canFollow&&config.agentFollowReasoning!==false;
+ return {label:'Actions & Permissions',submenu:[
+  {label:'Let avatars carry out my requests',type:'checkbox',checked:on,click:()=>update({agentEnabled:!on})},
+  {label:!on?'Off: she will say she cannot do it':follows?'Carried out by '+ENGINES[active]+', the agent that also reasons':'Carried out by '+ENGINES[active]+(canFollow?'':' ('+(config.reasoningMode==='delegate'?'your reasoning provider':builtInReasoning(config))+' cannot act on this Mac)'),enabled:false},
   {type:'separator'},
-  ...Object.entries(ENGINES).map(([engine,label])=>({label:(active===engine?'✓ ':'')+label+(available[engine]?'':' · not installed'),submenu:[
-   {label:'Use '+label+' for actions',type:'radio',checked:active===engine,enabled:available[engine],click:()=>update({agentEngine:engine,agentFollowReasoning:false})},
+  {label:canFollow?'Follow reasoning agent':'Follow reasoning agent · not possible with '+(config.reasoningMode==='delegate'?'this reasoning provider':builtInReasoning(config)),type:'checkbox',checked:follows,enabled:on&&canFollow,click:()=>update({agentFollowReasoning:!follows})},
+  ...Object.entries(ENGINES).map(([engine,label])=>({label:(on&&active===engine?'✓ ':'')+label+(available[engine]?'':' · not installed'),enabled:on,submenu:[
+   {label:'Use '+label+' for actions',type:'radio',checked:on&&active===engine,enabled:available[engine],click:()=>update({agentEngine:engine,agentFollowReasoning:false})},
    {type:'separator'},
    ...permissionChoices(engine).map(choice=>({label:choice.label,type:'radio',checked:values[engine]===choice.value,enabled:available[engine],click:()=>update({agentPermissions:{[engine]:choice.value}})})),
    ...(engine==='codex'?[]:[{type:'separator'},{label:'Agent’s own permissions also apply',enabled:false}]),
   ]})),
-  {type:'separator'},{label:'Agent settings…',click:openSettings},
+  {type:'separator'},{label:'Action settings…',click:openSettings},
  ]};
 }
 function reasoningMenu(config,{active,update,openSettings,available=installed(config)}){
- return {label:'Delegate Reasoning Provider',submenu:[
-  ...Object.entries(ENGINES).map(([engine,label])=>({label:label+(available[engine]?'':' · not installed'),type:'radio',checked:active===engine,enabled:available[engine],click:()=>update(selectEngine(engine))})),
+ const delegating=config.reasoningMode==='delegate',names={openai:'OpenAI',xai:'xAI'};
+ return {label:'Reasoning',submenu:[
+  {label:builtInReasoning(config),type:'radio',checked:!delegating,click:()=>update({reasoningMode:'managed'})},
+  {type:'separator'},{label:'Delegate harder questions to',enabled:false},
+  ...Object.entries(ENGINES).map(([engine,label])=>({label:label+(available[engine]?'':' · not installed'),type:'radio',checked:delegating&&active===engine,enabled:available[engine],click:()=>update(selectEngine(engine))})),
+  // a plain API provider chosen in Settings has no engine of its own: show it, ticked, rather than nothing ticked
+  ...(delegating&&!active?[{label:(names[config.delegateProvider]||'Another provider')+' · set in Settings',type:'radio',checked:true,click:openSettings}]:[]),
   {type:'separator'},{label:'More reasoning options…',click:openSettings},
  ]};
 }

@@ -26,7 +26,7 @@ GPT‑6 Astra, with a custom model option. Account availability is checked by
 Codex itself. The desktop engine is preferred over older standalone CLI
 installations; GLA_CODEX_PATH can explicitly select a different executable.
 
-Choose **Codex permissions** in Settings or right-click **Delegate Reasoning Provider → Codex App Server**. This choice is saved independently of the other agents:
+Choose **Codex permissions** in Settings or right-click **Reasoning → Codex App Server**. This choice is saved independently of the other agents:
 
 - **Ask for approval**: work in the selected folder; ask for additional access.
 - **Approve for me**: use Codex’s own risk reviewer for additional access requests.

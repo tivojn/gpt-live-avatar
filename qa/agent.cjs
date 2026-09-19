@@ -26,7 +26,7 @@ const {actionEngine,reasoningEngine,runtimeConfig,normalizeDelegate}=require('..
  assert.equal(actionEngine({agentEngine:'basic'}),'codex','Legacy built-in config migrates to Codex, never a hidden built-in fallback');
  const patches=[],available={codex:true,openclaw:false,hermes:true,grok:true,enconvo:true};
  const menu=providerMenu(saved,{active:'hermes',available,update:p=>patches.push(p),openSettings(){}});
- assert.equal(menu.label,'Action Engine & Permissions');
+ assert.equal(menu.label,'Actions & Permissions');
  const engineItem=name=>menu.submenu.find(x=>x.submenu&&x.label.includes(name));
  assert.match(engineItem('Hermes').label,/✓ Hermes/);assert.equal(engineItem('OpenClaw').submenu[0].enabled,false);
  engineItem('Grok Build').submenu[0].click();assert.deepEqual(patches[0],{agentEngine:'grok',agentFollowReasoning:false});

@@ -19,7 +19,7 @@ app.whenReady().then(async()=>{try{
  await run(settings,"document.querySelector('#agentBindings').closest('section').scrollIntoView({block:'start'})");await wait(200);fs.writeFileSync(out+'/agent-choices.png',(await settings.webContents.capturePage()).toPNG());
  // Native menu, legacy migration and listening visuals without opening audio.
  await run(solo,'await gla.showMenu({})');
- const provider=templates.flatMap(t=>t).find(x=>x.label==='Delegate Reasoning Provider');assert(provider);assert.equal(provider.submenu.filter(x=>x.submenu).length,5);
+ const provider=templates.flatMap(t=>t).find(x=>x.label==='Reasoning');assert(provider);assert.equal(provider.submenu.filter(x=>x.submenu).length,5);
  assert(templates.flatMap(t=>t).some(x=>x.label==='Bring Avatar Back'&&x.accelerator==='CommandOrControl+Shift+0'));
  assert.equal(await run(settings,"return Boolean(document.querySelector('#agentBrowser'))"),false);
  assert.equal(await run(settings,"return [...document.querySelector('#agentEngine').options].some(o=>o.value==='basic')"),false);
