@@ -78,14 +78,14 @@ app.whenReady().then(async()=>{
    async createOffer(){return {sdp:'fake-offer',type:'offer'}} async setLocalDescription(d){this.localDescription=d}
    async setRemoteDescription(){setTimeout(()=>this.channel.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'session.started'})})),20)} close(){this.connectionState='closed'}
   };void 0;`);
-  items=await nativeMenu();items.find(x=>x.label==='Voice').submenu.find(x=>x.label.startsWith('Ripple')).submenu[0].click();
+  items=await nativeMenu();items.find(x=>x.label==='Voice').submenu.find(x=>x.label?.startsWith('Ripple')).submenu[0].click();
   await until(()=>js("(async()=> (await gla.getSettings()).voicePreview.state==='connected')()"),'Menu voice preview');
   assert.equal(await js('micRequests'),0);assert.equal(requests.at(-1).preview,true);assert.equal(requests.at(-1).voice,'ripple');
   assert.equal(await js('(await gla.getSettings()).voice'),'marin','Preview does not select voice');
   await js('gla.stopVoicePreview()');await wait(100);
   await js("gla_live.start({voice:'marin'})");await until(()=>js("gla_live.state==='connected'"),'Live connected');
   await js("gla_live.remember('user','Please remember our dance.');gla_live.setMuted(true)");
-  items=await nativeMenu();items.find(x=>x.label==='Voice').submenu.find(x=>x.label.startsWith('Ripple')).submenu[1].click();
+  items=await nativeMenu();items.find(x=>x.label==='Voice').submenu.find(x=>x.label?.startsWith('Ripple')).submenu[1].click();
   await until(()=>js("gla_live.state==='connected' && gla_live.voice==='ripple'"),'Dynamic voice reconnect');
   assert.equal(requests.at(-1).history[0].text,'Please remember our dance.');assert.equal(await js('gla_live.muted'),true);
   await js("gla.setSettings({bubbleMode:'off'})");await wait(300);
